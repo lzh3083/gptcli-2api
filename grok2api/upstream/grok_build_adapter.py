@@ -3067,6 +3067,17 @@ def _run_registration(
             except Exception:
                 pass
 
+            def _mail_should_cancel() -> bool:
+                _check_cancel()
+                return False
+
+            def _mail_on_tick(*, elapsed: float = 0.0, remaining: float = 0.0, **_kw) -> None:
+                update(
+                    "waiting_email",
+                    f"等待接收 6 位验证码: {email} · 已等待 {int(elapsed)}s"
+                    + (f", 剩余 {int(remaining)}s" if remaining else ""),
+                )
+
             def _otp_cb(target_email: str, after_ts: float) -> str:
                 update("waiting_email", f"等待接收 6 位验证码: {target_email}")
                 if receiver is None:
