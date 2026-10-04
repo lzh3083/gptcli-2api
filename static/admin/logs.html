@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+
+  
+  <script>
+  /* g2a-asset-boot v2: recover at most once; never spin-reload forever */
+  (function () {
+    var KEY = "g2a_asset_reload_at";
+    function reloadedRecently() {
+      try { return (Date.now() - Number(sessionStorage.getItem(KEY) || 0)) < 60000; } catch (e) { return false; }
+    }
+    function markReload() {
+      try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    }
+    window.__g2aScriptFailed = function (el) {
+      console.error("static script failed", el && el.src);
+      if (!reloadedRecently()) {
+        markReload();
+        var u = new URL(location.href);
+        u.searchParams.set("_g2a_cb", String(Date.now()));
+        location.replace(u.pathname + u.search);
+        return;
+      }
+      var d = document.getElementById("boot-desc") || document.getElementById("boot-hint");
+      if (d) d.textContent = "静态资源加载失败，请点击重试";
+    };
+    window.__g2aBootLogin = function () {
+      function show(msg) {
+        try {
+          var boot = document.getElementById("boot-view");
+          var auth = document.getElementById("auth-view");
+          if (boot) boot.classList.remove("hidden");
+          if (auth) auth.classList.add("hidden");
+          var d = document.getElementById("boot-desc");
+          var h = document.getElementById("boot-hint");
+          if (d) d.textContent = "页面脚本未就绪";
+          if (h) h.innerHTML = (msg || "") +
+            '<br><button type="button" class="g2a-btn g2a-btn-primary" style="margin-top:12px" id="g2a-reload-btn">重试</button>';
+          var b = document.getElementById("g2a-reload-btn");
+          if (b) b.onclick = function () {
+            try { sessionStorage.removeItem(KEY); } catch (e) {}
+            location.replace(location.pathname + "?_g2a_cb=" + Date.now());
+          };
+        } catch (e) {}
+      }
+      // Wait a tick for deferred scripts; do NOT auto-reload unless scripts truly missing after short wait.
+      var tries = 0;
+      function attempt() {
+        tries += 1;
+        if (window.G2A && typeof G2A.api === "function" && G2A.auth && typeof G2A.auth.initLoginPage === "function") {
+          try { G2A.auth.initLoginPage(); } catch (e) { show(String(e && e.message || e)); }
+          return;
+        }
+        if (tries < 20) { setTimeout(attempt, 50); return; } // ~1s wait for script parse
+        show("登录脚本加载不完整。点击重试。");
+      }
+      attempt();
+    };
+  })();
+  </script>
+
+
+
+  <script>
+    // g2a-paint-lock: keep first paint continuous; never leave a blank black document.
+    (function () {
+      try {
+        var t = localStorage.getItem("g2a_theme");
+        if (t !== "light" && t !== "dark") {
+          t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+        document.documentElement.style.colorScheme = t;
+        document.documentElement.style.background = t === "light" ? "#f5f7fb" : "#0a0a0f";
+        var tok = localStorage.getItem("g2a_admin_token") || "";
+        var ts = Number(localStorage.getItem("g2a_admin_token_ts") || 0) || 0;
+        var grace = tok && ts && (Date.now() - ts) < 7 * 24 * 3600 * 1000;
+        if (tok || grace) document.documentElement.classList.add("g2a-has-session");
+      } catch (e) {}
+      // Safety: if soft-nav busy class somehow persisted via bfcache, clear on pageshow.
+      window.addEventListener("pageshow", function () {
+        try { document.body && document.body.classList.remove("g2a-softnav-busy"); } catch (_) {}
+      });
+      // If scripts hang, unstick busy dimmer after 12s.
+      setTimeout(function () {
+        try { document.body && document.body.classList.remove("g2a-softnav-busy"); } catch (_) {}
+      }, 12000);
+    })();
+  </script>
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>任务日志 · gptcli-2api</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <link rel="stylesheet" href="/static/dist/admin-antd.957f0049d1.css" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+
+</head>
+<body class="g2a-body" data-page="logs">
+  <div id="toast" class="g2a-message"></div>
+  <div class="g2a-layout" id="main-view">
+    <aside class="g2a-sider">
+      <div class="g2a-brand">
+        <div class="g2a-logo">G</div>
+        <div>
+          <div class="g2a-brand-title">gptcli-2api</div>
+          <div class="g2a-brand-sub"><span id="app-version">…</span> · Admin</div>
+        </div>
+      </div>
+      <nav class="g2a-menu">
+        <a class="g2a-menu-item " href="/admin" data-page="overview"><span class="g2a-menu-ico">◫</span><span>概览</span></a>
+        <a class="g2a-menu-item " href="/admin/keys" data-page="keys"><span class="g2a-menu-ico">🔑</span><span>API Keys</span></a>
+        <a class="g2a-menu-item " href="/admin/accounts" data-page="accounts"><span class="g2a-menu-ico">👥</span><span>账号 / 轮询</span></a>
+        <a class="g2a-menu-item " href="/admin/usage" data-page="usage"><span class="g2a-menu-ico">Σ</span><span>用量</span></a>
+        <a class="g2a-menu-item is-active" href="/admin/logs" data-page="logs"><span class="g2a-menu-ico">📜</span><span>任务日志</span></a>
+        <a class="g2a-menu-item " href="/admin/models" data-page="models"><span class="g2a-menu-ico">▣</span><span>模型</span></a>
+        <a class="g2a-menu-item " href="/admin/settings" data-page="settings"><span class="g2a-menu-ico">⚙</span><span>系统设置</span></a>
+        <a class="g2a-menu-item " href="/admin/guide" data-page="guide"><span class="g2a-menu-ico">📘</span><span>接入指南</span></a>
+      </nav>
+      <div class="g2a-sider-foot">
+        <a href="/docs" target="_blank" rel="noopener">Swagger</a>
+        <a href="/health" target="_blank" rel="noopener">Health</a>
+        <a href="/metrics" target="_blank" rel="noopener">Metrics</a>
+        <button type="button" class="g2a-btn g2a-btn-default g2a-btn-block" id="btn-logout">退出登录</button>
+      </div>
+    </aside>
+    <div class="g2a-main">
+      <header class="g2a-header">
+        <div>
+          <h1 id="page-title">任务日志</h1>
+          <p id="page-sub">查询后台任务结果（协议注册、SSO 导入、测活、Token 续期等）</p>
+        </div>
+        <div class="g2a-header-actions">
+          <span id="status-pill" class="g2a-tag">—</span>
+          <button type="button" class="g2a-theme-toggle" data-theme-toggle aria-label="切换主题"><span class="ico">☀️</span><span class="label">白天</span></button>
+          <button type="button" class="g2a-btn g2a-btn-default" id="btn-refresh">刷新</button>
+        </div>
+      </header>
+      <div class="g2a-mobile-nav" id="mobile-nav"></div>
+      <div class="g2a-content">
+
+<section class="g2a-card">
+  <div class="g2a-card-head">
+    <div>
+      <h3>任务日志</h3>
+      <p>后台 / 长任务结果（协议注册、SSO 导入、测活、Token 续期等），保存在 PostgreSQL，可按类型 / 状态 / 关键词查询。</p>
+    </div>
+    <div class="g2a-actions">
+      <button class="g2a-btn g2a-btn-default" id="btn-logs-reload">刷新</button>
+    </div>
+  </div>
+  <div class="g2a-form-row" style="gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="g2a-field" style="min-width:220px;flex:1">
+      <label for="logs-q">关键词</label>
+      <input id="logs-q" class="g2a-input" placeholder="类型 / 状态 / 摘要 / 任务 ID" />
+    </div>
+    <div class="g2a-field" style="min-width:160px">
+      <label for="logs-action">类型</label>
+      <select id="logs-action" class="g2a-input">
+        <option value="all">全部</option>
+      </select>
+    </div>
+    <div class="g2a-field" style="min-width:140px">
+      <label for="logs-status">状态</label>
+      <select id="logs-status" class="g2a-input">
+        <option value="all">全部</option>
+        <option value="done">done</option>
+        <option value="partial">partial</option>
+        <option value="error">error</option>
+        <option value="cancelled">cancelled</option>
+        <option value="running">running</option>
+      </select>
+    </div>
+    <div class="g2a-field" style="min-width:120px">
+      <label for="logs-page-size">每页</label>
+      <select id="logs-page-size" class="g2a-input">
+        <option value="20">20</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+    <div class="g2a-field" style="align-self:end">
+      <button class="g2a-btn g2a-btn-primary" id="btn-logs-search">查询</button>
+    </div>
+  </div>
+  <div id="logs-info" class="g2a-muted" style="margin-bottom:8px">—</div>
+  <div class="g2a-table-wrap">
+    <table class="g2a-table">
+      <thead>
+        <tr>
+          <th style="width:160px">时间</th>
+          <th style="width:120px">类型</th>
+          <th style="width:100px">状态</th>
+          <th>摘要</th>
+          <th style="width:140px">进度</th>
+          <th style="width:70px">结果</th>
+        </tr>
+      </thead>
+      <tbody id="logs-tbody"></tbody>
+    </table>
+  </div>
+  <div class="g2a-actions" style="justify-content:space-between;margin-top:12px">
+    <div id="logs-page-info" class="g2a-muted">—</div>
+    <div class="g2a-actions">
+      <button class="g2a-btn g2a-btn-default" id="logs-page-prev">上一页</button>
+      <button class="g2a-btn g2a-btn-default" id="logs-page-next">下一页</button>
+    </div>
+  </div>
+  <pre id="logs-detail" class="g2a-log is-empty hidden" style="margin-top:12px" hidden>—</pre>
+</section>
+
+      </div>
+    </div>
+  </div>
+  <script src="/static/dist/utils.ac10ff3b58.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/api.9ac71f7ed9.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/auth.fa7b1e0e4d.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.0f85a1f533.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grokcli-2api.local/contracts/manifest.schema.json",
+  "title": "grokcli-2api compatibility manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "oracle",
+    "routes",
+    "authentication",
+    "stream_invariants",
+    "failover",
+    "nondeterministic_fields"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "implementation",
+        "version"
+      ],
+      "properties": {
+        "implementation": {
+          "enum": [
+            "go",
+            "python"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "admin_routes": {
+          "type": [
+            "object",
+            "string"
+          ]
+        },
+        "data_safety": {
+          "type": [
+            "object",
+            "string"
+          ]
+        },
+        "readiness": {
+          "type": [
+            "object",
+            "string"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "method",
+          "paths",
+          "protocol"
+        ],
+        "properties": {
+          "method": {
+            "enum": [
+              "GET",
+              "POST",
+              "PATCH",
+              "DELETE"
+            ]
+          },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^/"
+            }
+          },
+          "protocol": {
+            "type": "string",
+            "minLength": 1
+          },
+          "go_phase": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "headers",
+        "precedence"
+      ],
+      "properties": {
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "precedence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stream_invariants": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "failover": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "allowed",
+        "forbidden"
+      ],
+      "properties": {
+        "allowed": {
+          "type": "string"
+        },
+        "forbidden": {
+          "type": "string"
+        }
+      }
+    },
+    "nondeterministic_fields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\$"
+      }
+    },
+    "admin_routes": {
+      "type": [
+        "object",
+        "string",
+        "array",
+        "boolean",
+        "number",
+        "null"
+      ]
+    },
+    "readiness": {
+      "type": [
+        "object",
+        "string",
+        "array",
+        "boolean",
+        "number",
+        "null"
+      ]
+    },
+    "data_safety": {
+      "type": [
+        "object",
+        "string",
+        "array",
+        "boolean",
+        "number",
+        "null"
+      ]
+    }
+  }
+}

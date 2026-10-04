@@ -1,0 +1,19 @@
+[Unit]
+Description=grokcli-2api hot-update watcher (pull + force-recreate)
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment=G2A_COMPOSE_DIR=/root/grokcli-2api
+Environment=G2A_DATA_DIR=/var/lib/grokcli-2api/data
+Environment=G2A_POLL_SEC=5
+Environment=G2A_USE_GHCR=1
+Environment=G2A_SERVICE=grokcli-2api
+WorkingDirectory=/root/grokcli-2api
+ExecStart=/root/grokcli-2api/scripts/g2a-update-watcher.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

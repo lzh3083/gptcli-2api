@@ -1,0 +1,38 @@
+[Unit]
+Description=grokcli-2api (OpenAI-compatible Grok proxy, multi-account)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=grok2api
+Group=grok2api
+WorkingDirectory=/opt/grokcli-2api
+# cp /opt/grokcli-2api/.env.example /opt/grokcli-2api/.env  then edit
+EnvironmentFile=-/opt/grokcli-2api/.env
+Environment=GROK2API_HOST=0.0.0.0
+Environment=GROK2API_PORT=3000
+Environment=GROK2API_OPEN_BROWSER=0
+Environment=GROK2API_ACCOUNT_MODE=round_robin
+Environment=GROK2API_TOKEN_MAINTAIN=1
+Environment=GROK2API_REASONING_COMPAT=off
+Environment=GROK2API_DATA_DIR=/var/lib/grok2api/data
+# Environment=GROK2API_ADMIN_PASSWORD=change-me
+# Go cutover example (after bin/grok2api-migrate up and shared stores are healthy):
+# Environment=GROK2API_RUNTIME=go
+# Environment=GROK2API_GO_PUBLIC_READ=1
+# Environment=GROK2API_GO_MESSAGES=1
+# Environment=GROK2API_OUTBOUND_MAX_TOOLS=1
+# ExecStart=/opt/grokcli-2api/bin/grok2api
+# See docs/GO_MESSAGES_CANARY.md for verify + rollback.
+# Set GROK2API_RUNTIME=go and point ExecStart at bin/grok2api after running
+# bin/grok2api-migrate up and enabling staged Go route flags.
+ExecStart=/usr/bin/python3 /opt/grokcli-2api/app.py
+Restart=on-failure
+RestartSec=5
+# Hardening (optional; relax if paths need write elsewhere)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

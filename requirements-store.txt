@@ -1,0 +1,10 @@
+# Optional deps for multi-worker shared stores (Redis + PostgreSQL).
+# File-only single-worker deployments do NOT need this file.
+#
+#   pip install -r requirements-store.txt
+#
+redis>=5.0.0
+psycopg[binary,pool]>=3.1.0
+cryptography>=42.0.0
+# tests only (optional):
+# fakeredis>=2.21.0

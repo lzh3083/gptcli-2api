@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+
+  
+  <script>
+  /* g2a-asset-boot v2: recover at most once; never spin-reload forever */
+  (function () {
+    var KEY = "g2a_asset_reload_at";
+    function reloadedRecently() {
+      try { return (Date.now() - Number(sessionStorage.getItem(KEY) || 0)) < 60000; } catch (e) { return false; }
+    }
+    function markReload() {
+      try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    }
+    window.__g2aScriptFailed = function (el) {
+      console.error("static script failed", el && el.src);
+      if (!reloadedRecently()) {
+        markReload();
+        var u = new URL(location.href);
+        u.searchParams.set("_g2a_cb", String(Date.now()));
+        location.replace(u.pathname + u.search);
+        return;
+      }
+      var d = document.getElementById("boot-desc") || document.getElementById("boot-hint");
+      if (d) d.textContent = "静态资源加载失败，请点击重试";
+    };
+    window.__g2aBootLogin = function () {
+      function show(msg) {
+        try {
+          var boot = document.getElementById("boot-view");
+          var auth = document.getElementById("auth-view");
+          if (boot) boot.classList.remove("hidden");
+          if (auth) auth.classList.add("hidden");
+          var d = document.getElementById("boot-desc");
+          var h = document.getElementById("boot-hint");
+          if (d) d.textContent = "页面脚本未就绪";
+          if (h) h.innerHTML = (msg || "") +
+            '<br><button type="button" class="g2a-btn g2a-btn-primary" style="margin-top:12px" id="g2a-reload-btn">重试</button>';
+          var b = document.getElementById("g2a-reload-btn");
+          if (b) b.onclick = function () {
+            try { sessionStorage.removeItem(KEY); } catch (e) {}
+            location.replace(location.pathname + "?_g2a_cb=" + Date.now());
+          };
+        } catch (e) {}
+      }
+      // Wait a tick for deferred scripts; do NOT auto-reload unless scripts truly missing after short wait.
+      var tries = 0;
+      function attempt() {
+        tries += 1;
+        if (window.G2A && typeof G2A.api === "function" && G2A.auth && typeof G2A.auth.initLoginPage === "function") {
+          try { G2A.auth.initLoginPage(); } catch (e) { show(String(e && e.message || e)); }
+          return;
+        }
+        if (tries < 20) { setTimeout(attempt, 50); return; } // ~1s wait for script parse
+        show("登录脚本加载不完整。点击重试。");
+      }
+      attempt();
+    };
+  })();
+  </script>
+
+
+
+  <script>
+    // g2a-paint-lock: keep first paint continuous; never leave a blank black document.
+    (function () {
+      try {
+        var t = localStorage.getItem("g2a_theme");
+        if (t !== "light" && t !== "dark") {
+          t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+        document.documentElement.style.colorScheme = t;
+        document.documentElement.style.background = t === "light" ? "#f5f7fb" : "#0a0a0f";
+        var tok = localStorage.getItem("g2a_admin_token") || "";
+        var ts = Number(localStorage.getItem("g2a_admin_token_ts") || 0) || 0;
+        var grace = tok && ts && (Date.now() - ts) < 7 * 24 * 3600 * 1000;
+        if (tok || grace) document.documentElement.classList.add("g2a-has-session");
+      } catch (e) {}
+      // Safety: if soft-nav busy class somehow persisted via bfcache, clear on pageshow.
+      window.addEventListener("pageshow", function () {
+        try { document.body && document.body.classList.remove("g2a-softnav-busy"); } catch (_) {}
+      });
+      // If scripts hang, unstick busy dimmer after 12s.
+      setTimeout(function () {
+        try { document.body && document.body.classList.remove("g2a-softnav-busy"); } catch (_) {}
+      }, 12000);
+    })();
+  </script>
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>系统设置 · gptcli-2api</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <link rel="stylesheet" href="/static/dist/admin-antd.957f0049d1.css" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+
+</head>
+<body class="g2a-body" data-page="settings">
+  <div id="toast" class="g2a-message"></div>
+  <div class="g2a-layout" id="main-view">
+    <aside class="g2a-sider">
+      <div class="g2a-brand">
+        <div class="g2a-logo">G</div>
+        <div>
+          <div class="g2a-brand-title">gptcli-2api</div>
+          <div class="g2a-brand-sub"><span id="app-version">…</span> · Admin</div>
+        </div>
+      </div>
+      <nav class="g2a-menu">
+        <a class="g2a-menu-item " href="/admin" data-page="overview"><span class="g2a-menu-ico">◫</span><span>概览</span></a>
+        <a class="g2a-menu-item " href="/admin/keys" data-page="keys"><span class="g2a-menu-ico">🔑</span><span>API Keys</span></a>
+        <a class="g2a-menu-item " href="/admin/accounts" data-page="accounts"><span class="g2a-menu-ico">👥</span><span>账号 / 轮询</span></a>
+        <a class="g2a-menu-item " href="/admin/usage" data-page="usage"><span class="g2a-menu-ico">Σ</span><span>用量</span></a>
+        <a class="g2a-menu-item " href="/admin/logs" data-page="logs"><span class="g2a-menu-ico">📜</span><span>任务日志</span></a>
+        <a class="g2a-menu-item " href="/admin/models" data-page="models"><span class="g2a-menu-ico">▣</span><span>模型</span></a>
+        <a class="g2a-menu-item is-active" href="/admin/settings" data-page="settings"><span class="g2a-menu-ico">⚙</span><span>系统设置</span></a>
+        <a class="g2a-menu-item " href="/admin/guide" data-page="guide"><span class="g2a-menu-ico">📘</span><span>接入指南</span></a>
+      </nav>
+      <div class="g2a-sider-foot">
+        <a href="/docs" target="_blank" rel="noopener">Swagger</a>
+        <a href="/health" target="_blank" rel="noopener">Health</a>
+        <a href="/metrics" target="_blank" rel="noopener">Metrics</a>
+        <button type="button" class="g2a-btn g2a-btn-default g2a-btn-block" id="btn-logout">退出登录</button>
+      </div>
+    </aside>
+    <div class="g2a-main">
+      <header class="g2a-header">
+        <div>
+          <h1 id="page-title">系统设置</h1>
+          <p id="page-sub">修改管理员密码、轮询策略与 sub2api / 维护参数</p>
+        </div>
+        <div class="g2a-header-actions">
+          <span id="status-pill" class="g2a-tag">—</span>
+          <button type="button" class="g2a-theme-toggle" data-theme-toggle aria-label="切换主题"><span class="ico">☀️</span><span class="label">白天</span></button>
+          <button type="button" class="g2a-btn g2a-btn-default" id="btn-refresh">刷新</button>
+        </div>
+      </header>
+      <div class="g2a-mobile-nav" id="mobile-nav"></div>
+      <div class="g2a-content">
+<div class="g2a-sublayout" data-page-subnav="settings" data-default-section="password">
+  <aside class="g2a-subnav" aria-label="页面分区">
+    <div class="g2a-subnav-label">分区</div>
+      <button type="button" class="g2a-subnav-item is-active" data-section="password" aria-controls="panel-password">
+        <span class="g2a-subnav-ico">🔐</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">管理员密码</span>
+          <span class="g2a-subnav-desc">修改后台登录密码</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="pool" aria-controls="panel-pool">
+        <span class="g2a-subnav-ico">⟳</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">轮询与维护</span>
+          <span class="g2a-subnav-desc">Token 维护与健康探测</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="proxy" aria-controls="panel-proxy">
+        <span class="g2a-subnav-ico">⇄</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">出站代理池</span>
+          <span class="g2a-subnav-desc">账号请求代理设置</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="relay" aria-controls="panel-relay">
+        <span class="g2a-subnav-ico">◈</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">Relay 参数</span>
+          <span class="g2a-subnav-desc">sub2api / 压缩与转发</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="cooldown" aria-controls="panel-cooldown">
+        <span class="g2a-subnav-ico">❄</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">冷却 / 踢出</span>
+          <span class="g2a-subnav-desc">轮询冷却策略</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="sub2api" aria-controls="panel-sub2api">
+        <span class="g2a-subnav-ico">⇪</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">sub2api 导入</span>
+          <span class="g2a-subnav-desc">对接 sub2api 管理端</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="cliproxyapi" aria-controls="panel-cliproxyapi">
+        <span class="g2a-subnav-ico">⧉</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">CLIProxyAPI</span>
+          <span class="g2a-subnav-desc">CPA auth 同步</span>
+        </span>
+      </button>
+  </aside>
+  <div class="g2a-submain">
+    <div class="g2a-subpanel is-active" data-section="password" id="panel-password">
+<section id="sec-password" class="g2a-card">
+  <div class="g2a-card-head">
+    <div>
+      <h3>修改管理员密码</h3>
+      <p>本卡片独立保存（点「更新密码」）。密码哈希写入数据库（hybrid 的 PostgreSQL）。环境变量 <code>GROK2API_ADMIN_PASSWORD</code> 仅用于<strong>首次</strong>无密码时自动导入，之后鉴权以数据库为准。当前密码<strong>不会</strong>下发到前端，须手动输入。</p>
+    </div>
+    <span id="pwd-env-pill" class="g2a-tag">—</span>
+  </div>
+  <!--
+    Never prefill admin passwords. Use a real <form> with autocomplete=off and
+    non-login field names so browsers do not inject the saved admin password
+    into "当前密码". Values are always typed by the user.
+  -->
+  <form id="form-change-admin-password" class="g2a-form-grid" style="display:grid;gap:12px;max-width:520px" autocomplete="off" onsubmit="return false;">
+    <!-- decoy fields: absorb browser password-manager autofill -->
+    <input type="text" name="username" autocomplete="username" tabindex="-1" aria-hidden="true"
+      style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" value="" />
+    <input type="password" name="password" autocomplete="new-password" tabindex="-1" aria-hidden="true"
+      style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" value="" />
+    <div class="g2a-field">
+      <label for="set-cur-password">当前密码</label>
+      <input id="set-cur-password" name="g2a_admin_current_pw" type="password" class="g2a-input"
+        autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+        readonly onfocus="this.removeAttribute('readonly')"
+        placeholder="请手动输入当前管理员密码" value="" />
+      <div class="g2a-muted" style="margin-top:4px">不会自动填入；请自行输入当前密码后再设新密码。</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-new-password">新密码</label>
+      <input id="set-new-password" name="g2a_admin_new_pw" type="password" class="g2a-input"
+        autocomplete="new-password" data-lpignore="true" data-1p-ignore="true"
+        placeholder="至少 4 位" minlength="4" value="" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-confirm-password">确认新密码</label>
+      <input id="set-confirm-password" name="g2a_admin_confirm_pw" type="password" class="g2a-input"
+        autocomplete="new-password" data-lpignore="true" data-1p-ignore="true"
+        placeholder="再输入一次" minlength="4" value="" />
+    </div>
+    <div class="g2a-actions">
+      <button type="button" class="g2a-btn g2a-btn-primary" id="btn-change-password">更新密码</button>
+    </div>
+  </form>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="pool" id="panel-pool" hidden>
+<section class="g2a-card" id="sec-version">
+  <div class="g2a-card-head">
+    <div>
+      <h3>版本与热更新</h3>
+      <p>对照 GitHub Release / GHCR 最新版本；在<strong>容器内</strong>一键 pull 并 force-recreate（无需宿主机 watcher）。</p>
+    </div>
+    <span id="version-pill" class="g2a-tag">—</span>
+  </div>
+  <div class="g2a-form-grid" style="display:grid;gap:12px;max-width:720px">
+    <div class="g2a-field">
+      <label>当前版本</label>
+      <div class="mono" id="ver-current">—</div>
+    </div>
+    <div class="g2a-field">
+      <label>最新版本</label>
+      <div class="mono" id="ver-latest">—</div>
+      <div class="g2a-muted" style="margin-top:4px" id="ver-release-name"></div>
+    </div>
+    <div class="g2a-field" style="grid-column:1/-1">
+      <label>更新说明</label>
+      <pre id="ver-notes" class="g2a-muted" style="white-space:pre-wrap;max-height:160px;overflow:auto;margin:0;font-size:12px">—</pre>
+    </div>
+    <div class="g2a-field" style="grid-column:1/-1">
+      <label>热更新状态</label>
+      <div id="ver-update-status" class="g2a-muted">—</div>
+      <div class="g2a-muted" style="margin-top:4px" id="ver-update-hint"></div>
+    </div>
+    <div class="g2a-actions" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <button type="button" class="g2a-btn g2a-btn-default" id="btn-version-check">检查更新</button>
+      <button type="button" class="g2a-btn g2a-btn-primary" id="btn-version-update" disabled>热更新并重启</button>
+      <button type="button" class="g2a-btn g2a-btn-default" id="btn-version-restart" title="不强制换版本号时，仍走容器内 recreate">仅重启服务</button>
+      <a id="ver-release-link" href="#" target="_blank" rel="noopener" class="g2a-muted" style="margin-left:4px;display:none">查看 Release</a>
+    </div>
+    <div class="g2a-muted" style="grid-column:1/-1;font-size:12px">
+      容器内热更新：挂载 <code>/var/run/docker.sock</code> + 项目目录到 <code>/compose</code> 后，点击「热更新」会在容器内
+      <code>docker pull</code> 目标 GHCR 镜像并 <code>compose up -d --force-recreate</code>。
+      不再依赖宿主机 <code>g2a-update-watcher</code>。
+    </div>
+  </div>
+</section>
+
+<section id="sec-pool" class="g2a-card">
+  <div class="g2a-card-head">
+    <div>
+      <h3>轮询与维护</h3>
+      <p>账号选择策略与后台维护开关（立即生效）。间隔类改完保存后下一周期生效。</p>
+    </div>
+  </div>
+  <div class="g2a-form-grid" style="display:grid;gap:14px;max-width:720px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+    <div class="g2a-field">
+      <label for="set-account-mode">账号轮询模式</label>
+      <select id="set-account-mode" class="g2a-input">
+        <option value="round_robin">round_robin · 轮询</option>
+        <option value="random">random · 随机</option>
+        <option value="least_used">least_used · 最少使用</option>
+      </select>
+    </div>
+    <div class="g2a-field">
+      <label for="set-default-model">默认模型</label>
+      <input id="set-default-model" type="text" class="g2a-input" placeholder="grok-4.5" />
+    </div>
+    <div class="g2a-field" style="grid-column:1/-1">
+      <label for="set-probe-models">健康探测模型列表</label>
+      <input id="set-probe-models" type="text" class="g2a-input" placeholder="grok-4.5, grok-4" />
+      <div class="g2a-muted" style="margin-top:4px">逗号分隔；后台每轮轮询其中一个，避免笛卡尔积打爆池子</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-token-maintain-interval">Token 维护间隔（秒）</label>
+      <input id="set-token-maintain-interval" type="number" class="g2a-input" min="30" max="3600" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">默认 90；大池子可适当调高减轻刷新风暴</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-token-refresh-skew">Token 提前刷新窗口（秒）</label>
+      <input id="set-token-refresh-skew" type="number" class="g2a-input" min="30" max="1800" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">到期前多少秒开始刷新；默认 120</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-model-health-interval">模型健康探测间隔（秒）</label>
+      <input id="set-model-health-interval" type="number" class="g2a-input" min="0" max="86400" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">0 = 仅手动；≥30 为周期探测。大号池建议 120–300。默认 180</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-model-health-batch">探测每批账号数</label>
+      <input id="set-model-health-batch" type="number" class="g2a-input" min="1" max="1000" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">每轮选取账号数；实际可能按 workers 自适应放大。默认 120</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-model-health-workers">探测并发 workers</label>
+      <input id="set-model-health-workers" type="number" class="g2a-input" min="1" max="64" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">同时探测的账号数。大号池建议 8–16。默认 12</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-affinity-ttl">会话粘性 TTL（秒）</label>
+      <input id="set-affinity-ttl" type="number" class="g2a-input" min="60" max="86400" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">多轮对话绑定同一账号的缓存时长；默认 7200（2h）</div>
+    </div>
+    <div class="g2a-actions" style="grid-column:1/-1;flex-wrap:wrap;gap:16px">
+      <label class="g2a-check"><input type="checkbox" id="set-token-maintain" /> Token 自动续期</label>
+      <label class="g2a-check"><input type="checkbox" id="set-model-health" /> 模型健康探测</label>
+      <label class="g2a-check"><input type="checkbox" id="set-model-health-auto-disable" /> 探测失败自动踢出/封禁</label>
+      <label class="g2a-check"><input type="checkbox" id="set-affinity" /> 会话粘性（同对话绑同一账号）</label>
+    </div>
+  </div>
+  <div class="g2a-actions" style="margin-top:14px;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-reset-settings-pool">重置默认</button>
+    <button type="button" class="g2a-btn g2a-btn-primary" id="btn-save-settings-pool">保存</button>
+  </div>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="proxy" id="panel-proxy" hidden>
+<section class="g2a-card" id="sec-outbound-proxy">
+  <div class="g2a-card-head">
+    <div>
+      <h3>账号出站代理池</h3>
+      <p>账号池请求上游（聊天 / 测活 / Token 续期）走代理。按账号粘性选代理，与会话粘性配合更稳。协议注册可共用同一列表，也可单独配置。</p>
+    </div>
+    <span id="outbound-proxy-pill" class="g2a-tag">—</span>
+  </div>
+  <div class="g2a-form-grid" style="display:grid;gap:14px;max-width:720px">
+    <div class="g2a-actions" style="flex-wrap:wrap;gap:16px">
+      <label class="g2a-check"><input type="checkbox" id="set-outbound-proxy-enabled" checked /> 启用出站代理池</label>
+    </div>
+    <div class="g2a-field g2a-field-span2">
+      <label for="set-outbound-proxy" title="每行一个代理；支持 http/socks5 与 host:port:user:pass">代理池</label>
+      <textarea id="set-outbound-proxy" class="g2a-input" rows="4" spellcheck="false" placeholder="可选，每行一个代理&#10;http://host:port&#10;host:port:user:pass&#10;socks5://user:pass@host:port"></textarea>
+      <p class="g2a-muted" style="margin:4px 0 0" id="set-outbound-proxy-hint">未配置时直连上游。策略 round_robin 会对账号 ID 做稳定哈希（同账号固定出口）。</p>
+    </div>
+    <div class="g2a-field">
+      <label for="set-outbound-proxy-username">代理用户名</label>
+      <input id="set-outbound-proxy-username" type="text" class="g2a-input" placeholder="可选，共享认证" autocomplete="off" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-outbound-proxy-password">代理密码</label>
+      <input id="set-outbound-proxy-password" type="password" class="g2a-input" placeholder="可选，共享认证" autocomplete="new-password" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-outbound-proxy-strategy">代理策略</label>
+      <select id="set-outbound-proxy-strategy" class="g2a-input">
+        <option value="round_robin" selected>轮询/粘性哈希 (round_robin)</option>
+        <option value="random">随机 (random)</option>
+        <option value="sticky">固定首个 (sticky)</option>
+      </select>
+    </div>
+  </div>
+  <div class="g2a-actions" style="margin-top:14px;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-reset-settings-proxy">重置默认</button>
+    <button type="button" class="g2a-btn g2a-btn-primary" id="btn-save-settings-proxy">保存</button>
+  </div>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="relay" id="panel-relay" hidden>
+<section class="g2a-card" id="sec-relay">
+  <div class="g2a-card-head">
+    <div>
+      <h3>Relay / sub2api 参数</h3>
+      <p>影响 Claude Code / sub2api 工具流、reasoning 兼容与长上下文压缩。单工具 + 间隔可避免 “Content block not found”。</p>
+    </div>
+  </div>
+  <div class="g2a-form-grid" style="display:grid;gap:14px;max-width:720px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+    <div class="g2a-field" style="grid-column:1/-1">
+      <label for="set-reasoning">Reasoning 兼容模式</label>
+      <select id="set-reasoning" class="g2a-input">
+        <option value="off">off · 仅 reasoning_content（推荐 sub2api）</option>
+        <option value="think_tag">think_tag · 包装为 &lt;think&gt; 进 content</option>
+        <option value="content">content · 合并进 content</option>
+      </select>
+    </div>
+    <div class="g2a-field">
+      <label for="set-max-tools">每轮最多工具数 · Claude/sub2api（0=不限）</label>
+      <input id="set-max-tools" type="number" class="g2a-input" min="0" max="64" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">sub2api / Claude Code 建议保持 1</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-max-tools-openai">每轮最多工具数 · OpenAI chat（0=不限）</label>
+      <input id="set-max-tools-openai" type="number" class="g2a-input" min="0" max="64" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">仅 /v1/chat/completions；默认 0</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-tool-gap">工具 SSE 间隔（秒）</label>
+      <input id="set-tool-gap" type="number" class="g2a-input" min="0" max="2" step="0.01" />
+      <div class="g2a-muted" style="margin-top:4px">推荐 0.08；纯 OpenAI 客户端可设 0</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-sse-keepalive">SSE 保活间隔（秒）</label>
+      <input id="set-sse-keepalive" type="number" class="g2a-input" min="2" max="120" step="1" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-history-auto-chars">自动压缩阈值（字符）</label>
+      <input id="set-history-auto-chars" type="number" class="g2a-input" min="0" max="5000000" step="1000" />
+      <div class="g2a-muted" style="margin-top:4px">messages JSON 超过此长度时强制压缩；0=关闭（默认，优先智商）。仅当大会话导致上游失败时再设阈值</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-history-keep-rounds">保留最近工具轮数</label>
+      <input id="set-history-keep-rounds" type="number" class="g2a-input" min="1" max="64" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">仅在开启压缩时生效：近乎完整保留最近 N 轮 tool；默认 32（智商优先）</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-history-tool-max">单条 tool 结果上限（字符）</label>
+      <input id="set-history-tool-max" type="number" class="g2a-input" min="512" max="2000000" step="100" />
+      <div class="g2a-muted" style="margin-top:4px">仅开启压缩时：最近轮次单条 tool 上限（head+tail）；默认 48000</div>
+    </div>
+    <div class="g2a-actions" style="grid-column:1/-1">
+      <label class="g2a-check"><input type="checkbox" id="set-history-compact" /> 历史压缩（长工具循环时缩小请求体）</label>
+    </div>
+    <div class="g2a-actions" style="grid-column:1/-1">
+      <label class="g2a-check"><input type="checkbox" id="set-debug-shell-args" /> Shell 参数调试日志（记录 cmd 投影前后，排查 <code>[    ]</code> 前缀等问题）</label>
+      <div class="g2a-muted" style="margin-top:4px;margin-left:1.6em">开启后服务端日志会打印 preferred_key / has_workdir / raw_cmd / projected_cmd（仅出站投影诊断，不改上游 prompt/cache）；平时请关闭</div>
+    </div>
+    <div class="g2a-field" style="grid-column:1/-1">
+      <div class="g2a-muted" style="padding:10px 12px;border:1px solid var(--g2a-border, #333);border-radius:8px;line-height:1.55">
+        <strong>Codex App Shell 透传（已内置，无需开关）</strong><br />
+        自动识别 Codex App / CLI 的 <code>exec_command</code>/<code>local_shell</code>（支持 <code>cmd</code> 与 <code>command</code>）。进站 shell schema 仅允许单字符串 <code>command</code>（不再广告 argv 数组）；出站做 <code>command</code>/<code>cmd</code> 键名映射、残留数组扁平化（含空格 token 用双引号，避免 bash 单引号导致 PowerShell ParserError），并保留 <code>workdir</code>/timeout。不注入 PowerShell 规则、不改写命令正文。调试请用上方「Shell 参数调试日志」（默认关，含 <code>input_kind</code>）。
+      </div>
+    </div>
+  </div>
+  <div class="g2a-actions" style="margin-top:14px;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-reset-settings-relay">重置默认</button>
+    <button type="button" class="g2a-btn g2a-btn-primary" id="btn-save-settings-relay">保存</button>
+  </div>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="cooldown" id="panel-cooldown" hidden>
+<section class="g2a-card" id="sec-cooldown">
+  <div class="g2a-card-head">
+    <div>
+      <h3>轮询 / 冷却 / 踢出策略</h3>
+      <p>失败即进入冷却状态（无时长，仅测活成功或手动解除）；可配置模型封禁 TTL、探测踢出次数与故障切换上限。</p>
+    </div>
+  </div>
+  <div class="g2a-form-grid" style="display:grid;gap:14px;max-width:720px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="g2a-field">
+      <label for="set-soft-ttl">临时模型软封禁 TTL（秒）</label>
+      <input id="set-soft-ttl" type="number" class="g2a-input" min="30" max="3600" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">free-usage 耗尽时仅封禁该模型，到期自动恢复</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-durable-ttl">模型不可用封禁 TTL（秒）</label>
+      <input id="set-durable-ttl" type="number" class="g2a-input" min="60" max="86400" step="1" />
+      <div class="g2a-muted" style="margin-top:4px">模型真正不可用时封禁时长，到期由探测自动复核</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-probe-kick-streak">探测失败几次后冷却踢出</label>
+      <input id="set-probe-kick-streak" type="number" class="g2a-input" min="1" max="20" step="1" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-probe-disable-streak">探测失败几次后硬踢出</label>
+      <input id="set-probe-disable-streak" type="number" class="g2a-input" min="2" max="50" step="1" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-max-failover">单次最多故障切换账号数</label>
+      <input id="set-max-failover" type="number" class="g2a-input" min="1" max="64" step="1" />
+    </div>
+  </div>
+  <div class="g2a-muted" style="margin-top:10px;line-height:1.55">
+    请求/探测失败会把账号标记为<strong>冷却中</strong>（纯状态，没有倒计时）。仅下次测活成功或管理台手动解除后才回到轮询；临时额度错误可同时软封禁该模型；多次探测失败会进一步踢出或禁用。
+  </div>
+  <div class="g2a-actions" style="margin-top:14px;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-reset-settings-cooldown">重置默认</button>
+    <button type="button" class="g2a-btn g2a-btn-primary" id="btn-save-settings-cooldown">保存</button>
+  </div>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="sub2api" id="panel-sub2api" hidden>
+<section class="g2a-card" id="sec-sub2api">
+  <div class="g2a-card-head">
+    <h2>sub2api 导入</h2>
+    <span id="sub2api-pill" class="g2a-tag">—</span>
+  </div>
+  <p class="g2a-muted" style="margin:0 0 12px;line-height:1.55">
+    配置 <a href="https://github.com/Wei-Shaw/sub2api" target="_blank" rel="noopener">sub2api</a> 管理端地址与登录后，
+    可在「账号」页将本地 Grok 账号<strong>批量导入</strong>到指定分组（平台 <code>grok</code> / OAuth）。
+    优先使用本地 access/refresh token 直推；无 token 时回退 SSO→OAuth。
+  </p>
+  <div class="g2a-form-grid">
+    <div class="g2a-field">
+      <label class="g2a-check"><input type="checkbox" id="set-sub2api-enabled" /> 启用 sub2api 导入</label>
+    </div>
+    <div class="g2a-field g2a-field-span2">
+      <label for="set-sub2api-url">sub2api URL</label>
+      <input id="set-sub2api-url" type="url" class="g2a-input" placeholder="https://sub2api.example.com" autocomplete="off" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-email">登录邮箱</label>
+      <input id="set-sub2api-email" type="email" class="g2a-input" placeholder="admin@example.com" autocomplete="username" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-password">登录密码</label>
+      <input id="set-sub2api-password" type="password" class="g2a-input" placeholder="已保存则留空不改" autocomplete="new-password" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-group-id">默认分组 ID</label>
+      <input id="set-sub2api-group-id" type="number" class="g2a-input" min="1" step="1" placeholder="可选，优先于名称" />
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-group-name">默认分组名</label>
+      <input id="set-sub2api-group-name" type="text" class="g2a-input" placeholder="gptcli-2api" />
+    </div>
+    <div class="g2a-field">
+      <label class="g2a-check"><input type="checkbox" id="set-sub2api-auto-group" checked /> 分组不存在时自动创建</label>
+    </div>
+    <div class="g2a-field">
+      <label class="g2a-check"><input type="checkbox" id="set-sub2api-auto-push-register" /> 注册成功后自动入库 sub2api</label>
+      <div class="g2a-muted" style="margin-top:4px">勾选后会<strong>同时启用</strong> sub2api 导入；协议注册入库本地后立刻推送到上方分组（需填好 URL/登录/分组）。点「保存设置」后生效。</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-concurrency">推送并发</label>
+      <input id="set-sub2api-concurrency" type="number" class="g2a-input" min="1" max="16" step="1" value="4" />
+      <div class="g2a-muted" style="margin-top:4px">本地→sub2api 同时推送几个账号；默认 4</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-account-concurrency">账号容量（concurrency）</label>
+      <input id="set-sub2api-account-concurrency" type="number" class="g2a-input" min="1" max="100" step="1" value="3" />
+      <div class="g2a-muted" style="margin-top:4px">写入 sub2api 每个账号的并发容量；在线推送与导出数据均生效。默认 3</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-account-priority">账号优先级</label>
+      <input id="set-sub2api-account-priority" type="number" class="g2a-input" min="0" max="100" step="1" value="50" />
+      <div class="g2a-muted" style="margin-top:4px">sub2api account.priority；默认 50</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-account-rate">倍率 rate_multiplier</label>
+      <input id="set-sub2api-account-rate" type="number" class="g2a-input" min="0.1" max="10" step="0.1" value="1" />
+      <div class="g2a-muted" style="margin-top:4px">sub2api 计费/限速倍率；默认 1.0</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-sub2api-notes">notes 前缀</label>
+      <input id="set-sub2api-notes" type="text" class="g2a-input" placeholder="gptcli-2api" />
+    </div>
+  </div>
+  <div class="g2a-actions" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-reset-settings-sub2api">重置默认</button>
+    <button type="button" class="g2a-btn g2a-btn-primary" id="btn-save-settings-sub2api">保存</button>
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-sub2api-test">测试连接</button>
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-sub2api-load-groups">刷新分组</button>
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-sub2api-create-group">创建分组</button>
+    <select id="set-sub2api-group-select" class="g2a-input" style="min-width:220px" title="选择后写入默认分组 ID">
+      <option value="">— 选择已有分组 —</option>
+    </select>
+  </div>
+  <pre id="sub2api-test-result" class="g2a-log" style="margin-top:10px;max-height:160px;display:none"></pre>
+  <p class="g2a-muted" style="margin:10px 0 0;line-height:1.55" id="sub2api-hint">
+    保存后到「账号」页：可「导入 sub2api（选中/全部）」在线推送；或「导出 sub2api 数据」下载官方 <code>sub2api-data</code> 备份，在 sub2api 管理台「导入数据」上传。
+    勾选「注册成功后自动入库 sub2api」后，协议注册导入本地账号会<strong>立刻</strong>推送到上方配置的分组。
+  </p>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="cliproxyapi" id="panel-cliproxyapi" hidden>
+<section class="g2a-card" id="sec-cliproxyapi">
+  <div class="g2a-card-head">
+    <h2>CLIProxyAPI（CPA）导入</h2>
+    <span id="cliproxyapi-pill" class="g2a-tag">—</span>
+  </div>
+  <p class="g2a-muted" style="margin:0 0 12px;line-height:1.55">
+    配置 <a href="https://github.com/router-for-me/CLIProxyAPI" target="_blank" rel="noopener">CLIProxyAPI</a>
+    的 Management API 后，可在「账号」页把<strong>本地号池账号同步导入到 CPA auth 目录</strong>
+    （<code>POST /v0/management/auth-files</code>，写入 <code>xai-email.json</code> 等文件）。
+    需在 CPA <code>config.yaml</code> 开启 <code>remote-management</code> 并设置 management key。
+  </p>
+  <div class="g2a-form-grid">
+    <div class="g2a-field">
+      <label class="g2a-check"><input type="checkbox" id="set-cliproxyapi-enabled" /> 启用 CLIProxyAPI 导入</label>
+    </div>
+    <div class="g2a-field g2a-field-span2">
+      <label for="set-cliproxyapi-url">CLIProxyAPI URL</label>
+      <input id="set-cliproxyapi-url" type="url" class="g2a-input" placeholder="http://127.0.0.1:8317 或 http://cli-proxy-api:8317" autocomplete="off" />
+      <div class="g2a-muted" style="margin-top:4px">管理 API 根地址（不要带 /v0/management）</div>
+    </div>
+    <div class="g2a-field g2a-field-span2">
+      <label for="set-cliproxyapi-key">Management Key</label>
+      <input id="set-cliproxyapi-key" type="password" class="g2a-input" placeholder="已保存则留空不改" autocomplete="new-password" />
+      <div class="g2a-muted" style="margin-top:4px">对应 CPA <code>remote-management.secret-key</code>；请求头 <code>Authorization: Bearer …</code> / <code>X-Management-Key</code></div>
+    </div>
+    <div class="g2a-field">
+      <label class="g2a-check"><input type="checkbox" id="set-cliproxyapi-auto-push-register" /> 注册成功后自动入库 CPA</label>
+      <div class="g2a-muted" style="margin-top:4px">勾选后会<strong>同时启用</strong> CLIProxyAPI 导入；协议注册入库本地后立刻推送到 CPA（需填好 URL / Management Key）。点「保存设置」后生效。</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-cliproxyapi-concurrency">推送并发</label>
+      <input id="set-cliproxyapi-concurrency" type="number" class="g2a-input" min="1" max="16" step="1" value="4" />
+      <div class="g2a-muted" style="margin-top:4px">本地→CPA 同时上传几个账号；默认 4</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-cliproxyapi-auth-type">写入 type</label>
+      <select id="set-cliproxyapi-auth-type" class="g2a-input">
+        <option value="xai" selected>xai（推荐 · Grok Build / cli-chat-proxy）</option>
+        <option value="codex">codex</option>
+      </select>
+    </div>
+    <div class="g2a-field g2a-field-span2">
+      <label for="set-cliproxyapi-base-upstream">auth 文件 base_url</label>
+      <input id="set-cliproxyapi-base-upstream" type="url" class="g2a-input" placeholder="https://cli-chat-proxy.grok.com/v1" />
+      <div class="g2a-muted" style="margin-top:4px">写入 CPA auth JSON 的上游；Grok Build 请保持 cli-chat-proxy，勿改成 api.x.ai 以免 402</div>
+    </div>
+    <div class="g2a-field">
+      <label for="set-cliproxyapi-notes">notes 前缀</label>
+      <input id="set-cliproxyapi-notes" type="text" class="g2a-input" placeholder="gptcli-2api" />
+    </div>
+  </div>
+  <div class="g2a-actions" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-reset-settings-cliproxyapi">重置默认</button>
+    <button type="button" class="g2a-btn g2a-btn-primary" id="btn-save-settings-cliproxyapi">保存</button>
+    <button type="button" class="g2a-btn g2a-btn-default" id="btn-cliproxyapi-test">测试连接</button>
+  </div>
+  <pre id="cliproxyapi-test-result" class="g2a-log" style="margin-top:10px;max-height:160px;display:none"></pre>
+  <p class="g2a-muted" style="margin:10px 0 0;line-height:1.55" id="cliproxyapi-hint">
+    保存后到「账号」页：用「导入 CLIProxyAPI（选中/全部）」把库里的账号同步到 CPA。
+    「导出 CLIProxyAPI」可下载 <code>cliproxyapi-auth-bundle</code> 备份（也可手动拆文件放进 CPA auth 目录）。
+  </p>
+</section>
+    </div>
+
+    <div class="g2a-sublayout-foot">
+<div class="g2a-actions" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div class="g2a-muted" id="settings-updated-at">—</div>
+    <div class="g2a-actions">
+      <button type="button" class="g2a-btn g2a-btn-default" id="btn-reload-settings">重新加载</button>
+    </div>
+  </div>
+  <p class="g2a-muted" style="margin:8px 0 0;line-height:1.5">每个卡片可单独「保存」或「重置默认」（仅影响该卡片）。底部可重新加载全部。</p>
+    </div>
+  </div>
+</div>
+
+
+      </div>
+    </div>
+  </div>
+  <script src="/static/dist/utils.ac10ff3b58.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/api.9ac71f7ed9.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/auth.fa7b1e0e4d.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.0f85a1f533.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+
+  
+  <script>
+  /* g2a-asset-boot v2: recover at most once; never spin-reload forever */
+  (function () {
+    var KEY = "g2a_asset_reload_at";
+    function reloadedRecently() {
+      try { return (Date.now() - Number(sessionStorage.getItem(KEY) || 0)) < 60000; } catch (e) { return false; }
+    }
+    function markReload() {
+      try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    }
+    window.__g2aScriptFailed = function (el) {
+      console.error("static script failed", el && el.src);
+      if (!reloadedRecently()) {
+        markReload();
+        var u = new URL(location.href);
+        u.searchParams.set("_g2a_cb", String(Date.now()));
+        location.replace(u.pathname + u.search);
+        return;
+      }
+      var d = document.getElementById("boot-desc") || document.getElementById("boot-hint");
+      if (d) d.textContent = "静态资源加载失败，请点击重试";
+    };
+    window.__g2aBootLogin = function () {
+      function show(msg) {
+        try {
+          var boot = document.getElementById("boot-view");
+          var auth = document.getElementById("auth-view");
+          if (boot) boot.classList.remove("hidden");
+          if (auth) auth.classList.add("hidden");
+          var d = document.getElementById("boot-desc");
+          var h = document.getElementById("boot-hint");
+          if (d) d.textContent = "页面脚本未就绪";
+          if (h) h.innerHTML = (msg || "") +
+            '<br><button type="button" class="g2a-btn g2a-btn-primary" style="margin-top:12px" id="g2a-reload-btn">重试</button>';
+          var b = document.getElementById("g2a-reload-btn");
+          if (b) b.onclick = function () {
+            try { sessionStorage.removeItem(KEY); } catch (e) {}
+            location.replace(location.pathname + "?_g2a_cb=" + Date.now());
+          };
+        } catch (e) {}
+      }
+      // Wait a tick for deferred scripts; do NOT auto-reload unless scripts truly missing after short wait.
+      var tries = 0;
+      function attempt() {
+        tries += 1;
+        if (window.G2A && typeof G2A.api === "function" && G2A.auth && typeof G2A.auth.initLoginPage === "function") {
+          try { G2A.auth.initLoginPage(); } catch (e) { show(String(e && e.message || e)); }
+          return;
+        }
+        if (tries < 20) { setTimeout(attempt, 50); return; } // ~1s wait for script parse
+        show("登录脚本加载不完整。点击重试。");
+      }
+      attempt();
+    };
+  })();
+  </script>
+
+
+
+  <script>
+    // g2a-paint-lock: keep first paint continuous; never leave a blank black document.
+    (function () {
+      try {
+        var t = localStorage.getItem("g2a_theme");
+        if (t !== "light" && t !== "dark") {
+          t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+        document.documentElement.style.colorScheme = t;
+        document.documentElement.style.background = t === "light" ? "#f5f7fb" : "#0a0a0f";
+        var tok = localStorage.getItem("g2a_admin_token") || "";
+        var ts = Number(localStorage.getItem("g2a_admin_token_ts") || 0) || 0;
+        var grace = tok && ts && (Date.now() - ts) < 7 * 24 * 3600 * 1000;
+        if (tok || grace) document.documentElement.classList.add("g2a-has-session");
+      } catch (e) {}
+      // Safety: if soft-nav busy class somehow persisted via bfcache, clear on pageshow.
+      window.addEventListener("pageshow", function () {
+        try { document.body && document.body.classList.remove("g2a-softnav-busy"); } catch (_) {}
+      });
+      // If scripts hang, unstick busy dimmer after 12s.
+      setTimeout(function () {
+        try { document.body && document.body.classList.remove("g2a-softnav-busy"); } catch (_) {}
+      }, 12000);
+    })();
+  </script>
+
+  <script>
+    // Apply theme before paint to avoid flash.
+    (function () {
+      try {
+        var t = localStorage.getItem("g2a_theme");
+        if (t !== "light" && t !== "dark") {
+          t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+        document.documentElement.style.colorScheme = t;
+        document.documentElement.style.background = t === "light" ? "#f5f7fb" : "#0a0a0f";
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 · gptcli-2api</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/dist/admin-antd.957f0049d1.css" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+<body class="g2a-body g2a-login-body">
+  <div id="toast" class="g2a-message"></div>
+  <div style="position:fixed;top:16px;right:16px;z-index:30"><button type="button" class="g2a-theme-toggle" data-theme-toggle aria-label="切换主题"><span class="ico">☀️</span><span class="label">白天</span></button></div>
+
+  <div id="boot-view" class="g2a-login-screen">
+    <div class="g2a-login-panel g2a-card">
+      <div class="g2a-login-brand">
+        <div class="g2a-logo g2a-logo-lg">G</div>
+        <div>
+          <div class="g2a-brand-title">gptcli-2api</div>
+          <div class="g2a-brand-sub">OpenAI · Anthropic 兼容网关</div>
+        </div>
+      </div>
+      <div class="g2a-login-status">
+        <span class="g2a-spinner" aria-hidden="true"></span>
+        <div>
+          <h1 id="boot-desc" class="g2a-login-title">正在连接服务…</h1>
+          <p id="boot-hint" class="g2a-muted">检测鉴权与数据库连接状态</p>
+        </div>
+      </div>
+      <div id="boot-conn" class="g2a-conn-list" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <div id="auth-view" class="g2a-login-screen hidden">
+    <div class="g2a-login-panel g2a-card">
+      <div class="g2a-login-brand">
+        <div class="g2a-logo g2a-logo-lg">G</div>
+        <div>
+          <div class="g2a-brand-title">gptcli-2api</div>
+          <div class="g2a-brand-sub">管理台鉴权入口</div>
+        </div>
+      </div>
+
+      <h1 id="auth-title" class="g2a-login-title">登录管理台</h1>
+      <p id="auth-desc" class="g2a-muted g2a-login-desc">使用管理员密码进入（会话 Token 鉴权）</p>
+
+      <div id="auth-conn" class="g2a-conn-list" style="margin-bottom:16px"></div>
+
+      <form id="auth-form" class="g2a-login-form" autocomplete="on">
+        <label class="g2a-label" for="auth-password">管理员密码</label>
+        <input id="auth-password" name="password" type="password" class="g2a-input g2a-input-lg"
+               placeholder="请输入管理员密码" autocomplete="current-password" required minlength="4" />
+        <div id="auth-error" class="g2a-form-error hidden"></div>
+        <button class="g2a-btn g2a-btn-primary g2a-btn-lg g2a-btn-block" id="auth-submit" type="submit">
+          登录并连接数据
+        </button>
+      </form>
+
+      <div class="g2a-login-foot">
+        <button type="button" class="g2a-link-btn" id="auth-refresh">重新检测连接</button>
+        <a class="g2a-link-btn" href="/health" target="_blank" rel="noopener">/health</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/dist/utils.ac10ff3b58.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/api.9ac71f7ed9.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/auth.fa7b1e0e4d.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script>document.addEventListener("DOMContentLoaded", function(){ window.__g2aBootLogin && __g2aBootLogin(); });</script>
+</body>
+</html>
