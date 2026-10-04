@@ -16,7 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     TZ=Asia/Shanghai \
     GROK2API_HOST=0.0.0.0 \
-    GROK2API_PORT=3000 \
+    GROK2API_PORT=8081 \
     GROK2API_OPEN_BROWSER=0 \
     GROK2API_STORE_BACKEND=hybrid \
     GROK2API_RUNTIME=go \
@@ -65,6 +65,7 @@ RUN apt-get update \
         curl \
         fonts-liberation \
         fonts-noto-color-emoji \
+        nodejs \
         libasound2 \
         libatk-bridge2.0-0 \
         libatk1.0-0 \
