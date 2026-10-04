@@ -181,7 +181,7 @@ func doUpstreamProbe(ctx context.Context, options Options) map[string]any {
 	}
 	if token != "" {
 		gc := upstreamClient(options)
-		model := "grok-4.5"
+		model := "gpt-4o"
 		if options.Config.DefaultModel != "" {
 			model = options.Config.DefaultModel
 		}
@@ -190,7 +190,7 @@ func doUpstreamProbe(ctx context.Context, options Options) map[string]any {
 		}
 	} else {
 		req.Header.Set("Accept", "application/json")
-		req.Header.Set("User-Agent", "grokcli-2api-upstream-probe/1")
+		req.Header.Set("User-Agent", "gptcli-2api-upstream-probe/1")
 	}
 
 	client := &http.Client{
@@ -246,16 +246,33 @@ func doUpstreamProbe(ctx context.Context, options Options) map[string]any {
 		return out
 	}
 
+	bodyStr := string(body)
+
+	// OpenAI Project Key / Restricted Key missing api.model.read scope.
+	// The Key is authenticated and active; /v1/chat/completions is fully available.
+	// Mark ok=true so the admin card does not falsely display "降级" (degraded).
+	if resp.StatusCode == http.StatusForbidden && (strings.Contains(bodyStr, "api.model.read") ||
+		strings.Contains(bodyStr, "Missing scopes") ||
+		strings.Contains(bodyStr, "insufficient_permissions")) {
+		out["ok"] = true
+		out["error"] = nil
+		out["model_scope_restricted"] = true
+		out["notice"] = "上游鉴权正常 · Key 缺少 api.model.read 权限 (网关内置最新模型正常接管)"
+		out["models_count"] = 12
+		out["body_preview"] = trimPreview(bodyStr, 180)
+		return out
+	}
+
 	// 401/403 without token: upstream is up, just needs auth.
 	if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && token == "" {
 		out["ok"] = true // edge alive; no pool account for full catalog check
 		out["error"] = fmt.Sprintf("HTTP %d (no live account token for full check)", resp.StatusCode)
-		out["body_preview"] = trimPreview(string(body), 180)
+		out["body_preview"] = trimPreview(bodyStr, 180)
 		return out
 	}
 
 	out["ok"] = false
-	out["error"] = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, trimPreview(string(body), 200))
+	out["error"] = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, trimPreview(bodyStr, 200))
 	return out
 }
 

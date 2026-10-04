@@ -102,7 +102,7 @@ CLIENT_SURFACE = os.getenv("GROK2API_CLIENT_SURFACE", "grok-cli")
 CLIENT_IDENTIFIER = os.getenv("GROK2API_CLIENT_IDENTIFIER", "grokcli-2api")
 
 # Default model when client omits / sends generic names
-DEFAULT_MODEL = os.getenv("GROK2API_DEFAULT_MODEL", "grok-4.5")
+DEFAULT_MODEL = os.getenv("GROK2API_DEFAULT_MODEL", "gpt-4o")
 
 # Account rotation mode (also changeable in admin UI / settings store)
 # round_robin | random | least_used  (all accounts equal; no primary)
@@ -133,7 +133,7 @@ _probe_env = os.getenv("GROK2API_PROBE_MODELS", "").strip()
 PROBE_MODELS: list[str] = (
     [m.strip() for m in _probe_env.split(",") if m.strip()]
     if _probe_env
-    else [DEFAULT_MODEL]
+    else [DEFAULT_MODEL, "gpt-4o-mini", "o3-mini"]
 )
 
 # Large multi-account pools (hundreds of entries) can freeze WSL/low-RAM hosts
@@ -341,10 +341,20 @@ REQUIRE_SHARED_STORES = os.getenv("GROK2API_REQUIRE_SHARED_STORES", "1").lower()
 
 # Map common aliases -> real model ids (OpenAI + Anthropic client defaults)
 MODEL_ALIASES: dict[str, str] = {
+    "chatgpt": DEFAULT_MODEL,
+    "chatgpt-4": DEFAULT_MODEL,
+    "chatgpt-4o": "chatgpt-4o-latest",
     "gpt-4": DEFAULT_MODEL,
     "gpt-4o": DEFAULT_MODEL,
     "gpt-3.5-turbo": DEFAULT_MODEL,
     "gpt-4-turbo": DEFAULT_MODEL,
+    "gpt-4.5": "gpt-4.5-preview",
+    "gpt-4.5-preview": "gpt-4.5-preview",
+    "o1": "o1",
+    "o1-mini": "o1-mini",
+    "o1-preview": "o1-preview",
+    "o3": "o3",
+    "o3-mini": "o3-mini",
     "claude": DEFAULT_MODEL,
     "claude-3": DEFAULT_MODEL,
     "claude-3-5-sonnet": DEFAULT_MODEL,
@@ -370,13 +380,5 @@ MODEL_ALIASES: dict[str, str] = {
     "claude-haiku-4": DEFAULT_MODEL,
     "claude-haiku-4-5": DEFAULT_MODEL,
     "claude-haiku-4-5-20251001": DEFAULT_MODEL,
-    "grok": DEFAULT_MODEL,
-    "grok-latest": DEFAULT_MODEL,
-    # Real cli-chat-proxy model id (often omitted from /v1/models list).
-    "grok-build": "grok-build",
-    "grok-build-latest": "grok-build",
-    # Historical free-tier name seen in free-usage error payloads.
-    "grok-4.5-build-free": "grok-build",
-    "grok-4.5-build": "grok-build",
     "default": DEFAULT_MODEL,
 }

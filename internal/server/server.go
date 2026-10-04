@@ -635,7 +635,7 @@ func serveModels(w http.ResponseWriter, r *http.Request, options Options) {
 	}
 	catalog := options.Models
 	if catalog == nil {
-		catalog = models.NewCatalog(config.Config{DefaultModel: "grok-4.5"}, nil)
+		catalog = models.NewCatalog(config.Config{DefaultModel: "gpt-4o"}, nil)
 	}
 	writeJSON(w, http.StatusOK, catalog.OpenAIList(r.Context()))
 }
@@ -1079,7 +1079,7 @@ func streamChatCompletions(w http.ResponseWriter, r *http.Request, body io.Reade
 				}
 				model := streamModel
 				if model == "" {
-					model = "grok-4.5"
+					model = "gpt-4o"
 				}
 				term := map[string]any{
 					"id":      id,
@@ -6698,7 +6698,7 @@ func modelCatalog(options Options) *models.Catalog {
 	if options.Models != nil {
 		return options.Models
 	}
-	return models.NewCatalog(config.Config{DefaultModel: "grok-4.5"}, nil)
+	return models.NewCatalog(config.Config{DefaultModel: "gpt-4o"}, nil)
 }
 
 func publicAPIBase(r *http.Request, port int) string {
@@ -7836,6 +7836,12 @@ func fetchUpstreamModels(ctx context.Context, options Options) (items []map[stri
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode >= 400 {
+		bodyStr := string(body)
+		if resp.StatusCode == http.StatusForbidden && (strings.Contains(bodyStr, "api.model.read") || strings.Contains(bodyStr, "Missing scopes")) {
+			// Key authenticated but restricted from reading /v1/models. Fallback to full built-in catalog!
+			items = ensureLocalModelExtras(nil, options.runtimeConfig().DefaultModel)
+			return items, a.Email, origin, nil
+		}
 		return nil, a.Email, origin, fmt.Errorf("upstream %d: %s", resp.StatusCode, string(body)[:minInt(300, len(body))])
 	}
 	var payload any
@@ -8610,7 +8616,7 @@ func parseUpstreamModels(payload any) []map[string]any {
 
 func ensureLocalModelExtras(items []map[string]any, defaultModel string) []map[string]any {
 	if defaultModel == "" {
-		defaultModel = "grok-4.5"
+		defaultModel = "gpt-4o"
 	}
 	have := map[string]bool{}
 	for _, it := range items {
@@ -8619,9 +8625,25 @@ func ensureLocalModelExtras(items []map[string]any, defaultModel string) []map[s
 		}
 	}
 	extras := []map[string]any{
-		{"id": defaultModel, "name": defaultModel, "owned_by": "xai"},
-		{"id": "grok-build", "name": "Grok Build", "description": "Grok coding / build model (cli-chat-proxy)", "owned_by": "xai", "synthetic": true},
-		{"id": "grok-search", "name": "Grok Search", "description": "Grok with web search enabled (local alias)", "owned_by": "xai", "synthetic": true},
+		{"id": defaultModel, "name": defaultModel, "owned_by": "openai"},
+		{"id": "gpt-5", "name": "GPT-5", "description": "OpenAI flagship intelligence model with configurable reasoning effort", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "gpt-5-mini", "name": "GPT-5 Mini", "description": "Strong intelligence for cost-sensitive, low-latency workloads", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "gpt-5-nano", "name": "GPT-5 nano", "description": "Fastest and most cost-efficient version of GPT-5", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-5-codex", "name": "GPT-5 Codex", "description": "Version of GPT-5 optimized for agentic coding in Codex", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.5", "name": "GPT-5.5", "description": "New class of intelligence for complex coding and professional work", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+		{"id": "gpt-4.1", "name": "GPT-4.1", "description": "OpenAI smartest non-reasoning flagship model", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini", "description": "Smaller, faster version of GPT-4.1", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-4o", "name": "GPT-4o", "description": "OpenAI flagship omni model", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-4o-mini", "name": "GPT-4o mini", "description": "OpenAI fast, affordable small model", "owned_by": "openai", "context_window": 128000},
+		{"id": "chatgpt-4o-latest", "name": "ChatGPT 4o Latest", "description": "ChatGPT latest dynamic model", "owned_by": "openai", "context_window": 128000},
+		{"id": "o3", "name": "o3", "description": "OpenAI flagship reasoning model", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "o3-mini", "name": "o3-mini", "description": "OpenAI latest efficient reasoning model", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "o4-mini", "name": "o4-mini", "description": "Fast, cost-efficient next-generation reasoning model", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "o1", "name": "o1", "description": "OpenAI reasoning model", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
+		{"id": "o1-mini", "name": "o1-mini", "description": "OpenAI fast reasoning model", "owned_by": "openai", "context_window": 128000, "supports_reasoning_effort": true},
+		{"id": "gpt-image-2", "name": "GPT Image 2", "description": "State-of-the-art OpenAI image generation model", "owned_by": "openai"},
+		{"id": "text-embedding-3-small", "name": "Embedding 3 Small", "description": "OpenAI text embedding", "owned_by": "openai"},
+		{"id": "text-embedding-3-large", "name": "Embedding 3 Large", "description": "OpenAI text embedding 3 large", "owned_by": "openai"},
 	}
 	for _, ex := range extras {
 		id := strings.ToLower(stringValue(ex["id"]))

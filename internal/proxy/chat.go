@@ -168,16 +168,20 @@ func (s *ChatService) CompleteWithResult(ctx context.Context, request ChatReques
 	// stickyMissID defers pin clear until a later account actually succeeds.
 	stickyMissID := ""
 	markedAccounts := make(map[string]bool)
+	var markedOrder []string
 	mark := func(accountID string) {
 		s.markAttempt(ctx, accountID)
-		markedAccounts[accountID] = true
+		if !markedAccounts[accountID] {
+			markedAccounts[accountID] = true
+			markedOrder = append(markedOrder, accountID)
+		}
 	}
 	releaseMarkedExcept := func(keepID string) {
 		if s.PickObserver == nil {
 			return
 		}
-		for id := range markedAccounts {
-			if id == keepID {
+		for _, id := range markedOrder {
+			if id == keepID || !markedAccounts[id] {
 				continue
 			}
 			s.releasePick(ctx, id)

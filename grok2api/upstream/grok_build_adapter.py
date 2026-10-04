@@ -2990,7 +2990,9 @@ def _run_registration(
                     proto = str(sess.get("novproxy_up_proto") or "socks5h").strip()
                     up_user = str(sess.get("novproxy_up_user") or "").strip()
                     up_pass = str(sess.get("novproxy_up_pass") or "").strip()
-                    region = str(sess.get("novproxy_up_region") or "US").strip()
+                    region = str(sess.get("novproxy_up_region") or sess.get("novproxy_region") or "AUTO").strip()
+                    if region.upper() in ("AUTO", "*", "ANY", "ALL"):
+                        region = "JP"
                     time_mins = str(sess.get("novproxy_up_time") or "60").strip()
                     if "-region-" in up_user:
                         up_user = up_user.split("-region-")[0].strip()
@@ -3003,7 +3005,9 @@ def _run_registration(
                     try:
                         from grok2api.upstream.browser_register import novproxy
                         api_base = str(sess.get("novproxy_api") or "https://white.novproxy.com/white/api").strip()
-                        region = str(sess.get("novproxy_region") or "US").strip()
+                        region = str(sess.get("novproxy_region") or "AUTO").strip()
+                        if region.upper() in ("AUTO", "*", "ANY", "ALL"):
+                            region = "JP"
                         minutes = int(sess.get("novproxy_minutes") or 60)
                         update("proxy_extract", f"正在从 NovProxy 提取实时动态住宅代理 ({region})...")
                         nodes = novproxy.fetch_nodes(
@@ -3040,12 +3044,12 @@ def _run_registration(
             # 3. 前置一致性配合：出口国家与网络环境自适应对齐 (us_consistency)
             from grok2api.upstream.browser_register import us_consistency
             if us_consistency.enabled():
-                expect_c = str(sess.get("us_consistency_expect_country") or "").strip()
+                expect_c = str(sess.get("us_consistency_expect_country") or "AUTO").strip()
                 if expect_c.upper() in ("AUTO", "ALL", "RAND", "ANY", "*"):
                     expect_c = ""
                 detected_zone = us_consistency.align_timezone_with_proxy(active_proxy, expect_country=expect_c)
                 if detected_zone:
-                    update("consistency", us_consistency.describe())
+                    update("consistency", f"us_consistency: 自动对齐出口所在地 ({us_consistency.location_summary()}) 时区")
 
             # 4. 同步本地 Turnstile Solver 求解器出站代理
             try:

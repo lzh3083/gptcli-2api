@@ -440,9 +440,9 @@ def start_browser(log_callback=None, use_proxy=True):
                 try:
                     import us_consistency
                     if us_consistency.enabled():
-                        expect = "US"
+                        expect = "AUTO"
                         try:
-                            expect = str(config.get("us_consistency_expect_country") or "US")
+                            expect = str(config.get("us_consistency_expect_country") or "AUTO")
                         except Exception:
                             pass
                         zone = us_consistency.align_timezone_with_proxy(browser_proxy, expect_country=expect)

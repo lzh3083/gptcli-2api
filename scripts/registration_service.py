@@ -903,8 +903,10 @@ async def extract_novproxy(request: Request) -> dict[str, Any]:
     extracted_time = qs.get("time", [None])[0]
     extracted_num = qs.get("num", [None])[0]
 
-    # 若粘贴的完整 URL 中自带参数，以 URL 参数为准；否则取表单字段
-    region = str(extracted_region or body.get("novproxy_region") or "US").strip()
+    # 若粘贴的完整 URL 中自带参数，以 URL 参数为准；否则取表单字段（默认优先模型部署国）
+    region = str(extracted_region or body.get("novproxy_region") or "AUTO").strip()
+    if region.upper() in ("AUTO", "ALL", "RAND", "ANY", "*"):
+        region = "JP"
     try:
         minutes = int(extracted_time or body.get("novproxy_minutes") or 60)
     except Exception:

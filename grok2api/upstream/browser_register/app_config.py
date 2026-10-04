@@ -137,19 +137,19 @@ DEFAULT_CONFIG = {
     "yyds_jwt": "",
     "defaultDomains": "",
     # ---- 美国住宅 IP 环境一致性（本仓库新增）----
-    # 把浏览器时区/语言/platform 归一化到"美国 Windows 桌面用户"，
-    # 避免 IP=US 而时区=UTC、platform=Linux 这类自相矛盾特征。
+    # 把浏览器时区/语言/platform 归一化到真实出口国家与地区，
+    # 避免 IP 所在地区与时区、语言、platform 等自相矛盾。
     "us_consistency_enabled": True,
-    "us_consistency_timezone": "America/New_York",
-    "us_consistency_locale": "en-US",
-    # 代理出口的期望国家。启动浏览器前会探测真实出口，只有国家匹配时
-    # 才按落地州对齐时区；不匹配则保持原时区不动，避免"将错就错"。
-    "us_consistency_expect_country": "US",
-    # ---- NovProxy 美国动态住宅代理 ----
+    "us_consistency_timezone": "AUTO",
+    "us_consistency_locale": "AUTO",
+    # 代理出口的期望国家。默认 AUTO 自动按家宽 IP 真实出口所在地对齐；
+    # 优先 OpenAI 模型部署国家（如 JP / US / SG / GB 等），不再强制锁死美国。
+    "us_consistency_expect_country": "AUTO",
+    # ---- NovProxy 动态住宅家宽代理 ----
     # 提取接口。节点按会话粘性保持，minutes 必须大于单账号完整流程耗时
     # （注册 + CPA 导出），否则 IP 会在流程中途变化。
     "novproxy_api": "https://white.novproxy.com/white/api",
-    "novproxy_region": "US",
+    "novproxy_region": "AUTO",
     "novproxy_minutes": 120,
     "novproxy_num": 5,
     # ---- 降智测试（Quality Probe）----

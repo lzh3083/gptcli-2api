@@ -146,3 +146,33 @@ func TestCachedUpstreamStatusStale(t *testing.T) {
 		t.Fatalf("expected fresh cache, got %#v", got)
 	}
 }
+
+func TestProbeUpstreamStatusModelScopeRestrictedOK(t *testing.T) {
+	upstreamStatusMu.Lock()
+	upstreamStatusCache = nil
+	upstreamStatusAt = time.Time{}
+	upstreamStatusInFly = false
+	upstreamStatusMu.Unlock()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": "You have insufficient permissions for this operation. Missing scopes: api.model.read. Check that you have the correct role in your organization.",
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	opts := Options{
+		Config: config.Config{UpstreamBase: srv.URL + "/v1", DefaultModel: "gpt-4o"},
+	}
+	result := probeUpstreamStatus(context.Background(), opts, true)
+	if result["ok"] != true {
+		t.Fatalf("expected ok=true for missing api.model.read scope, got %#v", result)
+	}
+	if result["reachable"] != true {
+		t.Fatalf("expected reachable=true, got %#v", result)
+	}
+	if result["model_scope_restricted"] != true {
+		t.Fatalf("expected model_scope_restricted=true, got %#v", result)
+	}
+}
