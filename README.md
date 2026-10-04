@@ -185,13 +185,11 @@ curl http://127.0.0.1:8081/v1/chat/completions \
 
 ## 支持的模型列表
 
-网关内置支持以下 OpenAI 最新主力模型路由与智能别名映射：
-- **GPT-5 系列（新一代旗舰与推理主力）**：`gpt-5`、`gpt-5-mini`、`gpt-5-nano`、`gpt-5-codex`、`gpt-5-chat-latest`、`gpt-5.5`、`gpt-5.6-sol`
-- **GPT-4.1 系列（顶尖非推理智能主力）**：`gpt-4.1`、`gpt-4.1-mini`、`gpt-4.1-nano`
-- **o-series 系列（深度逻辑与高效推理）**：`o3`、`o3-mini`、`o4-mini`、`o1`、`o1-mini`
-- **全模态经典主力（广泛兼容）**：`gpt-4o`、`gpt-4o-mini`、`chatgpt-4o-latest`、`gpt-4-turbo`
-- **图像与多模态扩展**：`gpt-image-2`
-- **向量嵌入**：`text-embedding-3-small`、`text-embedding-3-large`
+网关内置支持以下 OpenAI 官方最新主力模型路由与智能别名映射：
+- **GPT-4o 旗舰与全模态**：`gpt-4o`（默认模型，128k 上下文）、`gpt-4o-mini`（高性价比小型模型）、`chatgpt-4o-latest`（动态跟踪 ChatGPT 官方最新版本）
+- **o 系列深度推理主力**：`o3-mini`（新一代高效推理旗舰，支持 reasoning_effort 思考强度）、`o1`（旗舰深度推理模型）、`o1-mini`（快速逻辑与代码推理）、`o1-preview`（早期推理预览版）
+- **前沿研究与经典旗舰**：`gpt-4.5-preview`（超大研究级前沿模型）、`gpt-4-turbo`（128k 经典旗舰）、`gpt-4`（8k 经典模型）、`gpt-3.5-turbo`（经典轻量对话）
+- **多模态生图与向量嵌入**：`dall-e-3` / `dall-e-2`（官方高分辨率画图）、`text-embedding-3-small` / `text-embedding-3-large` / `text-embedding-ada-002`（文本向量嵌入）
 
 ---
 

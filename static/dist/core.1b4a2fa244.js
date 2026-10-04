@@ -4659,7 +4659,7 @@ function renderModels() {
       : "无模型";
   }
   if (!all.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="g2a-muted">暂无模型。请点「同步上游模型」或刷新；默认可用 gpt-5 / gpt-5-mini / gpt-4o / o3-mini</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="g2a-muted">暂无模型。请点「同步上游模型」或刷新；默认可用 gpt-4o / gpt-4o-mini / o3-mini / o1</td></tr>`;
     return;
   }
   if (!models.length) {
