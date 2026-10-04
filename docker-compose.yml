@@ -3,7 +3,7 @@ services:
   # App reaches them via the compose network: redis:6379 / postgres:5432.
   redis:
     image: redis:7-alpine
-    container_name: grokcli-2api-redis
+    container_name: gptcli-2api-redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
@@ -16,7 +16,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: grokcli-2api-postgres
+    container_name: gptcli-2api-postgres
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
       PGTZ: "${TZ:-Asia/Shanghai}"
@@ -24,7 +24,7 @@ services:
       POSTGRES_PASSWORD: grok2api  # ⚠️ CHANGE in production — do not use default
       POSTGRES_DB: grok2api
     volumes:
-      - grok2api_pg:/var/lib/postgresql/data
+      - gpt2api_pg:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U grok2api -d grok2api"]
@@ -33,12 +33,12 @@ services:
       retries: 10
 
   # Single app container: API + inline Turnstile Solver (same process tree)
-  grokcli-2api:
+  gptcli-2api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: grokcli-2api:local
-    container_name: grokcli-2api
+    image: gptcli-2api:local
+    container_name: gptcli-2api
     env_file:
       - path: .env
         required: false
@@ -46,8 +46,7 @@ services:
       # Only the app API is published. Postgres/Redis stay internal-only
       # (compose network). Inline Turnstile Solver listens on container
       # loopback 127.0.0.1:5073 and is NOT published to the host.
-      - "127.0.0.1:8081:8081"
-      - "127.0.0.1:40081:40081"
+      - "0.0.0.0:8081:8081"
     shm_size: "1gb"
     security_opt:
       - seccomp:unconfined
@@ -60,7 +59,7 @@ services:
       GROK2API_MODEL_HEALTH: "1"
       GROK2API_REASONING_COMPAT: "off"
       GROK2API_STORE_BACKEND: "hybrid"
-      GROK2API_REG_ENGINE: "browser"
+      GROK2API_REG_ENGINE: "openai"
       # Multi-worker: default 2 (enough for hybrid; override via .env for large hosts)
       GROK2API_WORKERS: "${GROK2API_WORKERS:-2}"
       # In-stack service DNS (do not use 127.0.0.1 here)
@@ -104,10 +103,10 @@ services:
       # In-container hot-update (docker.sock + /compose mount; no host watcher)
       GROK2API_HOT_UPDATE_MODE: "${GROK2API_HOT_UPDATE_MODE:-docker}"
       GROK2API_COMPOSE_DIR: "${GROK2API_COMPOSE_DIR:-/compose}"
-      GROK2API_DOCKER_SERVICE: "${GROK2API_DOCKER_SERVICE:-grokcli-2api}"
-      GROK2API_GHCR_IMAGE: "${GROK2API_GHCR_IMAGE:-ghcr.io/hm2899/grokcli-2api}"
+      GROK2API_DOCKER_SERVICE: "${GROK2API_DOCKER_SERVICE:-gptcli-2api}"
+      GROK2API_GHCR_IMAGE: "${GROK2API_GHCR_IMAGE:-ghcr.io/lzh3083/gptcli-2api}"
     healthcheck:
-      # $$ keeps substitution inside the container so override ports (e.g. 40081) work
+      # $$ keeps substitution inside the container so override ports work
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${GROK2API_PORT:-8081}/health >/dev/null"]
       interval: 10s
       timeout: 3s
@@ -129,21 +128,16 @@ services:
     networks:
       default:
         aliases:
-          - grokcli-2api
+          - gptcli-2api
     restart: unless-stopped
 
 volumes:
-  grok2api_pg:
+  gpt2api_pg:
 
 # Fixed project network name so other compose stacks can join as external:
-#   networks:
-#     grokcli-net:
-#       name: grokcli-2api_default
-#       external: true
-# Downstream DNS: http://grokcli-2api:<port>/v1
 networks:
   default:
-    name: grokcli-2api_default
+    name: gptcli-2api_default
     driver: bridge
     labels:
-      com.grokcli-2api.network: "shared-upstream"
+      com.gptcli-2api.network: "shared-upstream"
