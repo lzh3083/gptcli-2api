@@ -62,6 +62,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         python3-dev \
+        libzstd-dev \
         ca-certificates \
         chromium \
         curl \
