@@ -2734,6 +2734,42 @@ def _spawn_batch_runner(
     }
 
 
+def _preflight_chatgpt_path(proxy_url: str = "", log_callback: Callable[[str], None] = None) -> bool:
+    """非破坏性预检 ChatGPT / OpenAI 注册与认证端点的连通性与 Cloudflare 状态。"""
+    try:
+        from curl_cffi import requests
+    except ImportError:
+        import requests
+    targets = ("https://chatgpt.com/auth/login", "https://auth.openai.com/")
+    req_proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    for url in targets:
+        try:
+            started = time.monotonic()
+            resp = requests.get(
+                url,
+                proxies=req_proxies,
+                impersonate="chrome124",
+                timeout=15,
+                allow_redirects=False,
+            )
+            latency = int((time.monotonic() - started) * 1000)
+            status_code = int(resp.status_code)
+            headers = {str(k).lower(): str(v).lower() for k, v in dict(getattr(resp, "headers", {}) or {}).items()}
+            text = str(getattr(resp, "text", "") or "")[:4096].lower()
+            cf_blocked = ("cloudflare" in headers.get("server", "") or "cf-error" in text) and status_code in (403, 429, 503)
+            if cf_blocked:
+                if log_callback:
+                    log_callback(f"[!] 路径预检告警: {url} 遭遇 Cloudflare 阻断 (HTTP {status_code})")
+                return False
+            if log_callback:
+                log_callback(f"[+] 路径预检正常: {url} (HTTP {status_code}, 延迟 {latency}ms)")
+        except Exception as exc:
+            if log_callback:
+                log_callback(f"[!] 路径预检异常: {url} 连接失败: {exc}")
+            return False
+    return True
+
+
 def _run_registration(
     sid: str,
     yescaptcha_key: str,
@@ -2943,6 +2979,94 @@ def _run_registration(
             from openai_client.register import run_openai_registration
             import grok2api.pool.accounts as accounts
 
+            # 1. 代理自适应解析与 NovProxy 动态住宅家宽提取
+            active_proxy = str(proxy or sess.get("proxy") or "").strip()
+            proxy_mode = str(sess.get("proxy_mode") or "").strip().lower()
+
+            if active_proxy.lower() in ("novproxy", "residential") or (not active_proxy and proxy_mode in ("novproxy", "residential")):
+                novproxy_mode = str(sess.get("novproxy_mode") or "userpass").strip().lower()
+                if novproxy_mode == "userpass" and sess.get("novproxy_up_user") and sess.get("novproxy_up_pass"):
+                    host = str(sess.get("novproxy_up_host") or "us.novproxy.io:1000").strip()
+                    proto = str(sess.get("novproxy_up_proto") or "socks5h").strip()
+                    up_user = str(sess.get("novproxy_up_user") or "").strip()
+                    up_pass = str(sess.get("novproxy_up_pass") or "").strip()
+                    region = str(sess.get("novproxy_up_region") or "US").strip()
+                    time_mins = str(sess.get("novproxy_up_time") or "60").strip()
+                    if "-region-" in up_user:
+                        up_user = up_user.split("-region-")[0].strip()
+                    import secrets
+                    sid_rnd = secrets.token_hex(4)
+                    formatted_user = f"{up_user}-region-{region}-sid-{sid_rnd}-t-{time_mins}"
+                    active_proxy = f"{proto}://{formatted_user}:{up_pass}@{host}"
+                    update("proxy_assigned", f"已分配 NovProxy 住宅账密节点: {proto}://{up_user}:***@{host} ({region})")
+                else:
+                    try:
+                        from grok2api.upstream.browser_register import novproxy
+                        api_base = str(sess.get("novproxy_api") or "https://white.novproxy.com/white/api").strip()
+                        region = str(sess.get("novproxy_region") or "US").strip()
+                        minutes = int(sess.get("novproxy_minutes") or 60)
+                        update("proxy_extract", f"正在从 NovProxy 提取实时动态住宅代理 ({region})...")
+                        nodes = novproxy.fetch_nodes(
+                            api_base=api_base,
+                            region=region,
+                            num=1,
+                            minutes=minutes,
+                            attempts=2,
+                            timeout=12.0,
+                            log=lambda m: update("proxy_extract", f"[NovProxy] {m}"),
+                        )
+                        if nodes:
+                            node = nodes[0]
+                            active_proxy = node if "://" in node else f"socks5h://{node}"
+                            update("proxy_assigned", f"成功分配 NovProxy 住宅节点: {active_proxy}")
+                        else:
+                            raise RuntimeError("NovProxy 接口未返回任何可用节点")
+                    except Exception as n_exc:
+                        update("proxy_error", f"NovProxy 提取失败: {n_exc}")
+                        raise RuntimeError(f"NovProxy 动态住宅代理提取失败: {n_exc}") from n_exc
+
+            if active_proxy.lower() in ("direct", "none", "off", "0"):
+                active_proxy = ""
+
+            sess["proxy"] = active_proxy
+
+            # 2. 前置一致性配合：注册路径非破坏性预检 (Preflight)
+            if sess.get("proxy_pool_preflight_enabled", True):
+                update("preflight", "正在执行注册路径网络预检 (chatgpt.com / auth.openai.com)...")
+                preflight_ok = _preflight_chatgpt_path(proxy_url=active_proxy, log_callback=lambda m: update("preflight", m))
+                if not preflight_ok:
+                    raise RuntimeError("注册路径预检失败：ChatGPT 目标端点不可达或遭遇 Cloudflare 阻断，已终止本次尝试")
+
+            # 3. 前置一致性配合：出口国家与网络环境自适应对齐 (us_consistency)
+            from grok2api.upstream.browser_register import us_consistency
+            if us_consistency.enabled():
+                expect_c = str(sess.get("us_consistency_expect_country") or "").strip()
+                if expect_c.upper() in ("AUTO", "ALL", "RAND", "ANY", "*"):
+                    expect_c = ""
+                detected_zone = us_consistency.align_timezone_with_proxy(active_proxy, expect_country=expect_c)
+                if detected_zone:
+                    update("consistency", us_consistency.describe())
+
+            # 4. 同步本地 Turnstile Solver 求解器出站代理
+            try:
+                solver_proxies_file = (
+                    sess.get("captcha_solver_proxies_file")
+                    or os.environ.get("GROK2API_SOLVER_PROXIES_FILE")
+                    or "/app/turnstile-solver/proxies.txt"
+                )
+                solver_proxy_line = str(active_proxy).strip()
+                if solver_proxy_line.startswith("socks5h://"):
+                    solver_proxy_line = "socks5://" + solver_proxy_line[len("socks5h://"):]
+                elif solver_proxy_line.startswith("socks4a://"):
+                    solver_proxy_line = "socks4://" + solver_proxy_line[len("socks4a://"):]
+                p = Path(solver_proxies_file)
+                if not p.is_absolute():
+                    p = Path(os.getcwd()) / solver_proxies_file
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text((solver_proxy_line + "\n") if solver_proxy_line else "", encoding="utf-8")
+            except Exception:
+                pass
+
             def _otp_cb(target_email: str, after_ts: float) -> str:
                 update("waiting_email", f"等待接收 6 位验证码: {target_email}")
                 if receiver is None:
@@ -2965,7 +3089,7 @@ def _run_registration(
             ores = run_openai_registration(
                 email=email,
                 password=password,
-                proxy=proxy or None,
+                proxy=active_proxy or None,
                 otp_provider=_otp_cb if receiver else None,
                 on_step=lambda st, msg: update(st, msg),
                 check_cancel=_check_cancel,

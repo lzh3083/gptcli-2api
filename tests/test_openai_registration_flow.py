@@ -95,9 +95,30 @@ def test_registration_availability():
     print("test_registration_availability: PASS")
 
 
+def test_novproxy_and_consistency():
+    from grok2api.upstream.browser_register import novproxy
+    from grok2api.upstream.browser_register import us_consistency
+
+    # 1. 测试 NovProxy 节点解析
+    sample_api_resp = "104.238.12.34:10001\n104.238.12.35:10002\n"
+    nodes = novproxy.parse_proxy_lines(sample_api_resp)
+    assert len(nodes) == 2, f"解析节点数异常: {nodes}"
+    assert nodes[0] == "104.238.12.34:10001"
+
+    # 2. 测试环境一致性描述与默认对齐
+    assert us_consistency.enabled() is True
+    desc = us_consistency.describe()
+    assert "网络环境一致性" in desc
+
+    # 3. 验证 ChatGPT 预检函数存在并可调用
+    assert callable(adapter._preflight_chatgpt_path)
+    print("test_novproxy_and_consistency: PASS")
+
+
 if __name__ == "__main__":
     test_otp_extraction()
     test_profile_and_password()
     test_cpa_file_export()
     test_registration_availability()
+    test_novproxy_and_consistency()
     print("ALL INTEGRATION TESTS PASSED SUCCESSFULLY!")

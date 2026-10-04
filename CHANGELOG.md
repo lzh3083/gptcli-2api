@@ -20,6 +20,12 @@ All notable changes to `gptcli-2api` will be documented in this file.
   - 自动按 CLIProxyAPI (CPA) 规范落盘凭证文件至 `data/cpa_auth_files/codex-{email}.json`；
   - 支持在 Web 管理后台一键批量下载或推送到第三方平台。
 
+- **NovProxy 动态住宅家宽与前置一致性配合 (NovProxy & Preflight Consistency)**：
+  - 支持 NovProxy API 白名单提取与 UserPass 账密生成模式，自动拼装 `socks5h` 格式，保障一号一独立住宅 IP；
+  - 集成 ChatGPT / OpenAI 专用非破坏性路径预检（`_preflight_chatgpt_path`），提前拦截 Cloudflare 阻断风险；
+  - 自动探测出口 IP 地理位置，自适应对齐时区、Locale 与 Accept-Language；
+  - 毫秒级同步代理至本地 Turnstile Solver 求解器，保证求解端与业务请求端出口 IP 100% 一致。
+
 - **多服务端口隔离防冲突设计 (Independent Ports Architecture)**：
   - 全面调整服务监听端口，支持与现存 `grokcli-2api` 无缝共存：
     - **Go API 网关 / Web 管理台**：默认 **`8081`**

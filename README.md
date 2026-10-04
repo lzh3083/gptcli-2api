@@ -16,6 +16,11 @@
 - **ChatGPT 全自动协议注册**：移植自 `turb-gpt-free-register`，内置 13 步高仿真注册协议流，集成真实 Node.js Sentinel VM 挑战计算、`curl_cffi` Chrome146 TLS 指纹伪装。
 - **Codex OAuth 自动授权**：注册完成后无缝触发 Codex OAuth 授权提取，自动生成包含 `refresh_token` / `id_token` / `account_id` 的完整凭证。
 - **CPA 授权文件格式导出**：凭证直接落盘到 `data/cpa_auth_files/`，生成符合 CLIProxyAPI (CPA) 标准的 `codex-{email}.json` 授权文件，支持管理台一键导出与集成。
+- **NovProxy 动态住宅家宽接入**：支持白名单 API 动态提取与 UserPass 账密模式，自动组装 `socks5h` 协议节点，天然实现“一号一独立住宅物理 IP”。
+- **全链路前置一致性配合 (Preflight & Consistency)**：
+  - **注册路径预检**：非破坏性探测 `chatgpt.com` 与 `auth.openai.com` 连通性与 Cloudflare 状态，阻断即熔断换号，杜绝损耗；
+  - **环境自适应对齐**：按代理出口地理位置自动对齐真实时区、系统 Locale 与 `Accept-Language`，杜绝指纹矛盾；
+  - **求解器出站同步**：注册节点实时同步至本地 Turnstile Solver，保证打码过盾出口与业务请求出口 IP 100% 一致。
 - **端口彻底防冲突**：
   - **Go 主网关 / Web 管理台**：默认 **`8081`**（避免与 grokcli 的 `3000` 冲突）
   - **Python 注册 / SSO Sidecar**：默认 **`18080`**（避免与 grokcli 的 `18070` 冲突）
