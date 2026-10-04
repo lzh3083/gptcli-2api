@@ -51,8 +51,8 @@ func sanitizeUpdateImage(image string) (string, error) {
 }
 
 const (
-	defaultGHReleaseRepo = "lzh3083/grokcli-2api"
-	defaultGHCRImage     = "ghcr.io/lzh3083/grokcli-2api"
+	defaultGHReleaseRepo = "lzh3083/gptcli-2api"
+	defaultGHCRImage     = "ghcr.io/lzh3083/gptcli-2api"
 	versionCacheTTL      = 10 * time.Minute
 	updateRequestFile    = "update.request"
 	updateStatusFile     = "update.status"
