@@ -1589,9 +1589,8 @@ def save_codex_credential(storage: dict, email: str, plan_type: str) -> str:
 
     try:
         # 落盘到 data/cpa_auth_files/ 方便直接导出与 CPA 加载
-        base_dir = Path("/app/data/cpa_auth_files")
-        if not base_dir.exists():
-            base_dir = Path(__file__).resolve().parents[3] / "data" / "cpa_auth_files"
+        data_root = os.environ.get("GROK2API_DATA_DIR") or ("/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[3] / "data"))
+        base_dir = Path(data_root) / "cpa_auth_files"
         base_dir.mkdir(parents=True, exist_ok=True)
         file_path = base_dir / fname
         file_path.write_text(json.dumps(storage, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

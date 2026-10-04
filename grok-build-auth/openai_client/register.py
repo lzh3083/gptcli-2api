@@ -409,9 +409,8 @@ def run_openai_registration(
         cpa_chatgpt_file = ""
         try:
             import json
-            cpa_dir = Path("/app/data/cpa_auth_files")
-            if not cpa_dir.exists():
-                cpa_dir = Path(__file__).resolve().parents[3] / "data" / "cpa_auth_files"
+            data_root = os.environ.get("GROK2API_DATA_DIR") or ("/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[2] / "data"))
+            cpa_dir = Path(data_root) / "cpa_auth_files"
             cpa_dir.mkdir(parents=True, exist_ok=True)
             chatgpt_cpa_record = {
                 "access_token": access_token,
