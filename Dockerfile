@@ -60,6 +60,8 @@ ARG DOCKER_CLI_VERSION=27.5.1
 ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
+        python3-dev \
         ca-certificates \
         chromium \
         curl \
