@@ -375,6 +375,15 @@ def _is_permanent_refresh_failure(status_code: int, body: str) -> bool:
         "refresh token expired",
         "refresh_token expired",
         "token has been revoked",
+        "refresh_token_invalidated",
+        "token_invalidated",
+        "token_revoked",
+        "your session has ended",
+        "session has ended",
+        "invalidated oauth token",
+        "account_deactivated",
+        "account_blocked",
+        "user_deactivated",
     )
     return any(marker in text for marker in markers)
 
@@ -569,18 +578,39 @@ def refresh_access_token(
         raise RefreshRevokedError(
             str(entry.get("refresh_invalid_reason") or "refresh_token marked invalid")
         )
+    if entry.get("disable_auto_refresh") or entry.get("external_managed"):
+        return {}
+
+    is_openai = False
+    for k in ("iss", "issuer", "oidc_issuer", "id", "account_id"):
+        if "openai.com" in str(entry.get(k) or "").lower():
+            is_openai = True
+            break
+    if str(entry.get("type") or "").lower() in ("codex", "chatgpt"):
+        is_openai = True
+
     client_id = (
-        entry.get("oidc_client_id")
-        or GROK_CLI_CLIENT_ID
+        entry.get("client_id")
+        or entry.get("oidc_client_id")
+        or ("app_EMoamEEZ73f0CkXaXp7hrann" if is_openai else GROK_CLI_CLIENT_ID)
     )
+    token_url = (
+        str(entry.get("token_url") or entry.get("oidc_token_url") or "").strip()
+        or ("https://auth.openai.com/oauth/token" if is_openai else OIDC_TOKEN_URL)
+    )
+
     form = {
         "grant_type": "refresh_token",
         "refresh_token": rt,
         "client_id": str(client_id),
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    if is_openai:
+        headers["User-Agent"] = "OpenAI/Codex (cli-proxy; macOS)"
+        headers["Accept"] = "application/json"
+
     if client is not None:
-        resp = client.post(OIDC_TOKEN_URL, data=form, headers=headers)
+        resp = client.post(token_url, data=form, headers=headers)
     else:
         # Prefer outbound proxy pool when configured (single-account refresh path).
         proxy_url = None
@@ -605,7 +635,7 @@ def refresh_access_token(
         else:
             c = httpx.Client(timeout=30.0)
         try:
-            resp = c.post(OIDC_TOKEN_URL, data=form, headers=headers)
+            resp = c.post(token_url, data=form, headers=headers)
         finally:
             try:
                 c.close()

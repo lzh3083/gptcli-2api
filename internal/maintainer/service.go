@@ -2,12 +2,16 @@ package maintainer
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/hm2899/grokcli-2api/internal/accounts"
 	"github.com/hm2899/grokcli-2api/internal/store/postgres"
@@ -25,6 +29,8 @@ type Service struct {
 	Skew     time.Duration
 	Enabled  func() bool
 	IsLeader func() bool
+
+	flight singleflight.Group
 
 	mu        sync.Mutex
 	started   bool
@@ -296,54 +302,15 @@ func (s *Service) RunOnce(ctx context.Context, force bool) map[string]any {
 				outCh <- outcome{id: row.ID, ok: false, errText: "refresh cancelled"}
 				continue
 			}
-			tokenData, err := oidcClient.RefreshAccessToken(ctx, row.Payload)
-			if err != nil {
-				permanent := false
-				errText := err.Error()
-				var re *oidc.RefreshError
-				if asRefresh(err, &re) {
-					permanent = re.Permanent
-					errText = re.Error()
-				}
-				// Real-time DB sync: renew fail status (+ expired when permanent).
-				status := "fail"
-				if permanent {
-					status = "invalid"
-					_ = s.Store.MarkRefreshInvalid(ctx, row.ID, errText)
-					_, _ = s.Store.SetAccountEnabled(ctx, row.ID, false)
-				}
-				_ = s.Store.SaveRenewStatus(ctx, row.ID, false, status, errText, "token_maintainer")
-				deleted := false
-				if permanent && accounts.GetSSOValue(row.Payload) == "" {
-					if ok, _ := s.Store.DeleteAccount(ctx, row.ID); ok {
-						deleted = true
-					}
-				}
-				outCh <- outcome{id: row.ID, ok: false, deleted: deleted, permanent: permanent, errText: errText}
-				continue
-			}
-			newID, entry, err := oidc.EntryFromTokenResponse(tokenData, row.Payload)
-			if err != nil {
-				_ = s.Store.SaveRenewStatus(ctx, row.ID, false, "parse_fail", err.Error(), "token_maintainer")
-				outCh <- outcome{id: row.ID, ok: false, errText: err.Error()}
-				continue
-			}
-			if newID == "" {
-				newID = row.ID
-			}
-			if newID != row.ID {
-				_ = s.Store.UpsertAccount(ctx, newID, entry)
-				_, _ = s.Store.DeleteAccount(ctx, row.ID)
-			} else {
-				_ = s.Store.UpsertAccount(ctx, row.ID, entry)
-			}
-			// Success path: clear cooldown + stamp last_renew_status=ok in DB.
-			_, _ = s.Store.ClearAccountCooldown(ctx, newID)
-			_ = s.Store.SaveRenewStatus(ctx, newID, true, "ok", "", "token_maintainer")
+			res := s.refreshSingleAccount(ctx, row.ID, row.Payload, force, "token_maintainer")
 			outCh <- outcome{
-				id: newID, ok: true,
-				expiresAt:       entry["expires_at"],
-				hasRefreshToken: stringFrom(entry, "refresh_token") != "",
+				id:              res.ID,
+				ok:              res.Ok,
+				deleted:         res.Deleted,
+				permanent:       res.Permanent,
+				errText:         res.ErrText,
+				expiresAt:       res.ExpiresAt,
+				hasRefreshToken: res.HasRefreshToken,
 			}
 		}
 	}
@@ -554,82 +521,20 @@ func (s *Service) RunForIDs(ctx context.Context, ids []string, force bool) map[s
 	workerFn := func() {
 		defer wg.Done()
 		for id := range jobs {
-			row, err := s.Store.GetAccountRefreshRow(ctx, id)
-			if err != nil || row == nil {
-				outCh <- rowOut{id: id, ok: false, errText: "account not found"}
+			if ctx.Err() != nil {
+				outCh <- rowOut{id: id, ok: false, errText: "refresh cancelled"}
 				continue
 			}
-			payload := row.Payload
-			if payload == nil {
-				outCh <- rowOut{id: id, ok: false, errText: "account payload unavailable"}
-				continue
-			}
-			rt := stringFrom(payload, "refresh_token")
-			if rt == "" {
-				outCh <- rowOut{id: id, ok: true, skipped: true, errText: "no refresh_token"}
-				continue
-			}
-			if truthy(payload["refresh_invalid"]) {
-				outCh <- rowOut{id: id, ok: false, permanent: true, errText: "refresh_token marked invalid"}
-				continue
-			}
-			if !force {
-				exp := accounts.ParseExpiresAt(payload["expires_at"], stringFrom(payload, "key"))
-				if exp != nil && float64(time.Now().Unix())+skew.Seconds() < *exp {
-					outCh <- rowOut{
-						id: id, ok: true, skipped: true,
-						expiresAt: payload["expires_at"], hasRefreshToken: true,
-						errText: "not near expiry",
-					}
-					continue
-				}
-			}
-			tokenData, err := oidcClient.RefreshAccessToken(ctx, payload)
-			if err != nil {
-				permanent := false
-				errText := err.Error()
-				var re *oidc.RefreshError
-				if asRefresh(err, &re) {
-					permanent = re.Permanent
-					errText = re.Error()
-				}
-				status := "fail"
-				if permanent {
-					status = "invalid"
-					_ = s.Store.MarkRefreshInvalid(ctx, id, errText)
-					_, _ = s.Store.SetAccountEnabled(ctx, id, false)
-				}
-				_ = s.Store.SaveRenewStatus(ctx, id, false, status, errText, "manual_renew")
-				deleted := false
-				if permanent && accounts.GetSSOValue(payload) == "" {
-					if ok, _ := s.Store.DeleteAccount(ctx, id); ok {
-						deleted = true
-					}
-				}
-				outCh <- rowOut{id: id, ok: false, deleted: deleted, permanent: permanent, errText: errText}
-				continue
-			}
-			newID, entry, err := oidc.EntryFromTokenResponse(tokenData, payload)
-			if err != nil {
-				_ = s.Store.SaveRenewStatus(ctx, id, false, "parse_fail", err.Error(), "manual_renew")
-				outCh <- rowOut{id: id, ok: false, errText: err.Error()}
-				continue
-			}
-			if newID == "" {
-				newID = id
-			}
-			if newID != id {
-				_ = s.Store.UpsertAccount(ctx, newID, entry)
-				_, _ = s.Store.DeleteAccount(ctx, id)
-			} else {
-				_ = s.Store.UpsertAccount(ctx, id, entry)
-			}
-			_, _ = s.Store.ClearAccountCooldown(ctx, newID)
-			_ = s.Store.SaveRenewStatus(ctx, newID, true, "ok", "", "manual_renew")
+			res := s.refreshSingleAccount(ctx, id, nil, force, "manual_renew")
 			outCh <- rowOut{
-				id: newID, ok: true,
-				expiresAt:       entry["expires_at"],
-				hasRefreshToken: stringFrom(entry, "refresh_token") != "",
+				id:              res.ID,
+				ok:              res.Ok,
+				skipped:         res.Skipped,
+				deleted:         res.Deleted,
+				permanent:       res.Permanent,
+				errText:         res.ErrText,
+				expiresAt:       res.ExpiresAt,
+				hasRefreshToken: res.HasRefreshToken,
 			}
 		}
 	}
@@ -805,4 +710,229 @@ func envInt(name string, fallback, min, max int) int {
 
 func itoaMaint(n int) string {
 	return strconv.Itoa(n)
+}
+
+// RefreshOutcome encapsulates the result of an account token refresh attempt.
+type RefreshOutcome struct {
+	ID              string
+	Ok              bool
+	Skipped         bool
+	Deleted         bool
+	Permanent       bool
+	ErrText         string
+	ExpiresAt       any
+	HasRefreshToken bool
+}
+
+// refreshSingleAccount performs a safe, deduplicated, distributed-locked token refresh.
+func (s *Service) refreshSingleAccount(ctx context.Context, accountID string, cachedPayload map[string]any, force bool, source string) RefreshOutcome {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return RefreshOutcome{Ok: false, ErrText: "empty account id"}
+	}
+
+	// 1. SingleFlight within process: coalesce concurrent refreshes for the same account
+	key := "refresh:" + accountID
+	val, err, _ := s.flight.Do(key, func() (any, error) {
+		return s.doLockedRefresh(ctx, accountID, cachedPayload, force, source), nil
+	})
+	if err != nil {
+		return RefreshOutcome{ID: accountID, Ok: false, ErrText: err.Error()}
+	}
+	if out, ok := val.(RefreshOutcome); ok {
+		return out
+	}
+	return RefreshOutcome{ID: accountID, Ok: false, ErrText: "invalid refresh outcome"}
+}
+
+func (s *Service) doLockedRefresh(ctx context.Context, accountID string, cachedPayload map[string]any, force bool, source string) RefreshOutcome {
+	// A. Distributed mutex via Redis (if enabled)
+	lockToken := fmt.Sprintf("%d-%s", time.Now().UnixNano(), accountID)
+	lockKey := ""
+	haveRedisLock := false
+	if s.Redis != nil && s.Redis.Enabled() {
+		lockKey = fmt.Sprintf("lock:refresh:%s", sanitizeLockKey(accountID))
+		acquired, err := s.Redis.TryAcquireLock(ctx, lockKey, lockToken, 30*time.Second)
+		if err == nil && !acquired {
+			// Another cluster worker/instance is refreshing this account right now.
+			return RefreshOutcome{ID: accountID, Ok: true, Skipped: true, ErrText: "concurrent refresh in-flight by another worker"}
+		}
+		if acquired {
+			haveRedisLock = true
+			defer func() {
+				if haveRedisLock {
+					_, _ = s.Redis.ReleaseLock(context.Background(), lockKey, lockToken)
+				}
+			}()
+		}
+	}
+
+	// B. Double-Check Lock: Always load the latest payload from PostgreSQL after obtaining lock
+	var payload map[string]any
+	if s.Store != nil {
+		row, err := s.Store.GetAccountRefreshRow(ctx, accountID)
+		if err != nil || row == nil {
+			return RefreshOutcome{ID: accountID, Ok: false, ErrText: "account not found in store"}
+		}
+		payload = row.Payload
+	} else {
+		payload = cachedPayload
+	}
+	if payload == nil {
+		return RefreshOutcome{ID: accountID, Ok: false, ErrText: "account payload unavailable"}
+	}
+
+	// C. Skip externally managed accounts (e.g. managed by upstream CLIProxyAPI)
+	if truthy(payload["disable_auto_refresh"]) || truthy(payload["external_managed"]) {
+		return RefreshOutcome{ID: accountID, Ok: true, Skipped: true, ErrText: "account is externally managed (auto-refresh disabled)"}
+	}
+
+	// D. Check permanent invalid marker
+	if truthy(payload["refresh_invalid"]) {
+		return RefreshOutcome{ID: accountID, Ok: false, Permanent: true, ErrText: "refresh_token marked invalid"}
+	}
+
+	rt := stringFrom(payload, "refresh_token")
+	if rt == "" {
+		return RefreshOutcome{ID: accountID, Ok: true, Skipped: true, ErrText: "no refresh_token"}
+	}
+
+	// E. Debounce window: if refreshed within last 2 minutes, avoid sending duplicate refresh request
+	nowUnix := float64(time.Now().Unix())
+	if lastRenew, ok := parseNumericFloat(payload["last_renew_at"]); ok && lastRenew > 0 {
+		if nowUnix-lastRenew < 120 {
+			return RefreshOutcome{
+				ID:              accountID,
+				Ok:              true,
+				Skipped:         true,
+				ExpiresAt:       payload["expires_at"],
+				HasRefreshToken: true,
+				ErrText:         "recently refreshed within 2 minutes",
+			}
+		}
+	}
+
+	// F. Skew check (for non-force periodic check)
+	skew := s.Skew
+	if skew <= 0 {
+		skew = 2 * time.Minute
+	}
+	if !force {
+		exp := accounts.ParseExpiresAt(payload["expires_at"], stringFrom(payload, "key"))
+		if exp != nil && nowUnix+skew.Seconds() < *exp {
+			return RefreshOutcome{
+				ID:              accountID,
+				Ok:              true,
+				Skipped:         true,
+				ExpiresAt:       payload["expires_at"],
+				HasRefreshToken: true,
+				ErrText:         "not near expiry",
+			}
+		}
+	}
+
+	// G. Execute OIDC refresh
+	oidcClient := s.OIDC
+	if oidcClient == nil {
+		oidcClient = &oidc.Client{}
+	}
+	tokenData, err := oidcClient.RefreshAccessToken(ctx, payload)
+	if err != nil {
+		permanent := false
+		errText := err.Error()
+		var re *oidc.RefreshError
+		if asRefresh(err, &re) {
+			permanent = re.Permanent
+			errText = re.Error()
+		}
+		status := "fail"
+		if permanent {
+			status = "invalid"
+			if s.Store != nil {
+				_ = s.Store.MarkRefreshInvalid(ctx, accountID, errText)
+				_, _ = s.Store.SetAccountEnabled(ctx, accountID, false)
+			}
+		}
+		if s.Store != nil {
+			_ = s.Store.SaveRenewStatus(ctx, accountID, false, status, errText, source)
+		}
+		deleted := false
+		if permanent && accounts.GetSSOValue(payload) == "" && s.Store != nil {
+			if ok, _ := s.Store.DeleteAccount(ctx, accountID); ok {
+				deleted = true
+			}
+		}
+		return RefreshOutcome{ID: accountID, Ok: false, Deleted: deleted, Permanent: permanent, ErrText: errText}
+	}
+
+	// H. Parse updated tokens and atomically update PostgreSQL
+	newID, entry, err := oidc.EntryFromTokenResponse(tokenData, payload)
+	if err != nil {
+		if s.Store != nil {
+			_ = s.Store.SaveRenewStatus(ctx, accountID, false, "parse_fail", err.Error(), source)
+		}
+		return RefreshOutcome{ID: accountID, Ok: false, ErrText: err.Error()}
+	}
+	if newID == "" {
+		newID = accountID
+	}
+	entry["last_renew_at"] = time.Now().Unix()
+
+	if s.Store != nil {
+		if newID != accountID {
+			_ = s.Store.UpsertAccount(ctx, newID, entry)
+			_, _ = s.Store.DeleteAccount(ctx, accountID)
+		} else {
+			_ = s.Store.UpsertAccount(ctx, accountID, entry)
+		}
+		_, _ = s.Store.ClearAccountCooldown(ctx, newID)
+		_ = s.Store.SaveRenewStatus(ctx, newID, true, "ok", "", source)
+	}
+
+	return RefreshOutcome{
+		ID:              newID,
+		Ok:              true,
+		ExpiresAt:       entry["expires_at"],
+		HasRefreshToken: stringFrom(entry, "refresh_token") != "",
+	}
+}
+
+func sanitizeLockKey(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	res := b.String()
+	if len(res) > 80 {
+		res = res[len(res)-80:]
+	}
+	return res
+}
+
+func parseNumericFloat(v any) (float64, bool) {
+	if v == nil {
+		return 0, false
+	}
+	switch val := v.(type) {
+	case float64:
+		return val, true
+	case int64:
+		return float64(val), true
+	case int:
+		return float64(val), true
+	case json.Number:
+		if f, err := val.Float64(); err == nil {
+			return f, true
+		}
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }

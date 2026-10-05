@@ -16,9 +16,13 @@ import (
 )
 
 const (
-	DefaultIssuer   = "https://auth.x.ai"
-	DefaultTokenURL = "https://auth.x.ai/oauth2/token"
-	DefaultClientID = "grok-cli"
+	DefaultIssuer         = "https://auth.x.ai"
+	DefaultTokenURL       = "https://auth.x.ai/oauth2/token"
+	DefaultClientID       = "grok-cli"
+	OpenAIIssuer          = "https://auth.openai.com"
+	OpenAITokenURL        = "https://auth.openai.com/oauth/token"
+	OpenAICodexClientID   = "app_EMoamEEZ73f0CkXaXp7hrann"
+	OpenAIChatGPTClientID = "app_X8zY6vW2pQ9tR3dE7nK1jL5gH"
 )
 
 type Client struct {
@@ -43,19 +47,49 @@ func (e *RefreshError) Error() string {
 	return fmt.Sprintf("refresh status %d", e.Status)
 }
 
-func (c *Client) tokenURL() string {
+// IsOpenAIAccount inspects account payload to detect OpenAI vs xAI OAuth credentials.
+func IsOpenAIAccount(entry map[string]any) bool {
+	if entry == nil {
+		return false
+	}
+	for _, key := range []string{"iss", "issuer", "oidc_issuer", "id", "account_id"} {
+		if v := strings.ToLower(stringField(entry, key)); strings.Contains(v, "openai.com") {
+			return true
+		}
+	}
+	tp := strings.ToLower(stringField(entry, "type"))
+	if tp == "codex" || tp == "chatgpt" {
+		return true
+	}
+	cid := firstNonEmpty(stringField(entry, "client_id"), stringField(entry, "oidc_client_id"))
+	if strings.HasPrefix(cid, "app_") {
+		return true
+	}
+	return false
+}
+
+func (c *Client) tokenURL(entry map[string]any) string {
 	if strings.TrimSpace(c.TokenURL) != "" {
 		return strings.TrimSpace(c.TokenURL)
+	}
+	if explicit := firstNonEmpty(stringField(entry, "token_url"), stringField(entry, "oidc_token_url")); explicit != "" {
+		return explicit
+	}
+	if IsOpenAIAccount(entry) {
+		return OpenAITokenURL
 	}
 	return DefaultTokenURL
 }
 
 func (c *Client) clientID(entry map[string]any) string {
-	if id := stringField(entry, "oidc_client_id"); id != "" {
+	if id := firstNonEmpty(stringField(entry, "client_id"), stringField(entry, "oidc_client_id")); id != "" {
 		return id
 	}
 	if strings.TrimSpace(c.ClientID) != "" {
 		return strings.TrimSpace(c.ClientID)
+	}
+	if IsOpenAIAccount(entry) {
+		return OpenAICodexClientID
 	}
 	return DefaultClientID
 }
@@ -81,11 +115,15 @@ func (c *Client) RefreshAccessToken(ctx context.Context, entry map[string]any) (
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL(), strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL(entry), strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if IsOpenAIAccount(entry) {
+		req.Header.Set("User-Agent", "OpenAI/Codex (cli-proxy; macOS)")
+		req.Header.Set("Accept", "application/json")
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err

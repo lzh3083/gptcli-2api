@@ -65,3 +65,34 @@ func errorsAs(err error, target **RefreshError) bool {
 	}
 	return false
 }
+
+func TestOpenAIAccountResolution(t *testing.T) {
+	client := &Client{}
+	openAIEntry := map[string]any{
+		"id":        "https://auth.openai.com::test-user",
+		"client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
+		"type":      "codex",
+	}
+	if !IsOpenAIAccount(openAIEntry) {
+		t.Fatal("expected IsOpenAIAccount to be true")
+	}
+	if u := client.tokenURL(openAIEntry); u != OpenAITokenURL {
+		t.Fatalf("expected %s, got %s", OpenAITokenURL, u)
+	}
+	if cid := client.clientID(openAIEntry); cid != "app_EMoamEEZ73f0CkXaXp7hrann" {
+		t.Fatalf("expected app_EMoamEEZ73f0CkXaXp7hrann, got %s", cid)
+	}
+
+	xaiEntry := map[string]any{
+		"id": "https://auth.x.ai::test-user",
+	}
+	if IsOpenAIAccount(xaiEntry) {
+		t.Fatal("expected IsOpenAIAccount to be false for xai")
+	}
+	if u := client.tokenURL(xaiEntry); u != DefaultTokenURL {
+		t.Fatalf("expected %s, got %s", DefaultTokenURL, u)
+	}
+	if cid := client.clientID(xaiEntry); cid != DefaultClientID {
+		t.Fatalf("expected %s, got %s", DefaultClientID, cid)
+	}
+}
