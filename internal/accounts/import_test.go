@@ -58,3 +58,26 @@ func TestMergeDurableAccountFields(t *testing.T) {
 		t.Fatalf("%#v", entry)
 	}
 }
+
+func TestSovereignImportAndDiskSync(t *testing.T) {
+	cpaRecord := map[string]any{
+		"access_token":  "test-access-token",
+		"refresh_token": "test-refresh-token",
+		"email":         "sovereign-test@openai.com",
+		"type":          "codex",
+		"client_id":     "app_EMoamEEZ73f0CkXaXp7hrann",
+		"expired":       "2026-10-15T00:00:00Z",
+	}
+	res := CollectNormalizedEntries(cpaRecord)
+	if !res.OK || len(res.Normalized) != 1 {
+		t.Fatalf("import failed: %v", res.Error)
+	}
+	for _, ent := range res.Normalized {
+		if ent["sovereignty"] != "exclusive" || ent["managed_by"] != "gptcli-2api" {
+			t.Fatalf("expected sovereign markers, got %#v", ent)
+		}
+		if ent["last_renew_at"] == nil {
+			t.Fatal("expected last_renew_at to be initialized")
+		}
+	}
+}

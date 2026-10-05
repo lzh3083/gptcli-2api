@@ -889,6 +889,9 @@ func (s *Service) doLockedRefresh(ctx context.Context, accountID string, cachedP
 		_ = s.Store.SaveRenewStatus(ctx, newID, true, "ok", "", source)
 	}
 
+	// Sovereign ownership mode: keep disk CPA auth files strictly aligned
+	_ = accounts.SyncCredentialToDisk(entry)
+
 	return RefreshOutcome{
 		ID:              newID,
 		Ok:              true,

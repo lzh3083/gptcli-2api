@@ -327,6 +327,13 @@ func cliproxyRecordToEntry(obj map[string]any) (map[string]any, error) {
 	if idt := stringField(obj, "id_token"); idt != "" {
 		entry["id_token"] = idt
 	}
+	if tp := stringField(obj, "type"); tp != "" {
+		entry["type"] = tp
+	}
+	if cid := firstNonEmpty(stringField(obj, "client_id"), stringField(obj, "oidc_client_id")); cid != "" {
+		entry["client_id"] = cid
+		entry["oidc_client_id"] = cid
+	}
 	return entry, nil
 }
 
@@ -396,6 +403,17 @@ func normalizeEntry(entry map[string]any, preferredID string) (string, map[strin
 	}
 	if pwd := firstNonEmpty(stringField(out, "password"), stringField(out, "register_password")); pwd != "" {
 		out["password"] = pwd
+	}
+
+	// Sovereign ownership mode: gptcli-2api assumes exclusive refresh authority
+	delete(out, "disable_auto_refresh")
+	delete(out, "external_managed")
+	out["sovereignty"] = "exclusive"
+	out["managed_by"] = "gptcli-2api"
+
+	// Initialize debounce window: prevent immediate refresh stampede right after import
+	if _, ok := out["last_renew_at"]; !ok {
+		out["last_renew_at"] = time.Now().Unix()
 	}
 
 	fallback := preferredID
