@@ -71,7 +71,7 @@ func (c *Connector) PublicSettings(ctx context.Context) (map[string]any, error) 
 		"model_health_auto_disable":     boolSetting(values, "model_health_auto_disable", true),
 		"model_health_probe_batch":      floatSetting(values, "model_health_probe_batch", 120),
 		"model_health_probe_workers":    floatSetting(values, "model_health_probe_workers", 12),
-		"probe_models":                  valueOr(values, "probe_models", []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"}),
+		"probe_models":                  valueOr(values, "probe_models", []string{"gpt-4o", "gpt-4o-mini"}),
 		"default_model":                 stringSetting(values, "default_model", ""),
 		"registration_config":           mapSetting(values, "registration_config"),
 		"outbound_proxy_config":         publicOutboundProxyConfig(mapSetting(values, "outbound_proxy_config")),

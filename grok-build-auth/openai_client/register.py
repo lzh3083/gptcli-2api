@@ -379,25 +379,7 @@ def run_openai_registration(
             except Exception as exc:
                 logger.warning(f"2FA 设置失败(非阻断): {exc}")
 
-        # 阶段 5: 可选 Codex OAuth 授权
-        if enable_codex:
-            _step("codex_oauth", "执行 Codex OAuth 自动授权")
-            try:
-                from core.codex_oauth import run_codex_oauth
-                codex_result = run_codex_oauth(email, proxy=proxy, force=True)
-                if codex_result.get("ok"):
-                    _step("codex_oauth", f"Codex OAuth 成功: {codex_result.get('file_path')}")
-                else:
-                    _step("codex_oauth", f"Codex OAuth 结果: {codex_result.get('status')} - {codex_result.get('message')}")
-            except Exception as exc:
-                codex_result = {
-                    "status": "failed",
-                    "ok": False,
-                    "message": f"{type(exc).__name__}: {str(exc)[:180]}",
-                }
-                logger.warning(f"Codex OAuth 异常(非阻断): {exc}")
-
-        # 提取 cookies
+        # 提取 cookies 并提前保存 ChatGPT CPA 凭证文件，以便 Codex OAuth 步骤随时读取账号密码
         cookies_dict: dict[str, str] = {}
         try:
             for c in session.cookies:
@@ -405,7 +387,6 @@ def run_openai_registration(
         except Exception:
             pass
 
-        # 同时为 ChatGPT 会话落盘一份标准 CPA 凭证文件，确保随时可导出/对接
         cpa_chatgpt_file = ""
         try:
             import json
@@ -431,6 +412,30 @@ def run_openai_registration(
             logger.info(f"[CPA] 已生成 ChatGPT CPA 凭证文件: {cpa_chatgpt_file}")
         except Exception as e:
             logger.warning(f"[CPA] 保存 ChatGPT 凭证文件异常: {e}")
+
+        # 阶段 5: 可选 Codex OAuth 授权
+        if enable_codex:
+            _step("codex_oauth", "执行 Codex OAuth 自动授权")
+            try:
+                from core.codex_oauth import run_codex_oauth
+                codex_result = run_codex_oauth(
+                    email,
+                    otp_provider=otp_provider,
+                    proxy=proxy,
+                    force=True,
+                    password=password,
+                )
+                if codex_result.get("ok"):
+                    _step("codex_oauth", f"Codex OAuth 成功: {codex_result.get('file_path')}")
+                else:
+                    _step("codex_oauth", f"Codex OAuth 结果: {codex_result.get('status')} - {codex_result.get('message')}")
+            except Exception as exc:
+                codex_result = {
+                    "status": "failed",
+                    "ok": False,
+                    "message": f"{type(exc).__name__}: {str(exc)[:180]}",
+                }
+                logger.warning(f"Codex OAuth 异常(非阻断): {exc}")
 
         cpa_primary_file = (
             (codex_result.get("file_path") if isinstance(codex_result, dict) else None)

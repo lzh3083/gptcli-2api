@@ -101,7 +101,7 @@ func main() {
 	if store != nil {
 		oidcClient := &oidc.Client{}
 		maintSvc = maintainer.New(store, redisClient, oidcClient)
-		healthSvc = modelhealth.New(store, redisClient, cfg.UpstreamBase, []string{cfg.DefaultModel, "gpt-6-astra", "gpt-6-luna"})
+		healthSvc = modelhealth.New(store, redisClient, cfg.UpstreamBase, []string{cfg.DefaultModel, "gpt-4o-mini"})
 		if leader != nil {
 			maintSvc.IsLeader = leader.IsLeader
 			healthSvc.IsLeader = leader.IsLeader

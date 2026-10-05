@@ -192,31 +192,76 @@ def _account_registration_password(email: str) -> str:
     """读取账号的注册密码；不存在则返回空字符串。"""
     try:
         acc = db.get_account_by_email(email)
-        if not acc:
-            return ""
-        extra_raw = acc.get("extra_json")
-        extra = {}
-        if isinstance(extra_raw, str) and extra_raw.strip():
-            try:
-                extra = json.loads(extra_raw)
-            except Exception:
-                extra = {}
-        elif isinstance(extra_raw, dict):
-            extra = extra_raw
-        return str(extra.get("registration_password") or acc.get("registration_password") or "").strip()
+        if acc:
+            extra_raw = acc.get("extra_json")
+            extra = {}
+            if isinstance(extra_raw, str) and extra_raw.strip():
+                try:
+                    extra = json.loads(extra_raw)
+                except Exception:
+                    extra = {}
+            elif isinstance(extra_raw, dict):
+                extra = extra_raw
+            pwd = str(extra.get("registration_password") or acc.get("registration_password") or acc.get("password") or "").strip()
+            if pwd:
+                return pwd
     except Exception:
-        return ""
+        pass
+
+    # 从文件 fallback 读取
+    try:
+        data_roots = [
+            os.environ.get("GROK2API_DATA_DIR", ""),
+            "/app/data",
+            str(Path(__file__).resolve().parents[3] / "data"),
+            "./data",
+        ]
+        for dr in data_roots:
+            if not dr:
+                continue
+            for prefix in ("chatgpt-", ""):
+                fpath = Path(dr) / "cpa_auth_files" / f"{prefix}{email}.json"
+                if fpath.is_file():
+                    data = json.loads(fpath.read_text(encoding="utf-8"))
+                    pwd = str(data.get("password") or data.get("registration_password") or "").strip()
+                    if pwd:
+                        return pwd
+    except Exception:
+        pass
+    return ""
 
 
 def _account_totp_secret(email: str) -> str:
     """读取账号已开启的 2FA 密钥；不存在则返回空字符串。"""
     try:
         acc = db.get_account_by_email(email)
-        if not acc:
-            return ""
-        return str(acc.get("totp_secret") or "").strip()
+        if acc:
+            secret = str(acc.get("totp_secret") or "").strip()
+            if secret:
+                return secret
     except Exception:
-        return ""
+        pass
+
+    try:
+        data_roots = [
+            os.environ.get("GROK2API_DATA_DIR", ""),
+            "/app/data",
+            str(Path(__file__).resolve().parents[3] / "data"),
+            "./data",
+        ]
+        for dr in data_roots:
+            if not dr:
+                continue
+            for prefix in ("chatgpt-", ""):
+                fpath = Path(dr) / "cpa_auth_files" / f"{prefix}{email}.json"
+                if fpath.is_file():
+                    data = json.loads(fpath.read_text(encoding="utf-8"))
+                    secret = str(data.get("totp_secret") or "").strip()
+                    if secret:
+                        return secret
+    except Exception:
+        pass
+    return ""
 
 
 def _account_totp_code(email: str) -> str:
@@ -1168,6 +1213,7 @@ def _try_password_mfa_login(
     email: str,
     state: str,
     initial_result: dict | None,
+    password: str | None = None,
 ) -> tuple[str, str | None, dict]:
     """
     有注册密码时优先走密码登录；如进入 MFA challenge，则使用账号 totp_secret 生成 TOTP。
@@ -1177,8 +1223,8 @@ def _try_password_mfa_login(
       ("email_otp", None, result)                  服务端要求邮箱 OTP
       ("not_applicable", None, result)            当前实际页面不是密码页
     """
-    password = _account_registration_password(email)
-    if not password or not _is_password_step(initial_result):
+    pwd = (password or "").strip() or _account_registration_password(email)
+    if not pwd or not _is_password_step(initial_result):
         logger.info(
             "[Codex] 当前 Auth 未要求密码，按服务端返回继续：email=%s page=%s continue=%s",
             email,
@@ -1188,7 +1234,7 @@ def _try_password_mfa_login(
         return "not_applicable", None, initial_result or {}
 
     logger.info("[Codex] 账号存在注册密码，优先走密码登录：%s", email)
-    result = _password_verify(session, password)
+    result = _password_verify(session, pwd)
     continue_url = _extract_continue_url(result)
     page_type = _page_type(result)
 
@@ -1734,6 +1780,7 @@ def run_codex_oauth(
     proxy: str | None = None,
     force: bool = False,
     _cpa_reauth_round: int = 1,
+    password: str | None = None,
 ) -> dict:
     """
     注册成功后的 Codex OAuth 授权入口（全新 session + 接码方案）。
@@ -1856,7 +1903,7 @@ def run_codex_oauth(
         auth_result = _submit_email(session, email)
         human_delay("form")
         login_status, early_callback_url, auth_result = _try_password_mfa_login(
-            session, email, state, auth_result
+            session, email, state, auth_result, password=password
         )
         password_login_done = login_status == "logged_in"
 
@@ -1885,7 +1932,7 @@ def run_codex_oauth(
                     auth_result = _submit_email(session, email)
                     human_delay("api")
                     retry_status, retry_callback_url, retry_result = _try_password_mfa_login(
-                        session, email, state, auth_result
+                        session, email, state, auth_result, password=password
                     )
                     if retry_status == "logged_in":
                         password_login_done = True

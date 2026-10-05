@@ -142,17 +142,23 @@ def account_storage_id(
     user_id: str | None = None,
     client_id: str | None = None,
     fallback: str | None = None,
+    issuer: str | None = None,
 ) -> str:
     """
     Stable multi-account key. Prefer user_id so multiple humans sharing the
-    same OAuth client_id do not overwrite each other (CLI default key is
-    issuer::client_id which is single-slot).
+    same OAuth client_id do not overwrite each other.
     """
+    prefix = "https://auth.openai.com::"
+    if issuer and "auth.x.ai" in str(issuer):
+        prefix = "https://auth.x.ai::"
+    elif fallback and "auth.x.ai" in str(fallback):
+        prefix = "https://auth.x.ai::"
+
     if user_id:
-        return f"https://auth.x.ai::{user_id}"
+        return f"{prefix}{user_id}"
     if client_id:
-        return f"https://auth.x.ai::{client_id}"
-    return fallback or f"https://auth.x.ai::imported-{uuid.uuid4().hex[:12]}"
+        return f"{prefix}{client_id}"
+    return fallback or f"{prefix}imported-{uuid.uuid4().hex[:12]}"
 
 
 def entry_from_token_response(

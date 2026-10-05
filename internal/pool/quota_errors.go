@@ -18,6 +18,7 @@ const (
 	ClassFreeUsage     FailureClass = "subscription:free-usage-exhausted"
 	ClassRateLimit     FailureClass = "rate_limit"
 	ClassAuth          FailureClass = "auth_error"
+	ClassFatalAuth     FailureClass = "fatal_auth_invalid"
 	ClassServer        FailureClass = "server_error"
 	ClassModelCapacity FailureClass = "model_capacity"
 	ClassBilling       FailureClass = "billing_quota"
@@ -40,6 +41,8 @@ type CooldownDecision struct {
 	BlockModel bool
 	// ShouldCooldown is false for transient/client errors that must not cool the account.
 	ShouldCooldown bool
+	// DisableAccount permanently removes the account from rotation on fatal auth/token death.
+	DisableAccount bool
 	Reason         string
 }
 
@@ -201,7 +204,16 @@ func ClassifyUpstreamFailure(status int, errText string, requestedModel ...strin
 
 	// Auth / WAF / edge block — cool so the picker stops re-using the same token
 	// against a 403 wall (Cloudflare / edge bans heat up with rapid retries).
-	if status == http.StatusUnauthorized || status == http.StatusForbidden || isAuthText(low) || isEdgeBlockText(low) {
+	if status == http.StatusUnauthorized || status == http.StatusForbidden || isAuthText(low) || isEdgeBlockText(low) || IsFatalAuthText(low) {
+		if IsFatalAuthText(low) {
+			return CooldownDecision{
+				Class:          ClassFatalAuth,
+				Code:           string(ClassFatalAuth),
+				ShouldCooldown: true,
+				DisableAccount: true,
+				Reason:         firstNonEmpty(text, "authentication token invalidated/revoked"),
+			}
+		}
 		// 403 / Cloudflare-like: longer cool. 401 token issues: moderate cool.
 		cool := 8 * time.Minute
 		if status == http.StatusUnauthorized && !isEdgeBlockText(low) {
@@ -485,6 +497,26 @@ func isAuthText(low string) bool {
 		strings.Contains(low, "authentication") ||
 		strings.Contains(low, "未授权") ||
 		strings.Contains(low, "鉴权失败")
+}
+
+// IsFatalAuthText detects irrecoverable token revocation or account deactivation.
+func IsFatalAuthText(text string) bool {
+	low := strings.ToLower(text)
+	if low == "" {
+		return false
+	}
+	return strings.Contains(low, "token_invalidated") ||
+		strings.Contains(low, "token_revoked") ||
+		strings.Contains(low, "refresh_token_invalidated") ||
+		strings.Contains(low, "invalidated oauth token") ||
+		strings.Contains(low, "authentication token has been invalidated") ||
+		strings.Contains(low, "your session has ended") ||
+		strings.Contains(low, "account_deactivated") ||
+		strings.Contains(low, "account_blocked") ||
+		strings.Contains(low, "user_deactivated") ||
+		strings.Contains(low, "invalid_grant") ||
+		strings.Contains(low, "revoked-tokens") ||
+		strings.Contains(low, "token has been revoked")
 }
 
 // isEdgeBlockText detects Cloudflare / reverse-proxy WAF style blocks that often

@@ -1483,11 +1483,15 @@ func reportChatPool(r *http.Request, options Options, accountID string, ok bool,
 			failure.BlockedUntil = until
 		}
 		if options.Store != nil {
+			if decision.DisableAccount || decision.Class == pool.ClassFatalAuth {
+				_, _ = options.Store.SetAccountEnabled(ctx, accountID, false)
+				_ = options.Store.MarkRefreshInvalid(ctx, accountID, failure.CooldownReason)
+			}
 			// Only record durable failure/cooldown when classifier says so.
 			// Still bump fail stats for non-cooldown errors without setting until.
 			_ = options.Store.ReportPoolFailure(ctx, failure)
 			// Drop hot candidate cache so next pick skips just-cooled / model-blocked accounts.
-			if decision.ShouldCooldown || decision.BlockModel {
+			if decision.ShouldCooldown || decision.BlockModel || decision.DisableAccount {
 				postgres.InvalidatePoolCandidateCache()
 			}
 		}

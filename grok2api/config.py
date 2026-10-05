@@ -102,7 +102,7 @@ CLIENT_SURFACE = os.getenv("GROK2API_CLIENT_SURFACE", "grok-cli")
 CLIENT_IDENTIFIER = os.getenv("GROK2API_CLIENT_IDENTIFIER", "grokcli-2api")
 
 # Default model when client omits / sends generic names
-DEFAULT_MODEL = os.getenv("GROK2API_DEFAULT_MODEL", "gpt-6.1-sol")
+DEFAULT_MODEL = os.getenv("GROK2API_DEFAULT_MODEL", "gpt-4o")
 
 # Account rotation mode (also changeable in admin UI / settings store)
 # round_robin | random | least_used  (all accounts equal; no primary)
@@ -133,7 +133,7 @@ _probe_env = os.getenv("GROK2API_PROBE_MODELS", "").strip()
 PROBE_MODELS: list[str] = (
     [m.strip() for m in _probe_env.split(",") if m.strip()]
     if _probe_env
-    else [DEFAULT_MODEL, "gpt-6-astra", "gpt-6-luna"]
+    else [DEFAULT_MODEL, "gpt-4o-mini"]
 )
 
 # Large multi-account pools (hundreds of entries) can freeze WSL/low-RAM hosts

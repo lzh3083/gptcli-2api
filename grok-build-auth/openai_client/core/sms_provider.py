@@ -110,22 +110,31 @@ def _request_smsbower(http: CurlSession, params: dict) -> str:
         raise SmsProviderError("SMSBOWER_API_BASE 不能为空")
     resp = http.get(base, params={"api_key": api_key, **params})
     text = (resp.text or "").strip()
-    if resp.status_code != 200:
-        raise SmsProviderError(f"SMSBower HTTP {resp.status_code}: {text[:200]}")
+    # HeroSMS 等平台会把 400/401/402 等错误包成 JSON（{"title":"BAD_KEY","details":"..."}），
+    # 优先解包出 title 映射为业务错误；无法识别时再按 HTTP 状态码报错。
+    if text.startswith("{"):
+        try:
+            _obj = json.loads(text)
+        except Exception:
+            _obj = None
+        if isinstance(_obj, dict) and str(_obj.get("title") or "").strip():
+            text = str(_obj["title"]).strip()
     if text in ("BAD_KEY", "BAD_ACTION", "BAD_SERVICE", "WRONG_SERVICE", "BAD_STATUS", "NO_ACTIVATION"):
         if text == "BAD_KEY":
-            raise SmsProviderError("SMSBower API key 无效（BAD_KEY）")
+            raise SmsProviderError("接码平台 API key 无效（BAD_KEY）")
         if text in ("BAD_SERVICE", "WRONG_SERVICE"):
-            raise SmsProviderError(f"SMSBower 服务代码无效（{text}），OpenAI/ChatGPT 请填写 dr")
+            raise SmsProviderError(f"接码平台服务代码无效（{text}），OpenAI/ChatGPT 请填写 dr")
         if text == "NO_ACTIVATION":
-            raise SmsProviderError("SMSBower 激活 ID 不存在（NO_ACTIVATION）")
-        raise SmsProviderError(f"SMSBower 请求参数错误：{text}")
+            raise SmsProviderError("接码平台激活 ID 不存在（NO_ACTIVATION）")
+        raise SmsProviderError(f"接码平台请求参数错误：{text}")
     if text in ("NO_NUMBERS", "NO_BALANCE", "NO_MONEY"):
         if text in ("NO_BALANCE", "NO_MONEY"):
-            raise SmsNoBalanceError(f"SMSBower 余额不足（{text}），请充值")
-        raise SmsNoNumbersError("SMSBower 暂无可用号码（NO_NUMBERS）")
+            raise SmsNoBalanceError(f"接码平台余额不足（{text}），请充值")
+        raise SmsNoNumbersError("接码平台暂无可用号码（NO_NUMBERS）")
     if text.startswith("The service is prohibited"):
-        raise SmsProviderError(f"SMSBower 该服务被禁售：{text}")
+        raise SmsProviderError(f"接码平台该服务被禁售：{text}")
+    if resp.status_code != 200:
+        raise SmsProviderError(f"接码平台 HTTP {resp.status_code}: {text[:200]}")
     return text
 
 
@@ -587,11 +596,34 @@ def wait_for_sms_code(
                 continue
 
             if provider == "smsbower":
-                text = _request_smsbower(http, {"action": "getStatus", "id": activation_id})
+                use_v2 = bool(getattr(_cfg, "SMSBOWER_USE_V2", True))
+                text = _request_smsbower(http, {"action": "getStatusV2" if use_v2 else "getStatus", "id": activation_id})
+                # HeroSMS / SMSBower V2 返回 JSON: {"data": {"code": "123456"}} 或 {"sms": {"code": "123456"}}
+                if text.startswith("{"):
+                    try:
+                        _data = json.loads(text)
+                    except Exception:
+                        _data = None
+                    if isinstance(_data, dict):
+                        _item = _data.get("data") if isinstance(_data.get("data"), dict) else _data.get("sms")
+                        if isinstance(_item, dict) and _item.get("code"):
+                            code = str(_item["code"]).strip()
+                            logger.info(f"[SMSBower] 第 {round_no} 轮收到验证码：{code}")
+                            return code
+                        _title = str(_data.get("title") or "").strip()
+                        if _title == "STATUS_CANCEL":
+                            raise SmsProviderError("SMSBower 激活已被取消（STATUS_CANCEL）")
+                        if _title in ("NO_BALANCE", "NO_MONEY"):
+                            raise SmsNoBalanceError(f"SMSBower 余额不足（{_title}），请充值")
+                        if _title == "NO_ACTIVATION":
+                            raise SmsProviderError("SMSBower 激活 ID 不存在（NO_ACTIVATION）")
+                        text = _title or text
                 if text.startswith("STATUS_OK:"):
                     return text.split(":", 1)[1].strip().strip("'")
                 if text == "STATUS_CANCEL":
                     raise SmsProviderError("SMSBower 激活已被取消（STATUS_CANCEL）")
+                remaining = max(0, int(deadline - time.time()))
+                logger.info(f"[SMSBower] 第 {round_no} 轮未收到验证码，状态={text or 'WAIT'}，{interval}s 后重试（剩余 {remaining}s）")
                 time.sleep(interval)
                 continue
 

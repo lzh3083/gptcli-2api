@@ -1406,6 +1406,7 @@ def _make_email_receiver(
             self.base_url = base_url or default_base
             self.provider = provider
             self.token = token
+            self._seen_codes: set[str] = set()
 
         def wait_for_code(
             self,
@@ -1414,6 +1415,7 @@ def _make_email_receiver(
             should_cancel=None,
             poll_interval: float | None = None,
             on_tick=None,
+            after_ts: float | None = None,
         ) -> str:
             import re as _re
 
@@ -1423,6 +1425,7 @@ def _make_email_receiver(
             poll = max(0.4, min(poll, 2.0))
             started = time.time()
             last_tick = 0.0
+            exclude_codes = set(self._seen_codes)
             while time.time() < deadline:
                 if callable(should_cancel) and should_cancel():
                     raise _RegCancelled("cancelled while waiting for email code")
@@ -1457,51 +1460,59 @@ def _make_email_receiver(
                         )
                     for item in messages:
                         # 优先尝试使用 OpenAI/ChatGPT 邮件提取器
+                        cand_code = None
                         try:
                             from openai_client.core.otp_utils import extract_otp as _extract_openai_otp
                             o_code = _extract_openai_otp(item)
                             if o_code and len(str(o_code).strip()) == 6:
-                                return str(o_code).strip()
+                                cand_code = str(o_code).strip()
                         except Exception:
                             pass
 
-                        # Prefer xAI AAA-BBB codes first.
-                        text = "\n".join(
-                            str(item.get(k) or "")
-                            for k in (
-                                "subject",
-                                "content",
-                                "text",
-                                "textBody",
-                                "html",
-                                "htmlBody",
-                                "body",
-                                "from_address",
-                                "from",
-                                "verificationCode",
+                        if not cand_code:
+                            text = "\n".join(
+                                str(item.get(k) or "")
+                                for k in (
+                                    "subject",
+                                    "content",
+                                    "text",
+                                    "textBody",
+                                    "html",
+                                    "htmlBody",
+                                    "body",
+                                    "from_address",
+                                    "from",
+                                    "verificationCode",
+                                )
                             )
-                        )
-                        # Also accept 6-digit numeric codes
-                        match_num = _re.search(r"\b(\d{6})\b", text)
-                        if match_num:
-                            return match_num.group(1)
-                        match = _re.search(
-                            r"\b([A-Z0-9]{3})-([A-Z0-9]{3})\b", text, flags=_re.I
-                        )
-                        if match:
-                            return "".join(match.groups()).upper()
-                        # Also accept plain 6-char alnum codes.
-                        match2 = _re.search(
-                            r"\b([A-Z0-9]{6})\b", text, flags=_re.I
-                        )
-                        if match2:
-                            return match2.group(1).upper()
-                        extracted = item.get("extracted") or {}
-                        codes = extracted.get("codes") or []
-                        for code in codes:
-                            clean = str(code).replace("-", "").strip().upper()
-                            if len(clean) == 6 and _re.fullmatch(r"[A-Z0-9]{6}", clean):
-                                return clean
+                            match_num = _re.search(r"\b(\d{6})\b", text)
+                            if match_num:
+                                cand_code = match_num.group(1)
+                            else:
+                                match = _re.search(
+                                    r"\b([A-Z0-9]{3})-([A-Z0-9]{3})\b", text, flags=_re.I
+                                )
+                                if match:
+                                    cand_code = "".join(match.groups()).upper()
+                                else:
+                                    match2 = _re.search(
+                                        r"\b([A-Z0-9]{6})\b", text, flags=_re.I
+                                    )
+                                    if match2:
+                                        cand_code = match2.group(1).upper()
+                                    else:
+                                        extracted = item.get("extracted") or {}
+                                        codes = extracted.get("codes") or []
+                                        for code in codes:
+                                            clean = str(code).replace("-", "").strip().upper()
+                                            if len(clean) == 6 and _re.fullmatch(r"[A-Z0-9]{6}", clean):
+                                                cand_code = clean
+                                                break
+                        if cand_code:
+                            if exclude_codes and cand_code in exclude_codes:
+                                continue
+                            self._seen_codes.add(cand_code)
+                            return cand_code
                 except Exception:
                     pass
                 # Heartbeat for admin UI so waiting_email is not a silent freeze.
@@ -3082,7 +3093,7 @@ def _run_registration(
                     + (f", 剩余 {int(remaining)}s" if remaining else ""),
                 )
 
-            def _otp_cb(target_email: str, after_ts: float) -> str:
+            def _otp_cb(target_email: str, after_ts: float | None = None, **kwargs) -> str:
                 update("waiting_email", f"等待接收 6 位验证码: {target_email}")
                 if receiver is None:
                     raise RuntimeError("未分配邮箱接收器")
@@ -3092,6 +3103,7 @@ def _run_registration(
                         should_cancel=_mail_should_cancel,
                         poll_interval=1.0,
                         on_tick=_mail_on_tick,
+                        after_ts=after_ts,
                     )
                 except TypeError:
                     code = receiver.wait_for_code(timeout=180)

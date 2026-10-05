@@ -606,8 +606,9 @@ def _normalize_entry(
         client_id=str(entry.get("oidc_client_id"))
         if entry.get("oidc_client_id")
         else None,
+        issuer=str(entry.get("oidc_issuer")) if entry.get("oidc_issuer") else None,
         fallback=preferred_id
-        or f"https://auth.x.ai::imported-{uuid.uuid4().hex[:10]}",
+        or f"https://auth.openai.com::imported-{uuid.uuid4().hex[:10]}",
     )
     return aid, entry
 

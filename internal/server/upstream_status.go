@@ -11,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hm2899/grokcli-2api/internal/pool"
+	"github.com/hm2899/grokcli-2api/internal/store/postgres"
 )
 
 // upstreamStatusCache keeps the last probe result so the models-page poller and
@@ -151,6 +154,7 @@ func doUpstreamProbe(ctx context.Context, options Options) map[string]any {
 
 	// 2) HTTP GET /models — with live account token when available.
 	viaEmail := ""
+	viaAccountID := ""
 	token := ""
 	if options.Store != nil {
 		if auths, err := options.Store.ListAccountAuths(ctx, 5, true); err == nil && len(auths) > 0 {
@@ -159,6 +163,7 @@ func doUpstreamProbe(ctx context.Context, options Options) map[string]any {
 				if strings.TrimSpace(a.Token) != "" {
 					token = a.Token
 					viaEmail = a.Email
+					viaAccountID = a.ID
 					break
 				}
 			}
@@ -259,6 +264,20 @@ func doUpstreamProbe(ctx context.Context, options Options) map[string]any {
 		out["model_scope_restricted"] = true
 		out["notice"] = "上游鉴权正常 · Key 缺少 api.model.read 权限 (网关内置最新模型正常接管)"
 		out["models_count"] = 12
+		out["body_preview"] = trimPreview(bodyStr, 180)
+		return out
+	}
+
+	// 401/403 with fatal token error: account is dead, NOT upstream edge failure!
+	if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && token != "" && pool.IsFatalAuthText(bodyStr) {
+		if options.Store != nil && viaAccountID != "" {
+			_, _ = options.Store.SetAccountEnabled(ctx, viaAccountID, false)
+			_ = options.Store.MarkRefreshInvalid(ctx, viaAccountID, bodyStr)
+			postgres.InvalidatePoolCandidateCache()
+		}
+		out["ok"] = true // upstream edge is reachable and functional
+		out["error"] = fmt.Sprintf("HTTP %d (探测账号已失效并已自动停用: %s)", resp.StatusCode, viaEmail)
+		out["notice"] = "上游边缘节点正常 · 探测账号 Token 已失效并自动停用"
 		out["body_preview"] = trimPreview(bodyStr, 180)
 		return out
 	}

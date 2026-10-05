@@ -10429,7 +10429,7 @@ function settingsGroupDefaults(group) {
     case "pool":
       return {
         account_mode: "round_robin",
-        default_model: "gpt-6.1-sol",
+        default_model: "gpt-4o",
         token_maintain_enabled: true,
         model_health_enabled: true,
         model_health_auto_disable: true,
@@ -10440,7 +10440,7 @@ function settingsGroupDefaults(group) {
         model_health_probe_batch: 120,
         model_health_probe_workers: 12,
         conversation_affinity_ttl_sec: 7200,
-        probe_models: "gpt-6.1-sol, gpt-6-astra, gpt-6-luna",
+        probe_models: "gpt-4o, gpt-4o-mini",
       };
     case "proxy":
       return {

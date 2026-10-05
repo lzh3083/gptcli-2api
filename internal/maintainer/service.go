@@ -310,6 +310,7 @@ func (s *Service) RunOnce(ctx context.Context, force bool) map[string]any {
 				if permanent {
 					status = "invalid"
 					_ = s.Store.MarkRefreshInvalid(ctx, row.ID, errText)
+					_, _ = s.Store.SetAccountEnabled(ctx, row.ID, false)
 				}
 				_ = s.Store.SaveRenewStatus(ctx, row.ID, false, status, errText, "token_maintainer")
 				deleted := false
@@ -596,6 +597,7 @@ func (s *Service) RunForIDs(ctx context.Context, ids []string, force bool) map[s
 				if permanent {
 					status = "invalid"
 					_ = s.Store.MarkRefreshInvalid(ctx, id, errText)
+					_, _ = s.Store.SetAccountEnabled(ctx, id, false)
 				}
 				_ = s.Store.SaveRenewStatus(ctx, id, false, status, errText, "manual_renew")
 				deleted := false
