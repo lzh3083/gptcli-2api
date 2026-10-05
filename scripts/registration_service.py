@@ -43,7 +43,7 @@ else:
     _IMPORT_ERROR = None
 
 
-app = FastAPI(title="grok2api registration internal API", version="1.0.0")
+app = FastAPI(title="gptcli-2api registration internal API", version="1.1")
 API_PREFIX = "/internal/registration/v1"
 
 

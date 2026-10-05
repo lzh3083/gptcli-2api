@@ -124,7 +124,7 @@ func ExportSub2APIFormat(ctx context.Context, store Store, ids []string) (map[st
 	}
 	auth, _ := authMap["auth"].(map[string]any)
 	cfg := sub2Config(ctx, store)
-	notesPrefix := firstNonEmpty(stringField(cfg, "notes_prefix"), "grokcli-2api")
+	notesPrefix := firstNonEmpty(stringField(cfg, "notes_prefix"), "gptcli-2api")
 	accConc := intField(cfg, "account_concurrency", 3)
 	if accConc < 1 {
 		accConc = 3
@@ -170,13 +170,17 @@ func ExportSub2APIFormat(ctx context.Context, store Store, ids []string) (map[st
 		if refresh != "" {
 			credentials["refresh_token"] = refresh
 		}
+		plat := "openai"
+		if !isAccountOpenAI(entry, aid) && (stringField(entry, "source") == "xai" || strings.Contains(aid, "x.ai")) {
+			plat = "grok"
+		}
 		row := map[string]any{
 			"name":            trimLen(name, 200),
 			"notes":           notesPrefix + ":" + aid,
-			"platform":        "grok",
+			"platform":        plat,
 			"type":            "oauth",
 			"credentials":     credentials,
-			"extra":           map[string]any{"email": email, "local_account_id": aid, "source": "grokcli-2api"},
+			"extra":           map[string]any{"email": email, "local_account_id": aid, "source": "gptcli-2api"},
 			"concurrency":     accConc,
 			"priority":        accPrio,
 			"rate_multiplier": accRate,
@@ -198,6 +202,15 @@ func ExportSub2APIFormat(ctx context.Context, store Store, ids []string) (map[st
 	}, nil
 }
 
+func isAccountOpenAI(entry map[string]any, aid string) bool {
+	return strings.Contains(aid, "openai.com") ||
+		strings.Contains(stringField(entry, "oidc_issuer"), "openai.com") ||
+		strings.Contains(stringField(entry, "source"), "chatgpt") ||
+		stringField(entry, "auth_mode") == "chatgpt_session" ||
+		stringField(entry, "type") == "codex" ||
+		stringField(entry, "oidc_client_id") == "app_EMoamEEZ73f0CkXaXp7hrann"
+}
+
 func buildCLIProxyRecord(entry map[string]any, aid string) map[string]any {
 	if entry == nil {
 		return nil
@@ -214,10 +227,7 @@ func buildCLIProxyRecord(entry map[string]any, aid string) map[string]any {
 		expiredISO = time.Unix(int64(*exp), 0).UTC().Format(time.RFC3339)
 	}
 
-	isOpenAI := strings.Contains(aid, "openai.com") ||
-		strings.Contains(stringField(entry, "oidc_issuer"), "openai.com") ||
-		strings.Contains(stringField(entry, "source"), "chatgpt") ||
-		stringField(entry, "auth_mode") == "chatgpt_session"
+	isOpenAI := isAccountOpenAI(entry, aid)
 
 	defaultType := "codex"
 	if isOpenAI {
@@ -510,7 +520,7 @@ func CreateSub2APIGroup(ctx context.Context, store Store, name, platform string,
 		return map[string]any{"ok": false, "error": "group name is required"}
 	}
 	if platform == "" {
-		platform = "grok"
+		platform = "openai"
 	}
 	cfg := sub2Config(ctx, store)
 	base := strings.TrimRight(stringField(cfg, "base_url"), "/")
@@ -603,7 +613,7 @@ func PushSub2API(ctx context.Context, store Store, ids []string, groupID *int, c
 		return nil, err
 	}
 	auth, _ := authMap["auth"].(map[string]any)
-	notesPrefix := firstNonEmpty(stringField(cfg, "notes_prefix"), "grokcli-2api")
+	notesPrefix := firstNonEmpty(stringField(cfg, "notes_prefix"), "gptcli-2api")
 	accConc := intField(cfg, "account_concurrency", 3)
 	accPrio := intField(cfg, "account_priority", 50)
 	accRate := floatField(cfg, "account_rate_multiplier", 1)
@@ -713,9 +723,13 @@ func pushOneSub2(ctx context.Context, client *http.Client, base, token string, g
 	if exp := accounts.ParseExpiresAt(entry["expires_at"], access); exp != nil {
 		credentials["expires_at"] = time.Unix(int64(*exp), 0).UTC().Format(time.RFC3339)
 	}
+	plat := "openai"
+	if !isAccountOpenAI(entry, aid) && (stringField(entry, "source") == "xai" || strings.Contains(aid, "x.ai")) {
+		plat = "grok"
+	}
 	body := map[string]any{
 		"name":            trimLen(name, 200),
-		"platform":        "grok",
+		"platform":        plat,
 		"type":            "oauth",
 		"credentials":     credentials,
 		"extra":           map[string]any{},
@@ -744,7 +758,7 @@ func sub2Login(ctx context.Context, base, email, password string) (string, error
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "grokcli-2api-sub2api-push/1.0")
+	req.Header.Set("User-Agent", "gptcli-2api-sub2api-push/1.1")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
@@ -769,7 +783,7 @@ func sub2ListGroups(ctx context.Context, base, token string) ([]map[string]any, 
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "grokcli-2api-sub2api-push/1.0")
+	req.Header.Set("User-Agent", "gptcli-2api-sub2api-push/1.1")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -811,12 +825,12 @@ func sub2ListGroups(ctx context.Context, base, token string) ([]map[string]any, 
 
 func sub2CreateGroup(ctx context.Context, base, token, name, platform string) (map[string]any, error) {
 	if platform == "" {
-		platform = "grok"
+		platform = "openai"
 	}
 	body := map[string]any{
 		"name":            name,
 		"platform":        platform,
-		"description":     "created by grokcli-2api",
+		"description":     "created by gptcli-2api",
 		"rate_multiplier": 1.0,
 		"is_exclusive":    false,
 	}
@@ -827,7 +841,7 @@ func sub2CreateGroup(ctx context.Context, base, token, name, platform string) (m
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "grokcli-2api-sub2api-push/1.0")
+	req.Header.Set("User-Agent", "gptcli-2api-sub2api-push/1.1")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -871,7 +885,7 @@ func sub2CreateAccount(ctx context.Context, client *http.Client, base, token str
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "grokcli-2api-sub2api-push/1.0")
+	req.Header.Set("User-Agent", "gptcli-2api-sub2api-push/1.1")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -900,7 +914,7 @@ func sub2SSOToOAuth(ctx context.Context, client *http.Client, base, token string
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "grokcli-2api-sub2api-push/1.0")
+	req.Header.Set("User-Agent", "gptcli-2api-sub2api-push/1.1")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

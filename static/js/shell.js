@@ -25,7 +25,7 @@ window.G2A = window.G2A || {};
 
   async function init({ page }) {
     const meta = PAGE_META[page] || PAGE_META.overview;
-    document.title = meta.title + " · grokcli-2api";
+    document.title = meta.title + " · gptcli-2api";
     if (G2A.$("page-title")) G2A.$("page-title").textContent = meta.title;
     if (G2A.$("page-sub")) G2A.$("page-sub").textContent = meta.sub;
     buildMobileNav(page);

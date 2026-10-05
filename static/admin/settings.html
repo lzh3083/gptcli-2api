@@ -518,7 +518,7 @@
   </div>
   <p class="g2a-muted" style="margin:0 0 12px;line-height:1.55">
     配置 <a href="https://github.com/Wei-Shaw/sub2api" target="_blank" rel="noopener">sub2api</a> 管理端地址与登录后，
-    可在「账号」页将本地 Grok 账号<strong>批量导入</strong>到指定分组（平台 <code>grok</code> / OAuth）。
+    可在「账号」页将本地 OpenAI / ChatGPT / Codex 账号<strong>批量导入</strong>到指定分组（平台 <code>codex</code> / <code>chatgpt</code> / OAuth）。
     优先使用本地 access/refresh token 直推；无 token 时回退 SSO→OAuth。
   </p>
   <div class="g2a-form-grid">
@@ -549,8 +549,8 @@
       <label class="g2a-check"><input type="checkbox" id="set-sub2api-auto-group" checked /> 分组不存在时自动创建</label>
     </div>
     <div class="g2a-field">
-      <label class="g2a-check"><input type="checkbox" id="set-sub2api-auto-push-register" /> 注册成功后自动入库 sub2api</label>
-      <div class="g2a-muted" style="margin-top:4px">勾选后会<strong>同时启用</strong> sub2api 导入；协议注册入库本地后立刻推送到上方分组（需填好 URL/登录/分组）。点「保存设置」后生效。</div>
+      <label class="g2a-check"><input type="checkbox" id="set-sub2api-auto-push-register" /> 注册成功后自动入库 sub2api（建议单系统主权模式下保持关闭）</label>
+      <div class="g2a-muted" style="margin-top:4px">⚠️ <strong>提示</strong>：单系统主权模式下建议关闭此项，避免多系统同时持有 Refresh Token 引发并发轮转封号。</div>
     </div>
     <div class="g2a-field">
       <label for="set-sub2api-concurrency">推送并发</label>
@@ -677,9 +677,9 @@
     </div>
   </div>
   <script src="/static/dist/utils.ac10ff3b58.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/api.9ac71f7ed9.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/api.9ddb30423c.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/auth.fa7b1e0e4d.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/core.0a534bd382.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/auth.3ec19fa51e.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.68c5c2f913.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
 </body>
 </html>
