@@ -604,12 +604,12 @@
   <p class="g2a-muted" style="margin:0 0 12px;line-height:1.55">
     配置 <a href="https://github.com/router-for-me/CLIProxyAPI" target="_blank" rel="noopener">CLIProxyAPI</a>
     的 Management API 后，可在「账号」页把<strong>本地号池账号同步导入到 CPA auth 目录</strong>
-    （<code>POST /v0/management/auth-files</code>，写入 <code>xai-email.json</code> 等文件）。
+    （<code>POST /v0/management/auth-files</code>，写入 <code>codex-email.json</code> 等文件）。
     需在 CPA <code>config.yaml</code> 开启 <code>remote-management</code> 并设置 management key。
   </p>
   <div class="g2a-form-grid">
     <div class="g2a-field">
-      <label class="g2a-check"><input type="checkbox" id="set-cliproxyapi-enabled" /> 启用 CLIProxyAPI 导入</label>
+      <label class="g2a-check"><input type="checkbox" id="set-cliproxyapi-enabled" /> 启用 CLIProxyAPI 同步</label>
     </div>
     <div class="g2a-field g2a-field-span2">
       <label for="set-cliproxyapi-url">CLIProxyAPI URL</label>
@@ -622,8 +622,8 @@
       <div class="g2a-muted" style="margin-top:4px">对应 CPA <code>remote-management.secret-key</code>；请求头 <code>Authorization: Bearer …</code> / <code>X-Management-Key</code></div>
     </div>
     <div class="g2a-field">
-      <label class="g2a-check"><input type="checkbox" id="set-cliproxyapi-auto-push-register" /> 注册成功后自动入库 CPA</label>
-      <div class="g2a-muted" style="margin-top:4px">勾选后会<strong>同时启用</strong> CLIProxyAPI 导入；协议注册入库本地后立刻推送到 CPA（需填好 URL / Management Key）。点「保存设置」后生效。</div>
+      <label class="g2a-check"><input type="checkbox" id="set-cliproxyapi-auto-push-register" /> 注册成功后自动入库 CPA（建议单系统主权模式下保持关闭）</label>
+      <div class="g2a-muted" style="margin-top:4px">⚠️ <strong>提示</strong>：单系统主权模式下建议关闭此项，避免多系统同时持有 Refresh Token 引发并发轮转封号。</div>
     </div>
     <div class="g2a-field">
       <label for="set-cliproxyapi-concurrency">推送并发</label>
@@ -633,14 +633,14 @@
     <div class="g2a-field">
       <label for="set-cliproxyapi-auth-type">写入 type</label>
       <select id="set-cliproxyapi-auth-type" class="g2a-input">
-        <option value="xai" selected>xai（推荐 · Grok Build / cli-chat-proxy）</option>
-        <option value="codex">codex</option>
+        <option value="codex" selected>codex（推荐 · OpenAI / ChatGPT 官方客户端协议）</option>
+        <option value="xai">xai（Grok）</option>
       </select>
     </div>
     <div class="g2a-field g2a-field-span2">
       <label for="set-cliproxyapi-base-upstream">auth 文件 base_url</label>
-      <input id="set-cliproxyapi-base-upstream" type="url" class="g2a-input" placeholder="https://cli-chat-proxy.grok.com/v1" />
-      <div class="g2a-muted" style="margin-top:4px">写入 CPA auth JSON 的上游；Grok Build 请保持 cli-chat-proxy，勿改成 api.x.ai 以免 402</div>
+      <input id="set-cliproxyapi-base-upstream" type="url" class="g2a-input" placeholder="https://api.openai.com/v1（留空默认）" />
+      <div class="g2a-muted" style="margin-top:4px">写入 CPA auth JSON 的上游；Codex 账号请留空或填 https://api.openai.com/v1</div>
     </div>
     <div class="g2a-field">
       <label for="set-cliproxyapi-notes">notes 前缀</label>

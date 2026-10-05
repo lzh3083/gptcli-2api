@@ -3113,6 +3113,10 @@ def _run_registration(
                 return code_str
 
             update("starting", f"开始 ChatGPT 协议注册: {email}")
+            enable_codex_val = bool(
+                sess.get("enable_codex", False)
+                or (os.environ.get("ENABLE_CODEX_AUTO", "").strip().lower() in ("1", "true", "yes"))
+            )
             ores = run_openai_registration(
                 email=email,
                 password=password,
@@ -3120,7 +3124,7 @@ def _run_registration(
                 otp_provider=_otp_cb if receiver else None,
                 on_step=lambda st, msg: update(st, msg),
                 check_cancel=_check_cancel,
-                enable_codex=True,
+                enable_codex=enable_codex_val,
             )
 
             if not ores.get("success"):

@@ -219,13 +219,15 @@ func buildCLIProxyRecord(entry map[string]any, aid string) map[string]any {
 		strings.Contains(stringField(entry, "source"), "chatgpt") ||
 		stringField(entry, "auth_mode") == "chatgpt_session"
 
-	defaultType := "xai"
+	defaultType := "codex"
 	if isOpenAI {
 		if stringField(entry, "refresh_token") != "" || stringField(entry, "codex_cpa_file") != "" {
 			defaultType = "codex"
 		} else {
 			defaultType = "chatgpt"
 		}
+	} else {
+		defaultType = "xai"
 	}
 	cpaType := firstNonEmpty(stringField(entry, "cliproxyapi_type"), stringField(entry, "type"), defaultType)
 

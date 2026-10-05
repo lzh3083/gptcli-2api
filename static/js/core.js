@@ -9572,14 +9572,14 @@ function fillCliproxyapiForm(cfg) {
     $("set-cliproxyapi-concurrency").value = cfg.concurrency != null ? cfg.concurrency : 4;
   }
   if ($("set-cliproxyapi-auth-type")) {
-    $("set-cliproxyapi-auth-type").value = cfg.auth_type || "xai";
+    $("set-cliproxyapi-auth-type").value = cfg.auth_type || "codex";
   }
   if ($("set-cliproxyapi-base-upstream")) {
     $("set-cliproxyapi-base-upstream").value =
-      cfg.base_upstream || "https://cli-chat-proxy.grok.com/v1";
+      cfg.base_upstream || "";
   }
   if ($("set-cliproxyapi-notes")) {
-    $("set-cliproxyapi-notes").value = cfg.notes_prefix || "grokcli-2api";
+    $("set-cliproxyapi-notes").value = cfg.notes_prefix || "gptcli-2api";
   }
   const pill = $("cliproxyapi-pill");
   if (pill) {
@@ -9614,15 +9614,14 @@ function collectCliproxyapiPatch() {
     base_url: $("set-cliproxyapi-url") ? ($("set-cliproxyapi-url").value || "").trim() : "",
     auto_push_on_register: autoPush,
     notes_prefix: $("set-cliproxyapi-notes")
-      ? (($("set-cliproxyapi-notes").value || "").trim() || "grokcli-2api")
-      : "grokcli-2api",
+      ? (($("set-cliproxyapi-notes").value || "").trim() || "gptcli-2api")
+      : "gptcli-2api",
     auth_type: $("set-cliproxyapi-auth-type")
-      ? ($("set-cliproxyapi-auth-type").value || "xai")
-      : "xai",
+      ? ($("set-cliproxyapi-auth-type").value || "codex")
+      : "codex",
     base_upstream: $("set-cliproxyapi-base-upstream")
-      ? (($("set-cliproxyapi-base-upstream").value || "").trim() ||
-          "https://cli-chat-proxy.grok.com/v1")
-      : "https://cli-chat-proxy.grok.com/v1",
+      ? (($("set-cliproxyapi-base-upstream").value || "").trim())
+      : "",
   };
   const conc = $("set-cliproxyapi-concurrency")
     ? ($("set-cliproxyapi-concurrency").value || "").trim()

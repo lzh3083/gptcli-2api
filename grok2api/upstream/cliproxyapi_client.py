@@ -38,10 +38,12 @@ def _default_config() -> dict[str, Any]:
         "concurrency": 4,
         # After protocol registration, auto-push to CPA
         "auto_push_on_register": False,
-        # Prefer type=xai for Grok Build / cli-chat-proxy tokens
-        "auth_type": "xai",
-        "base_upstream": "https://cli-chat-proxy.grok.com/v1",
-        "notes_prefix": "grokcli-2api",
+        # 冷却缓冲时间（秒），默认 20 分钟 (1200 秒) 自然静置期
+        "auto_push_delay_sec": 1200,
+        # Prefer type=codex for OpenAI / ChatGPT tokens
+        "auth_type": "codex",
+        "base_upstream": "",
+        "notes_prefix": "gptcli-2api",
     }
 
 
@@ -75,17 +77,22 @@ def _normalize_config(raw: Any, *, include_secrets: bool = True) -> dict[str, An
     if auto_push is None:
         auto_push = raw.get("auto_import_on_register")
     out["auto_push_on_register"] = bool(auto_push)
-    auth_type = str(raw.get("auth_type") or "xai").strip().lower() or "xai"
+    try:
+        push_delay = int(raw.get("auto_push_delay_sec") if raw.get("auto_push_delay_sec") is not None else 1200)
+    except (TypeError, ValueError):
+        push_delay = 1200
+    out["auto_push_delay_sec"] = max(0, push_delay)
+    auth_type = str(raw.get("auth_type") or "codex").strip().lower() or "codex"
     if auth_type in ("x-ai", "x.ai", "grok"):
         auth_type = "xai"
     out["auth_type"] = auth_type
     out["base_upstream"] = str(
         raw.get("base_upstream")
         or raw.get("upstream_base_url")
-        or "https://cli-chat-proxy.grok.com/v1"
-    ).strip() or "https://cli-chat-proxy.grok.com/v1"
+        or ""
+    ).strip()
     out["notes_prefix"] = (
-        str(raw.get("notes_prefix") or "grokcli-2api").strip() or "grokcli-2api"
+        str(raw.get("notes_prefix") or "gptcli-2api").strip() or "gptcli-2api"
     )
     return out
 
@@ -201,8 +208,10 @@ def _record_filename(record: dict[str, Any]) -> str:
         fname = safe
     else:
         # CPA convention from save_cliproxyapi_auth_record
-        t = str(record.get("type") or "xai").strip().lower() or "xai"
-        if t in ("xai", "grok", "x-ai", "x.ai"):
+        t = str(record.get("type") or "codex").strip().lower() or "codex"
+        if t in ("codex", "chatgpt"):
+            fname = f"codex-{safe}"
+        elif t in ("xai", "grok", "x-ai", "x.ai"):
             fname = f"xai-{safe}"
         else:
             fname = f"{t}-{safe}"
@@ -330,13 +339,15 @@ def _entry_to_cpa_record(
     rec = accounts.build_cliproxyapi_export_record(entry, aid=aid)
     if not rec:
         return None
-    # Force preferred type / base_url from settings for Grok Build channel
-    pref = str(cfg.get("auth_type") or "xai").strip().lower() or "xai"
-    if pref in ("xai", "grok", "x-ai", "x.ai"):
+    # Force preferred type / base_url from settings
+    pref = str(cfg.get("auth_type") or "codex").strip().lower() or "codex"
+    if pref in ("codex", "chatgpt"):
+        rec["type"] = "codex"
+    elif pref in ("xai", "grok", "x-ai", "x.ai"):
         rec["type"] = "xai"
     if cfg.get("base_upstream"):
         rec["base_url"] = str(cfg.get("base_upstream"))
-    note_prefix = str(cfg.get("notes_prefix") or "grokcli-2api")
+    note_prefix = str(cfg.get("notes_prefix") or "gptcli-2api")
     rec["note"] = f"{note_prefix}:{aid}"
     return rec
 
@@ -492,6 +503,38 @@ def maybe_auto_push_registered_accounts(
             "reason": "missing_management_key",
             "results": [],
         }
+
+    delay_sec = int(live.get("auto_push_delay_sec") or 1200)
+    if delay_sec > 0 and source != "delayed_worker":
+        import threading
+
+        def _delayed_push_worker():
+            print(
+                f"[cliproxyapi] 新账号 {ids} 进入 {delay_sec}s (约 {delay_sec // 60} 分钟) 自然静置冷却期，"
+                f"将在静置结束后自动推送到 CPA..."
+            )
+            time.sleep(delay_sec)
+            try:
+                delayed_res = push_accounts(ids)
+                print(
+                    f"[cliproxyapi] 自然静置期结束，自动推送到 CPA 完成: "
+                    f"total={delayed_res.get('total')} ok={delayed_res.get('success')} "
+                    f"fail={delayed_res.get('failed')}"
+                )
+            except Exception as exc:
+                print(f"[cliproxyapi] 延迟推送异常: {exc}")
+
+        t = threading.Thread(target=_delayed_push_worker, daemon=True)
+        t.start()
+        return {
+            "ok": True,
+            "skipped": False,
+            "delayed": True,
+            "delay_sec": delay_sec,
+            "message": f"账号已进入 {delay_sec // 60} 分钟自然冷却期，静置结束后将自动推送到 CPA",
+            "results": [],
+        }
+
     try:
         result = push_accounts(ids)
         result["source"] = source
