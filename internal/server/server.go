@@ -635,7 +635,7 @@ func serveModels(w http.ResponseWriter, r *http.Request, options Options) {
 	}
 	catalog := options.Models
 	if catalog == nil {
-		catalog = models.NewCatalog(config.Config{DefaultModel: "gpt-4o"}, nil)
+		catalog = models.NewCatalog(config.Config{DefaultModel: "gpt-6.1-sol"}, nil)
 	}
 	writeJSON(w, http.StatusOK, catalog.OpenAIList(r.Context()))
 }
@@ -1079,7 +1079,7 @@ func streamChatCompletions(w http.ResponseWriter, r *http.Request, body io.Reade
 				}
 				model := streamModel
 				if model == "" {
-					model = "gpt-4o"
+					model = "gpt-6.1-sol"
 				}
 				term := map[string]any{
 					"id":      id,
@@ -6698,7 +6698,7 @@ func modelCatalog(options Options) *models.Catalog {
 	if options.Models != nil {
 		return options.Models
 	}
-	return models.NewCatalog(config.Config{DefaultModel: "gpt-4o"}, nil)
+	return models.NewCatalog(config.Config{DefaultModel: "gpt-6.1-sol"}, nil)
 }
 
 func publicAPIBase(r *http.Request, port int) string {
@@ -8616,7 +8616,7 @@ func parseUpstreamModels(payload any) []map[string]any {
 
 func ensureLocalModelExtras(items []map[string]any, defaultModel string) []map[string]any {
 	if defaultModel == "" {
-		defaultModel = "gpt-4o"
+		defaultModel = "gpt-6.1-sol"
 	}
 	have := map[string]bool{}
 	for _, it := range items {
@@ -8626,20 +8626,20 @@ func ensureLocalModelExtras(items []map[string]any, defaultModel string) []map[s
 	}
 	extras := []map[string]any{
 		{"id": defaultModel, "name": defaultModel, "owned_by": "openai"},
-		{"id": "gpt-4o", "name": "GPT-4o", "description": "OpenAI flagship omni multimodal model", "owned_by": "openai", "context_window": 128000},
-		{"id": "gpt-4o-mini", "name": "GPT-4o mini", "description": "Fast, affordable small model for focused tasks", "owned_by": "openai", "context_window": 128000},
-		{"id": "chatgpt-4o-latest", "name": "ChatGPT 4o Latest", "description": "ChatGPT latest dynamic model tracking chatgpt.com", "owned_by": "openai", "context_window": 128000},
-		{"id": "o3-mini", "name": "o3-mini", "description": "OpenAI efficient reasoning model with high speed and low cost", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
-		{"id": "o1", "name": "o1", "description": "OpenAI flagship reasoning model for math, science and coding", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
-		{"id": "o1-mini", "name": "o1-mini", "description": "Fast reasoning model especially strong at code and math", "owned_by": "openai", "context_window": 128000, "supports_reasoning_effort": true},
-		{"id": "o1-preview", "name": "o1-preview", "description": "OpenAI foundational reasoning preview model", "owned_by": "openai", "context_window": 128000, "supports_reasoning_effort": true},
-		{"id": "gpt-4.5-preview", "name": "GPT-4.5 Preview", "description": "OpenAI research-grade largest flagship model", "owned_by": "openai", "context_window": 128000},
-		{"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "description": "GPT-4 Turbo with 128k context and vision capabilities", "owned_by": "openai", "context_window": 128000},
-		{"id": "gpt-4", "name": "GPT-4", "description": "OpenAI foundational high-intelligence model", "owned_by": "openai", "context_window": 8192},
-		{"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast, inexpensive model for simple tasks", "owned_by": "openai", "context_window": 16385},
-		{"id": "dall-e-3", "name": "DALL·E 3", "description": "State-of-the-art OpenAI image generation model", "owned_by": "openai"},
-		{"id": "text-embedding-3-small", "name": "Embedding 3 Small", "description": "Highly efficient text embedding model", "owned_by": "openai"},
+		{"id": "gpt-6.1-sol", "name": "GPT-6.1 Sol", "description": "Near-Astra performance at much lower cost (Flagship Value & Recommended Default)", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-6-astra", "name": "GPT-6 Astra", "description": "Most capable flagship model for complex reasoning, coding, computer use and deep research", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-6-sol", "name": "GPT-6 Sol", "description": "High intelligence for complex coding and agentic workflows", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-6-luna", "name": "GPT-6 Luna", "description": "Most efficient model for high-throughput and cost-sensitive workloads", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.6-sol", "name": "GPT-5.6 Sol", "description": "GPT-5.6 flagship model for complex professional work", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.6-terra", "name": "GPT-5.6 Terra", "description": "GPT-5.6 model balancing intelligence and cost", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.6-luna", "name": "GPT-5.6 Luna", "description": "GPT-5.6 model optimized for cost-sensitive workloads", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-5.5", "name": "GPT-5.5", "description": "Advanced intelligence for complex coding and technical tasks", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+		{"id": "gpt-image-2.5-sunburst", "name": "GPT Image 2.5 Sunburst", "description": "OpenAI most capable state-of-the-art image generation model", "owned_by": "openai"},
+		{"id": "gpt-image-2.5-flare", "name": "GPT Image 2.5 Flare", "description": "Fast and lightweight image generation model", "owned_by": "openai"},
+		{"id": "gpt-live-1", "name": "GPT Live 1", "description": "OpenAI ultra-low latency interactive voice model ($0.05/min)", "owned_by": "openai"},
 		{"id": "text-embedding-3-large", "name": "Embedding 3 Large", "description": "Most capable text embedding model for search and similarity", "owned_by": "openai"},
+		{"id": "text-embedding-3-small", "name": "Embedding 3 Small", "description": "Highly efficient text embedding model", "owned_by": "openai"},
+		{"id": "gpt-4o", "name": "GPT-4o (Legacy)", "description": "Legacy omni model", "owned_by": "openai", "context_window": 128000},
 	}
 	for _, ex := range extras {
 		id := strings.ToLower(stringValue(ex["id"]))

@@ -102,7 +102,7 @@ CLIENT_SURFACE = os.getenv("GROK2API_CLIENT_SURFACE", "grok-cli")
 CLIENT_IDENTIFIER = os.getenv("GROK2API_CLIENT_IDENTIFIER", "grokcli-2api")
 
 # Default model when client omits / sends generic names
-DEFAULT_MODEL = os.getenv("GROK2API_DEFAULT_MODEL", "gpt-4o")
+DEFAULT_MODEL = os.getenv("GROK2API_DEFAULT_MODEL", "gpt-6.1-sol")
 
 # Account rotation mode (also changeable in admin UI / settings store)
 # round_robin | random | least_used  (all accounts equal; no primary)
@@ -133,7 +133,7 @@ _probe_env = os.getenv("GROK2API_PROBE_MODELS", "").strip()
 PROBE_MODELS: list[str] = (
     [m.strip() for m in _probe_env.split(",") if m.strip()]
     if _probe_env
-    else [DEFAULT_MODEL, "gpt-4o-mini", "o3-mini"]
+    else [DEFAULT_MODEL, "gpt-6-astra", "gpt-6-luna"]
 )
 
 # Large multi-account pools (hundreds of entries) can freeze WSL/low-RAM hosts
@@ -341,20 +341,42 @@ REQUIRE_SHARED_STORES = os.getenv("GROK2API_REQUIRE_SHARED_STORES", "1").lower()
 
 # Map common aliases -> real model ids (OpenAI + Anthropic client defaults)
 MODEL_ALIASES: dict[str, str] = {
+    "auto": DEFAULT_MODEL,
+    "default": DEFAULT_MODEL,
     "chatgpt": DEFAULT_MODEL,
     "chatgpt-4": DEFAULT_MODEL,
-    "chatgpt-4o": "chatgpt-4o-latest",
+    "chatgpt-4o": DEFAULT_MODEL,
+    "gpt-6": DEFAULT_MODEL,
+    "gpt-6.1": "gpt-6.1-sol",
+    "gpt-6.1-sol": "gpt-6.1-sol",
+    "gpt-6-astra": "gpt-6-astra",
+    "astra": "gpt-6-astra",
+    "gpt-6-sol": "gpt-6-sol",
+    "gpt-6-luna": "gpt-6-luna",
+    "luna": "gpt-6-luna",
+    "gpt-5.6": "gpt-5.6-sol",
+    "gpt-5.6-sol": "gpt-5.6-sol",
+    "gpt-5.6-terra": "gpt-5.6-terra",
+    "gpt-5.6-luna": "gpt-5.6-luna",
+    "gpt-5.5": "gpt-5.5",
+    "gpt-5.5-pro": "gpt-5.5-pro",
+    "gpt-5.4": "gpt-5.4",
+    "gpt-image": "gpt-image-2.5-sunburst",
+    "gpt-image-2.5": "gpt-image-2.5-sunburst",
+    "dall-e": "gpt-image-2.5-sunburst",
+    "dall-e-3": "gpt-image-2.5-sunburst",
+    "gpt-5": "gpt-5.6-sol",
+    "gpt-5-mini": "gpt-5.6-terra",
+    "gpt-5-nano": "gpt-5.6-luna",
     "gpt-4": DEFAULT_MODEL,
     "gpt-4o": DEFAULT_MODEL,
+    "gpt-4o-mini": DEFAULT_MODEL,
     "gpt-3.5-turbo": DEFAULT_MODEL,
-    "gpt-4-turbo": DEFAULT_MODEL,
-    "gpt-4.5": "gpt-4.5-preview",
-    "gpt-4.5-preview": "gpt-4.5-preview",
-    "o1": "o1",
-    "o1-mini": "o1-mini",
-    "o1-preview": "o1-preview",
-    "o3": "o3",
-    "o3-mini": "o3-mini",
+    "o1": DEFAULT_MODEL,
+    "o1-mini": DEFAULT_MODEL,
+    "o3": DEFAULT_MODEL,
+    "o3-mini": DEFAULT_MODEL,
+    "o4-mini": DEFAULT_MODEL,
     "claude": DEFAULT_MODEL,
     "claude-3": DEFAULT_MODEL,
     "claude-3-5-sonnet": DEFAULT_MODEL,
@@ -380,5 +402,4 @@ MODEL_ALIASES: dict[str, str] = {
     "claude-haiku-4": DEFAULT_MODEL,
     "claude-haiku-4-5": DEFAULT_MODEL,
     "claude-haiku-4-5-20251001": DEFAULT_MODEL,
-    "default": DEFAULT_MODEL,
 }

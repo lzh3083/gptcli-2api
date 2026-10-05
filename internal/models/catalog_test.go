@@ -7,7 +7,7 @@ import (
 )
 
 func TestFallbackModelsIncludeOpenAIExtras(t *testing.T) {
-	catalog := NewCatalog(config.Config{DefaultModel: "gpt-4o"}, nil)
+	catalog := NewCatalog(config.Config{DefaultModel: "gpt-6.1-sol"}, nil)
 	items := catalog.PublicModels(t.Context())
 	ids := map[string]bool{}
 	for _, item := range items {
@@ -15,20 +15,17 @@ func TestFallbackModelsIncludeOpenAIExtras(t *testing.T) {
 		ids[id] = true
 	}
 	for _, id := range []string{
-		"gpt-4o",
-		"gpt-4o-mini",
-		"chatgpt-4o-latest",
-		"o3-mini",
-		"o1",
-		"o1-mini",
-		"o1-preview",
-		"gpt-4.5-preview",
-		"gpt-4-turbo",
-		"gpt-4",
-		"gpt-3.5-turbo",
-		"dall-e-3",
-		"text-embedding-3-small",
+		"gpt-6.1-sol",
+		"gpt-6-astra",
+		"gpt-6-sol",
+		"gpt-6-luna",
+		"gpt-5.6-sol",
+		"gpt-5.6-terra",
+		"gpt-5.6-luna",
+		"gpt-image-2.5-sunburst",
+		"gpt-live-1",
 		"text-embedding-3-large",
+		"text-embedding-3-small",
 	} {
 		if !ids[id] {
 			t.Fatalf("missing model %s in %#v", id, items)
@@ -40,20 +37,21 @@ func TestFallbackModelsIncludeOpenAIExtras(t *testing.T) {
 }
 
 func TestResolveAliases(t *testing.T) {
-	catalog := NewCatalog(config.Config{DefaultModel: "gpt-4o"}, nil)
+	catalog := NewCatalog(config.Config{DefaultModel: "gpt-6.1-sol"}, nil)
 	for input, want := range map[string]string{
-		"":                         "gpt-4o",
-		"auto":                     "gpt-4o",
-		"chatgpt":                  "gpt-4o",
-		"gpt-4":                    "gpt-4o",
-		"gpt-4o":                   "gpt-4o",
-		"gpt-3.5-turbo":            "gpt-3.5-turbo",
-		"gpt-4.5":                  "gpt-4.5-preview",
-		"o3-mini":                  "o3-mini",
-		"o1":                       "o1",
-		"dall-e":                   "dall-e-3",
-		"claude-sonnet-4-20250514": "gpt-4o",
-		"web-search":               "gpt-4o",
+		"":                         "gpt-6.1-sol",
+		"auto":                     "gpt-6.1-sol",
+		"chatgpt":                  "gpt-6.1-sol",
+		"gpt-6":                    "gpt-6.1-sol",
+		"gpt-6-astra":              "gpt-6-astra",
+		"astra":                    "gpt-6-astra",
+		"luna":                     "gpt-6-luna",
+		"gpt-4":                    "gpt-6.1-sol",
+		"gpt-4o":                   "gpt-6.1-sol",
+		"o1":                       "gpt-6.1-sol",
+		"o3-mini":                  "gpt-6.1-sol",
+		"claude-sonnet-4-20250514": "gpt-6.1-sol",
+		"web-search":               "gpt-6.1-sol",
 		"custom-model":             "custom-model",
 	} {
 		if got := catalog.Resolve(input); got != want {

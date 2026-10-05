@@ -1677,9 +1677,9 @@ def get_probe_models() -> list[str]:
         env_models = [str(m).strip() for m in (PROBE_MODELS or []) if str(m).strip()]
         if env_models:
             return env_models
-        return [str(DEFAULT_MODEL or "gpt-4o"), "gpt-4o-mini", "o3-mini"]
+        return [str(DEFAULT_MODEL or "gpt-6.1-sol"), "gpt-6-astra", "gpt-6-luna"]
     except Exception:
-        return ["gpt-4o", "gpt-4o-mini", "o3-mini"]
+        return ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"]
 
 
 def set_probe_models(value: Any) -> list[str]:
@@ -1688,9 +1688,9 @@ def set_probe_models(value: Any) -> list[str]:
         try:
             from grok2api.config import DEFAULT_MODEL
 
-            models = [str(DEFAULT_MODEL or "gpt-4o"), "gpt-4o-mini", "o3-mini"]
+            models = [str(DEFAULT_MODEL or "gpt-6.1-sol"), "gpt-6-astra", "gpt-6-luna"]
         except Exception:
-            models = ["gpt-4o", "gpt-4o-mini", "o3-mini"]
+            models = ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"]
     # Persist as comma-separated for simple UI round-trip
     joined = ", ".join(models)
     _set_setting_value("probe_models", joined)
@@ -1709,9 +1709,9 @@ def get_default_model_setting() -> str:
         try:
             from grok2api.config import DEFAULT_MODEL
 
-            return str(DEFAULT_MODEL or "gpt-4o")
+            return str(DEFAULT_MODEL or "gpt-6.1-sol")
         except Exception:
-            return "gpt-4o"
+            return "gpt-6.1-sol"
     return str(raw).strip()
 
 

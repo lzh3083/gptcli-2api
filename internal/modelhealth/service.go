@@ -83,7 +83,7 @@ func New(store *postgres.Connector, redisClient *redis.Client, upstream string, 
 		models = normalizeModels(splitCSV(os.Getenv("GROK2API_PROBE_MODELS")))
 	}
 	if len(models) == 0 {
-		models = []string{"gpt-4o", "gpt-4o-mini", "o3-mini"}
+		models = []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"}
 	}
 	return &Service{
 		Store:    store,
@@ -156,7 +156,7 @@ func (s *Service) SetModels(models []string) {
 	}
 	norm := normalizeModels(models)
 	if len(norm) == 0 {
-		norm = []string{"gpt-4o", "gpt-4o-mini", "o3-mini"}
+		norm = []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -916,7 +916,7 @@ func (s *Service) runWave(ctx context.Context, source string, manualWave bool, s
 
 	cycleModels := s.modelsForSource(source)
 	if len(cycleModels) == 0 {
-		cycleModels = []string{"gpt-4o"}
+		cycleModels = []string{"gpt-6.1-sol"}
 	}
 
 	workers := s.Workers
@@ -1447,7 +1447,7 @@ func (s *Service) modelsForSource(source string) []string {
 	s.mu.Unlock()
 	models = normalizeModels(models)
 	if len(models) == 0 {
-		return []string{"gpt-4o"}
+		return []string{"gpt-6.1-sol"}
 	}
 	if source == "background" {
 		if len(models) == 1 {
@@ -1769,7 +1769,7 @@ func isFreeUsageExhausted(errText string) bool {
 
 func firstModel(models []string) string {
 	if len(models) == 0 {
-		return "gpt-4o"
+		return "gpt-6.1-sol"
 	}
 	return models[0]
 }

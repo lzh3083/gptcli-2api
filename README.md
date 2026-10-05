@@ -183,13 +183,25 @@ curl http://127.0.0.1:8081/v1/chat/completions \
 
 ---
 
-## 支持的模型列表
+## 支持的模型列表（2026 最新官方主力矩阵）
 
-网关内置支持以下 OpenAI 官方最新主力模型路由与智能别名映射：
-- **GPT-4o 旗舰与全模态**：`gpt-4o`（默认模型，128k 上下文）、`gpt-4o-mini`（高性价比小型模型）、`chatgpt-4o-latest`（动态跟踪 ChatGPT 官方最新版本）
-- **o 系列深度推理主力**：`o3-mini`（新一代高效推理旗舰，支持 reasoning_effort 思考强度）、`o1`（旗舰深度推理模型）、`o1-mini`（快速逻辑与代码推理）、`o1-preview`（早期推理预览版）
-- **前沿研究与经典旗舰**：`gpt-4.5-preview`（超大研究级前沿模型）、`gpt-4-turbo`（128k 经典旗舰）、`gpt-4`（8k 经典模型）、`gpt-3.5-turbo`（经典轻量对话）
-- **多模态生图与向量嵌入**：`dall-e-3` / `dall-e-2`（官方高分辨率画图）、`text-embedding-3-small` / `text-embedding-3-large` / `text-embedding-ada-002`（文本向量嵌入）
+网关原生对齐 OpenAI 官方最新旗舰矩阵（默认主力为 `gpt-6.1-sol`）：
+- **GPT-6 旗舰矩阵（最新主力）**：
+  - `gpt-6.1-sol`（默认推荐，性能接近 Astra 但成本远低，性价比首选，1,050K 上下文）
+  - `gpt-6-astra`（最强旗舰，复杂推理、编码、computer use 与深度研究，1,050K 上下文）
+  - `gpt-6-sol`（面向高难度编码与 agentic 工作流，1,050K 上下文）
+  - `gpt-6-luna`（最高效高并发大批量任务，1,050K 上下文）
+- **上一代在售（生产过渡兼容）**：
+  - `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna`、`gpt-5.5`、`gpt-5.5-pro`、`gpt-5.4`
+- **专业与多模态**：
+  - 图像生图：`gpt-image-2.5-sunburst`（最强生图）、`gpt-image-2.5-flare`（快速）、`gpt-image-2`
+  - 实时语音：`gpt-live-1`（$0.05/分钟）、`gpt-realtime-2.1`、`gpt-realtime-2.1-mini`、`gpt-realtime-2`、`gpt-realtime-translate`、`gpt-live-transcribe`、`gpt-transcribe`
+  - 网络安全与生命科学：`gpt-5.6-cyber`、`gpt-rosalind-research`
+  - 开源权重：`gpt-oss-120b`、`gpt-oss-20b`（Apache 2.0）
+  - 文本向量嵌入：`text-embedding-3-large`、`text-embedding-3-small`
+- **经典别名平滑重定向**：
+  - 别名 `chatgpt`、`gpt-6`、`gpt-4`、`gpt-4o`、`o1`、`o3-mini`、`claude` 等均自动平滑指向当前默认旗舰 `gpt-6.1-sol`；
+  - `dall-e` / `dall-e-3` 自动指向 `gpt-image-2.5-sunburst`。
 
 ---
 

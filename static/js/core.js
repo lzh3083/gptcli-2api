@@ -4659,7 +4659,7 @@ function renderModels() {
       : "无模型";
   }
   if (!all.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="g2a-muted">暂无模型。请点「同步上游模型」或刷新；默认可用 gpt-4o / gpt-4o-mini / o3-mini / o1</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="g2a-muted">暂无模型。请点「同步上游模型」或刷新；默认可用 gpt-6.1-sol / gpt-6-astra / gpt-6-luna</td></tr>`;
     return;
   }
   if (!models.length) {
@@ -5503,7 +5503,7 @@ function renderGuide() {
   if (!base) base = "<your-host>/v1";
   let origin = base.replace(/\/v1\/?$/, "");
   if (!origin) origin = pageOrigin || "<your-host>";
-  const model = (dashCache && dashCache.default_model) || (statusCache && statusCache.default_model) || "gpt-4o";
+  const model = (dashCache && dashCache.default_model) || (statusCache && statusCache.default_model) || "gpt-6.1-sol";
   $("guide-base").textContent = base;
   $("guide-model").textContent = model;
   $("guide-curl").textContent = `curl ${base}/chat/completions \\
@@ -10429,7 +10429,7 @@ function settingsGroupDefaults(group) {
     case "pool":
       return {
         account_mode: "round_robin",
-        default_model: "gpt-4o",
+        default_model: "gpt-6.1-sol",
         token_maintain_enabled: true,
         model_health_enabled: true,
         model_health_auto_disable: true,
@@ -10440,7 +10440,7 @@ function settingsGroupDefaults(group) {
         model_health_probe_batch: 120,
         model_health_probe_workers: 12,
         conversation_affinity_ttl_sec: 7200,
-        probe_models: "gpt-4o, gpt-4o-mini, o3-mini",
+        probe_models: "gpt-6.1-sol, gpt-6-astra, gpt-6-luna",
       };
     case "proxy":
       return {

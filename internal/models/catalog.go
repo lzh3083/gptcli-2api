@@ -122,29 +122,47 @@ func mergeExtraModels(models []map[string]any, defaultModel string) []map[string
 	}
 	now := time.Now().Unix()
 	for _, extra := range []map[string]any{
-		// ── OpenAI 主力旗舰全模态 ──────────────────────────────────
-		{"id": "gpt-4o", "name": "GPT-4o", "description": "OpenAI flagship omni multimodal model", "owned_by": "openai", "context_window": 128000},
-		{"id": "gpt-4o-mini", "name": "GPT-4o mini", "description": "Fast, affordable small model for focused tasks", "owned_by": "openai", "context_window": 128000},
-		{"id": "chatgpt-4o-latest", "name": "ChatGPT 4o Latest", "description": "ChatGPT latest dynamic model tracking chatgpt.com", "owned_by": "openai", "context_window": 128000},
+		// ── GPT-6 旗舰矩阵（2026 最新主力） ─────────────────────────────
+		{"id": "gpt-6.1-sol", "name": "GPT-6.1 Sol", "description": "Near-Astra performance at much lower cost (Flagship Value & Recommended Default)", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-6-astra", "name": "GPT-6 Astra", "description": "Most capable flagship model for complex reasoning, coding, computer use and deep research", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-6-sol", "name": "GPT-6 Sol", "description": "High intelligence for complex coding and agentic workflows", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-6-luna", "name": "GPT-6 Luna", "description": "Most efficient model for high-throughput and cost-sensitive workloads", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
 
-		// ── o 系列深度推理主力 ─────────────────────────────────────
-		{"id": "o3-mini", "name": "o3-mini", "description": "OpenAI efficient reasoning model with high speed and low cost", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
-		{"id": "o1", "name": "o1", "description": "OpenAI flagship reasoning model for math, science and coding", "owned_by": "openai", "context_window": 200000, "supports_reasoning_effort": true},
-		{"id": "o1-mini", "name": "o1-mini", "description": "Fast reasoning model especially strong at code and math", "owned_by": "openai", "context_window": 128000, "supports_reasoning_effort": true},
-		{"id": "o1-preview", "name": "o1-preview", "description": "OpenAI foundational reasoning preview model", "owned_by": "openai", "context_window": 128000, "supports_reasoning_effort": true},
+		// ── 上一代在售（生产过渡兼容） ───────────────────────────────
+		{"id": "gpt-5.6-sol", "name": "GPT-5.6 Sol", "description": "GPT-5.6 flagship model for complex professional work", "owned_by": "openai", "context_window": 1050000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.6-terra", "name": "GPT-5.6 Terra", "description": "GPT-5.6 model balancing intelligence and cost", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.6-luna", "name": "GPT-5.6 Luna", "description": "GPT-5.6 model optimized for cost-sensitive workloads", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-5.5", "name": "GPT-5.5", "description": "Advanced intelligence for complex coding and technical tasks", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.5-pro", "name": "GPT-5.5 Pro", "description": "GPT-5.5 pro version for extended thinking and deep reasoning", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+		{"id": "gpt-5.4", "name": "GPT-5.4", "description": "Previous generation balanced flagship model", "owned_by": "openai", "context_window": 128000},
 
-		// ── 研究级前沿旗舰与经典生产模型 ───────────────────────────
-		{"id": "gpt-4.5-preview", "name": "GPT-4.5 Preview", "description": "OpenAI research-grade largest flagship model", "owned_by": "openai", "context_window": 128000},
-		{"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "description": "GPT-4 Turbo with 128k context and vision capabilities", "owned_by": "openai", "context_window": 128000},
-		{"id": "gpt-4", "name": "GPT-4", "description": "OpenAI foundational high-intelligence model", "owned_by": "openai", "context_window": 8192},
-		{"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast, inexpensive model for simple tasks", "owned_by": "openai", "context_window": 16385},
+		// ── 专业图像模型 ───────────────────────────────────────────
+		{"id": "gpt-image-2.5-sunburst", "name": "GPT Image 2.5 Sunburst", "description": "OpenAI most capable state-of-the-art image generation model", "owned_by": "openai"},
+		{"id": "gpt-image-2.5-flare", "name": "GPT Image 2.5 Flare", "description": "Fast and lightweight image generation model", "owned_by": "openai"},
+		{"id": "gpt-image-2", "name": "GPT Image 2", "description": "Previous generation high-quality image generation model", "owned_by": "openai"},
 
-		// ── 官方多模态、绘图与向量嵌入 ─────────────────────────────
-		{"id": "dall-e-3", "name": "DALL·E 3", "description": "State-of-the-art OpenAI image generation model", "owned_by": "openai"},
-		{"id": "dall-e-2", "name": "DALL·E 2", "description": "Previous generation OpenAI image generation model", "owned_by": "openai"},
-		{"id": "text-embedding-3-small", "name": "Embedding 3 Small", "description": "Highly efficient text embedding model", "owned_by": "openai"},
+		// ── 实时语音与转录 ─────────────────────────────────────────
+		{"id": "gpt-live-1", "name": "GPT Live 1", "description": "OpenAI ultra-low latency interactive voice model ($0.05/min)", "owned_by": "openai"},
+		{"id": "gpt-realtime-2.1", "name": "GPT Realtime 2.1", "description": "Multimodal speech-to-speech realtime model", "owned_by": "openai"},
+		{"id": "gpt-realtime-2.1-mini", "name": "GPT Realtime 2.1 Mini", "description": "Cost-efficient realtime voice and audio model", "owned_by": "openai"},
+		{"id": "gpt-realtime-2", "name": "GPT Realtime 2", "description": "Previous generation realtime audio model", "owned_by": "openai"},
+		{"id": "gpt-realtime-translate", "name": "GPT Realtime Translate", "description": "Dedicated low-latency translation model", "owned_by": "openai"},
+		{"id": "gpt-live-transcribe", "name": "GPT Live Transcribe", "description": "Streaming real-time speech transcription model", "owned_by": "openai"},
+		{"id": "gpt-transcribe", "name": "GPT Transcribe", "description": "General speech-to-text audio transcription model", "owned_by": "openai"},
+
+		// ── 开源权重与专有安全模型 ─────────────────────────────────
+		{"id": "gpt-oss-120b", "name": "GPT OSS 120B", "description": "OpenAI open-weight 120B model (Apache 2.0)", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-oss-20b", "name": "GPT OSS 20B", "description": "OpenAI open-weight 20B model (Apache 2.0)", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-5.6-cyber", "name": "GPT-5.6 Cyber", "description": "Defensive cybersecurity model for vulnerability research", "owned_by": "openai", "context_window": 256000},
+		{"id": "gpt-rosalind-research", "name": "GPT Rosalind Research", "description": "Life sciences reasoning model for approved organizations", "owned_by": "openai", "context_window": 256000, "supports_reasoning_effort": true},
+
+		// ── 文本向量嵌入 ───────────────────────────────────────────
 		{"id": "text-embedding-3-large", "name": "Embedding 3 Large", "description": "Most capable text embedding model for search and similarity", "owned_by": "openai"},
-		{"id": "text-embedding-ada-002", "name": "Embedding Ada 002", "description": "Previous generation text embedding model", "owned_by": "openai"},
+		{"id": "text-embedding-3-small", "name": "Embedding 3 Small", "description": "Highly efficient text embedding model", "owned_by": "openai"},
+
+		// ── 经典过渡兼容 ───────────────────────────────────────────
+		{"id": "gpt-4o", "name": "GPT-4o (Legacy)", "description": "Legacy omni model (mapped to latest infrastructure)", "owned_by": "openai", "context_window": 128000},
+		{"id": "gpt-4o-mini", "name": "GPT-4o mini (Legacy)", "description": "Legacy small model", "owned_by": "openai", "context_window": 128000},
 	} {
 		id := extra["id"].(string)
 		if have[strings.ToLower(id)] {
@@ -170,48 +188,65 @@ func sortOrderFor(id, defaultModel string) int {
 	switch id {
 	case defaultModel:
 		return 0
-	case "gpt-4o":
+	case "gpt-6.1-sol":
 		return 1
-	case "gpt-4o-mini":
+	case "gpt-6-astra":
 		return 2
-	case "chatgpt-4o-latest":
+	case "gpt-6-sol":
 		return 3
-	case "o3-mini":
+	case "gpt-6-luna":
 		return 4
-	case "o1":
+	case "gpt-5.6-sol":
 		return 5
-	case "o1-mini":
+	case "gpt-5.6-terra":
 		return 6
-	case "gpt-4.5-preview":
+	case "gpt-5.6-luna":
 		return 7
-	case "gpt-4-turbo":
+	case "gpt-5.5":
 		return 8
-	case "gpt-4":
+	case "gpt-5.5-pro":
 		return 9
-	case "gpt-3.5-turbo":
+	case "gpt-5.4":
 		return 10
-	case "o1-preview":
+	case "gpt-image-2.5-sunburst":
 		return 11
-	case "dall-e-3":
+	case "gpt-image-2.5-flare":
 		return 12
-	case "text-embedding-3-small":
+	case "gpt-image-2":
 		return 13
-	case "text-embedding-3-large":
+	case "gpt-live-1":
 		return 14
+	case "gpt-realtime-2.1":
+		return 15
+	case "gpt-oss-120b":
+		return 16
+	case "text-embedding-3-large":
+		return 17
+	case "text-embedding-3-small":
+		return 18
+	case "gpt-4o":
+		return 25
 	default:
-		return 20
+		return 30
 	}
 }
 
 func aliases(defaultModel string) map[string]string {
 	return map[string]string{
-		"auto": defaultModel,
-		"chatgpt": defaultModel, "chatgpt-4": defaultModel, "chatgpt-4o": "chatgpt-4o-latest",
-		"gpt-4": defaultModel, "gpt-4o": defaultModel, "gpt-3.5-turbo": "gpt-3.5-turbo",
-		"gpt-4.5": "gpt-4.5-preview",
-		"o3-mini": "o3-mini",
-		"o1": "o1", "o1-mini": "o1-mini", "o1-preview": "o1-preview",
-		"dall-e": "dall-e-3",
+		"auto":    defaultModel,
+		"default": defaultModel,
+		"chatgpt": defaultModel, "chatgpt-4": defaultModel, "chatgpt-4o": defaultModel,
+		"gpt-6": defaultModel, "gpt-6.1": "gpt-6.1-sol", "gpt-6.1-sol": "gpt-6.1-sol",
+		"gpt-6-astra": "gpt-6-astra", "astra": "gpt-6-astra",
+		"gpt-6-sol": "gpt-6-sol",
+		"gpt-6-luna": "gpt-6-luna", "luna": "gpt-6-luna",
+		"gpt-5.6": "gpt-5.6-sol", "gpt-5.6-sol": "gpt-5.6-sol", "gpt-5.6-terra": "gpt-5.6-terra", "gpt-5.6-luna": "gpt-5.6-luna",
+		"gpt-5.5": "gpt-5.5", "gpt-5.5-pro": "gpt-5.5-pro", "gpt-5.4": "gpt-5.4",
+		"gpt-image": "gpt-image-2.5-sunburst", "gpt-image-2.5": "gpt-image-2.5-sunburst", "dall-e": "gpt-image-2.5-sunburst", "dall-e-3": "gpt-image-2.5-sunburst",
+		// Legacy model aliases mapped smoothly to new generation
+		"gpt-5": "gpt-5.6-sol", "gpt-5-mini": "gpt-5.6-terra", "gpt-5-nano": "gpt-5.6-luna",
+		"gpt-4": defaultModel, "gpt-4o": defaultModel, "gpt-4o-mini": defaultModel, "gpt-3.5-turbo": defaultModel,
+		"o1": defaultModel, "o1-mini": defaultModel, "o3": defaultModel, "o3-mini": defaultModel, "o4-mini": defaultModel,
 		"claude": defaultModel, "claude-3": defaultModel, "claude-3-5-sonnet": defaultModel, "claude-3-5-sonnet-20240620": defaultModel,
 		"claude-3-5-sonnet-20241022": defaultModel, "claude-3-5-haiku": defaultModel, "claude-3-5-haiku-20241022": defaultModel,
 		"claude-3-haiku": defaultModel, "claude-3-haiku-20240307": defaultModel, "claude-3-opus": defaultModel, "claude-3-opus-20240229": defaultModel,
