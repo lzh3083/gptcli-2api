@@ -4140,13 +4140,20 @@ def _run_registration(
                     "total": len(imported_ids),
                 }
                 print(f"[grok-build-auth] WARN: CLIProxyAPI auto-push failed: {e}")
-        # Auto probe newly imported accounts so they are validated in the pool.
-        # Release global admission BEFORE the settle sleep so bulk jobs don't
-        # hold scarce inflight slots for REGISTER_PROBE_DELAY_SEC after success.
+        # 纯注册机模式：跳过本地对刚注册账号的探活与模型探测，凭证已保存至 cpa_auth_files 供 CPA 独占使用
         if admission_flag is not None:
             _release_reg_admission_once(admission_flag)
         probe_summaries: list[dict[str, Any]] = []
+        discarded_ids: list[str] = []
+        degraded_ids: list[str] = []
+        quality_summaries: list[dict[str, Any]] = []
+        quality_summary_counts: dict[str, int] = {}
         if imported_ids:
+            print(
+                f"[grok-build-auth] 纯注册机模式：跳过本地探活与模型探测，{len(imported_ids)} 个账号凭证已安全落盘",
+                flush=True,
+            )
+        if False and imported_ids:
             delay = max(0.0, float(REGISTER_PROBE_DELAY_SEC or 0.0))
             if delay > 0:
                 update(

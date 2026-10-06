@@ -7085,69 +7085,29 @@ func serveAccountsRefresh(w http.ResponseWriter, r *http.Request, options Option
 	if !requireAdminReadWrite(w, r, options, true) {
 		return
 	}
-	if options.Maintainer == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "maintainer unavailable"})
-		return
-	}
-	force := true
-	var body map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	if v, ok := body["force"].(bool); ok {
-		force = v
-	}
-	ids := stringSlice(body["ids"])
-	if len(ids) == 0 {
-		ids = stringSlice(body["account_ids"])
-	}
-	var result map[string]any
-	if len(ids) > 0 {
-		// Selected-account renew: refresh only those ids and return per-row results
-		// so the admin UI can paint immediately (busy rows / toast / pool patch).
-		result = options.Maintainer.RunForIDs(r.Context(), ids, force)
-	} else {
-		result = options.Maintainer.RunOnce(r.Context(), force)
-	}
-	result["maintainer"] = options.Maintainer.Status()
-	result["token_maintainer"] = result["maintainer"]
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":               true,
+		"message":          "纯注册机模式：已禁用账号刷新与探测功能，账号生命周期由 CPA 独占维护",
+		"refreshed":        0,
+		"attempted":        0,
+		"failed":           0,
+		"results":          []any{},
+		"maintainer":       map[string]any{"enabled": false, "running": false},
+		"token_maintainer": map[string]any{"enabled": false, "running": false},
+	})
 }
 
 func serveToggleTokenMaintain(w http.ResponseWriter, r *http.Request, options Options) {
 	if !requireAdminReadWrite(w, r, options, true) {
 		return
 	}
-	if options.Store == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "store unavailable"})
-		return
-	}
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
-		return
-	}
-	enabled, ok := body["enabled"].(bool)
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "enabled bool required"})
-		return
-	}
-	if err := options.Store.SetSetting(r.Context(), "token_maintain_enabled", enabled); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
-		return
-	}
-	if options.Maintainer != nil {
-		if enabled {
-			options.Maintainer.Start()
-			options.Maintainer.RequestRunSoon(false)
-		} else {
-			options.Maintainer.Stop()
-		}
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                     true,
-		"token_maintain_enabled": enabled,
-		"settings":               map[string]any{"token_maintain_enabled": enabled},
-		"maintainer":             serviceStatus(options.Maintainer, options),
-		"token_maintainer":       serviceStatus(options.Maintainer, options),
+		"token_maintain_enabled": false,
+		"message":                "纯注册机模式下强制禁用 Token 维护",
+		"settings":               map[string]any{"token_maintain_enabled": false},
+		"maintainer":             map[string]any{"enabled": false, "running": false},
+		"token_maintainer":       map[string]any{"enabled": false, "running": false},
 	})
 }
 
@@ -7155,37 +7115,12 @@ func serveToggleModelHealth(w http.ResponseWriter, r *http.Request, options Opti
 	if !requireAdminReadWrite(w, r, options, true) {
 		return
 	}
-	if options.Store == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "store unavailable"})
-		return
-	}
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
-		return
-	}
-	enabled, ok := body["enabled"].(bool)
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "enabled bool required"})
-		return
-	}
-	if err := options.Store.SetSetting(r.Context(), "model_health_enabled", enabled); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
-		return
-	}
-	if options.ModelHealth != nil {
-		if enabled {
-			options.ModelHealth.Start()
-			options.ModelHealth.RequestRunSoon()
-		} else {
-			options.ModelHealth.Stop()
-		}
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                   true,
-		"model_health_enabled": enabled,
-		"settings":             map[string]any{"model_health_enabled": enabled},
-		"model_health":         serviceStatus(options.ModelHealth, options),
+		"model_health_enabled": false,
+		"message":              "纯注册机模式下强制禁用模型健康探测",
+		"settings":             map[string]any{"model_health_enabled": false},
+		"model_health":         map[string]any{"enabled": false, "running": false},
 	})
 }
 

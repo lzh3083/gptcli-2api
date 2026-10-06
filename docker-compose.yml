@@ -55,11 +55,13 @@ services:
       GROK2API_HOST: "0.0.0.0"
       GROK2API_PORT: "8081"
       GROK2API_OPEN_BROWSER: "0"
-      GROK2API_TOKEN_MAINTAIN: "1"
-      GROK2API_MODEL_HEALTH: "1"
+      GROK2API_TOKEN_MAINTAIN: "${GROK2API_TOKEN_MAINTAIN:-0}"
+      GROK2API_MODEL_HEALTH: "${GROK2API_MODEL_HEALTH:-0}"
       GROK2API_REASONING_COMPAT: "off"
       GROK2API_STORE_BACKEND: "hybrid"
       GROK2API_REG_ENGINE: "openai"
+      SMS_COUNTRY: "${SMS_COUNTRY:-16,73,117}"
+      SMS_PROVIDER: "${SMS_PROVIDER:-smsbower}"
       # Multi-worker: default 2 (enough for hybrid; override via .env for large hosts)
       GROK2API_WORKERS: "${GROK2API_WORKERS:-2}"
       # In-stack service DNS (do not use 127.0.0.1 here)
@@ -90,7 +92,7 @@ services:
       GROK2API_GO_RESPONSES: "${GROK2API_GO_RESPONSES:-1}"
       GROK2API_GO_ADMIN_READ: "${GROK2API_GO_ADMIN_READ:-1}"
       GROK2API_GO_ADMIN_WRITE: "${GROK2API_GO_ADMIN_WRITE:-1}"
-      GROK2API_GO_MAINTAINER: "${GROK2API_GO_MAINTAINER:-1}"
+      GROK2API_GO_MAINTAINER: "${GROK2API_GO_MAINTAINER:-0}"
       GROK2API_GO_WRITES: "${GROK2API_GO_WRITES:-1}"
       GROK2API_GO_OWNERSHIP_MODE: "${GROK2API_GO_OWNERSHIP_MODE:-all}"
       # Python registration + SSO sidecar (used when GROK2API_RUNTIME=go)
@@ -113,6 +115,9 @@ services:
       retries: 12
       start_period: 90s
     volumes:
+      - ./bin:/app/bin
+      - ./grok2api:/app/grok2api
+      - ./grok-build-auth:/app/grok-build-auth
       - ./data:/app/data
       - ./turnstile-solver/logs:/app/turnstile-solver/logs
       # In-container hot-update: docker CLI talks to host docker daemon.

@@ -231,11 +231,7 @@ func buildCLIProxyRecord(entry map[string]any, aid string) map[string]any {
 
 	defaultType := "codex"
 	if isOpenAI {
-		if stringField(entry, "refresh_token") != "" || stringField(entry, "codex_cpa_file") != "" {
-			defaultType = "codex"
-		} else {
-			defaultType = "chatgpt"
-		}
+		defaultType = "codex"
 	} else {
 		defaultType = "xai"
 	}

@@ -1556,6 +1556,41 @@ def cfmail_fetch_messages(
         if len(parts) == 3 and all(parts):
             jwt = cand
     if not jwt:
+        # 尝试通过管理员密码从 /admin/mails 获取邮件（支持已有老账号）
+        admin_key = (api_key or MOEMAIL_API_KEY or "").strip()
+        if admin_key:
+            target_addr = (address or email_id or "").strip()
+            base = normalize_cfmail_base_url(base_url or CFMAIL_DEFAULT_BASE_URL)
+            admin_headers = _cfmail_headers(api_key=admin_key, as_admin=True)
+            try:
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.get(
+                        f"{base}/admin/mails",
+                        headers=admin_headers,
+                        params={"limit": 20, "offset": 0, "address": target_addr} if target_addr else {"limit": 20, "offset": 0},
+                    )
+                    if resp.status_code < 400:
+                        data = resp.json() if resp.content else {}
+                        body = data.get("data") if isinstance(data, dict) and "data" in data else data
+                        items = []
+                        if isinstance(body, dict):
+                            items = body.get("results") or body.get("mails") or body.get("items") or []
+                        elif isinstance(body, list):
+                            items = body
+                        out = []
+                        for raw_item in items:
+                            if isinstance(raw_item, dict):
+                                raw_rfc = str(raw_item.get("raw") or "")
+                                if raw_rfc:
+                                    parsed = _cfmail_parse_raw_rfc822(raw_rfc)
+                                    parsed["id"] = raw_item.get("id") or parsed.get("id")
+                                    parsed["created_at"] = raw_item.get("created_at") or parsed.get("created_at")
+                                    out.append(parsed)
+                                else:
+                                    out.append(raw_item)
+                        return out
+            except Exception:
+                pass
         return []
     base = normalize_cfmail_base_url(base_url or CFMAIL_DEFAULT_BASE_URL)
     headers = _cfmail_headers(api_key=jwt, site_password=site_password)

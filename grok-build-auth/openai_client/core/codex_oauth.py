@@ -1326,15 +1326,18 @@ def _do_phone_verification(session: BrowserSession) -> dict:
     http = sms_provider._http()
     max_retries = _cfg.SMS_MAX_RETRIES
     provider = _sms_provider_name()
+    raw_countries = str(getattr(_cfg, "SMS_COUNTRY", "6") or "6").replace(";", ",").split(",")
+    countries = [c.strip() for c in raw_countries if c.strip()] or ["6"]
     try:
         last_err = None
         for attempt in range(1, max_retries + 1):
             activation_id = None
             try:
-                activation_id, phone = sms_provider.acquire_number(http)
+                target_country = countries[(attempt - 1) % len(countries)]
+                activation_id, phone = sms_provider.acquire_number(http, country=target_country)
                 logger.info(
                     f"[Codex] 手机验证尝试 {attempt}/{max_retries}，"
-                    f"provider={provider}, activation_id={activation_id}, 号码=+{phone}"
+                    f"provider={provider}, country={target_country}, activation_id={activation_id}, 号码=+{phone}"
                 )
 
                 # 发短信

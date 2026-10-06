@@ -204,14 +204,8 @@ func (s *Service) probeHTTP() *http.Client {
 }
 
 func (s *Service) Start() {
-	s.mu.Lock()
-	if s.started {
-		s.mu.Unlock()
-		return
-	}
-	s.started = true
-	s.mu.Unlock()
-	go s.loop()
+	slog.Info("model health probe disabled: pure registration mode active")
+	return
 }
 
 func (s *Service) Stop() {
@@ -227,10 +221,7 @@ func (s *Service) Stop() {
 }
 
 func (s *Service) RequestRunSoon() {
-	select {
-	case s.runSoon <- struct{}{}:
-	default:
-	}
+	return
 }
 
 func (s *Service) Status() map[string]any {
@@ -377,65 +368,20 @@ func (s *Service) maybeRun() {
 }
 
 func (s *Service) RunOnce(ctx context.Context, source string) map[string]any {
-	// Background: one priority batch under cycle budget.
-	// manual_all: multi-wave until pool covered or max waves / job cancel.
-	if source == "manual_all" || source == "manual" || source == "admin" {
-		return s.runManualAll(ctx, source)
+	return map[string]any{
+		"ok":      true,
+		"message": "纯注册机模式：已禁用模型健康探测与账号探活",
+		"running": false,
 	}
-	return s.runWave(ctx, source, false, false)
 }
 
 // StartProbeAll starts (or returns) an async full-pool probe job.
 // Admin UI can poll JobStatus / model-health Status().job.
 func (s *Service) StartProbeAll() map[string]any {
-	if s == nil {
-		return map[string]any{"ok": false, "error": "service unavailable"}
+	return map[string]any{
+		"ok":      true,
+		"message": "纯注册机模式：已禁用模型探活",
 	}
-	s.jobMu.Lock()
-	if s.jobRunning {
-		job := cloneMap(s.job)
-		s.jobMu.Unlock()
-		job["ok"] = true
-		job["already_running"] = true
-		return job
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultManualJobTimeout)
-	s.jobCancel = cancel
-	s.jobRunning = true
-	started := time.Now()
-	jobID := "manual_all:" + time.Now().UTC().Format("20060102T150405")
-	s.job = map[string]any{
-		"ok": true, "running": true, "source": "manual_all",
-		"job_id": jobID, "task_id": "probe:" + jobID,
-		"started_at": started.Unix(), "wave": 0, "waves": 0,
-		"probed": 0, "available": 0, "failed": 0,
-		"implementation": "go",
-	}
-	jobSnap := cloneMap(s.job)
-	s.jobMu.Unlock()
-
-	// Fresh sweep generation for this manual job so we do not inherit a half-covered
-	// background generation (which made "全部模型探测" look stuck / incomplete).
-	_ = s.startSweep(context.Background())
-
-	go func() {
-		result := s.runManualAll(ctx, "manual_all")
-		cancel()
-		s.jobMu.Lock()
-		s.jobRunning = false
-		s.jobCancel = nil
-		result["running"] = false
-		result["finished_at"] = time.Now().Unix()
-		if result["ok"] == nil {
-			result["ok"] = true
-		}
-		s.job = result
-		s.jobMu.Unlock()
-		s.mu.Lock()
-		s.last = result
-		s.mu.Unlock()
-	}()
-	return jobSnap
 }
 
 // JobStatus returns the current/last async probe-all job snapshot.
@@ -1176,7 +1122,15 @@ func (s *Service) probeAccountsConcurrent(ctx context.Context, auths []postgres.
 }
 
 func (s *Service) ProbeAccount(ctx context.Context, auth postgres.AccountAuth, model, source string) map[string]any {
-	return s.probeAccount(ctx, auth, model, source, s.AutoDisable, false)
+	return map[string]any{
+		"account_id": auth.ID,
+		"email":      auth.Email,
+		"model":      model,
+		"ok":         true,
+		"status":     "skipped",
+		"available":  true,
+		"message":    "纯注册机模式：跳过账号探测",
+	}
 }
 
 func (s *Service) probeAccount(ctx context.Context, auth postgres.AccountAuth, model, source string, autoDisable bool, deferSave bool) map[string]any {

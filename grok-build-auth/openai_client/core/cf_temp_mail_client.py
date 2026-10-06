@@ -573,9 +573,11 @@ def fetch_latest_otp(
         raise CFTempMailError("Cloudflare 取码缺少邮箱地址")
 
     account = get_account_context(target)
-    if account is None or not account.jwt:
+    jwt = account.jwt if account else ""
+    admin_key = _api_key()
+    if not jwt and not admin_key:
         raise CFTempMailError(
-            f"Cloudflare 邮箱上下文缺失: {target}。请确认该地址由当前进程 cloudflare 来源创建。"
+            f"Cloudflare 邮箱上下文缺失且未配置管理员密钥: {target}。请确认该地址由当前进程 cloudflare 来源创建。"
         )
 
     wait_seconds = int(max_wait if max_wait is not None else _email_cfg.OTP_MAX_WAIT)
@@ -595,7 +597,24 @@ def fetch_latest_otp(
 
     while time.monotonic() < deadline:
         try:
-            messages = list_messages(account.jwt)
+            if jwt:
+                messages = list_messages(jwt)
+            else:
+                raw_payload = _request(
+                    "GET",
+                    "/admin/mails",
+                    params={"limit": 20, "offset": 0, "address": target},
+                )
+                raw_items = raw_payload.get("results") if isinstance(raw_payload, dict) else (raw_payload if isinstance(raw_payload, list) else [])
+                messages = []
+                for rit in raw_items:
+                    if isinstance(rit, dict) and rit.get("raw"):
+                        parsed = _parse_raw_email(rit["raw"])
+                        parsed["id"] = rit.get("id")
+                        parsed["created_at"] = rit.get("created_at")
+                        messages.append(parsed)
+                    elif isinstance(rit, dict):
+                        messages.append(rit)
         except CFTempMailError as exc:
             last_error = str(exc)
             logger.warning("[Cloudflare] 拉取邮件失败: %s", exc)

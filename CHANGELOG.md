@@ -4,6 +4,28 @@ All notable changes to `gptcli-2api` will be documented in this file.
 
 ---
 
+## [v1.1.0] - 2026-10-06
+
+### 🎯 纯注册机模式架构重构与 CPA 凭证独占保障 (Pure Registration & CPA Sovereignty)
+
+- **纯注册机定位彻底固化 (Pure Registration Engine Transition)**：
+  - 将项目运行定位彻底重构为**纯粹的账号注册机**，完全剥离与关闭账号的定时探活、模型可用性巡检与自动续期任务；
+  - 彻底禁用 Go 内核常驻 `Maintainer` 协程与 `ModelHealth` 探活组件（`GROK2API_GO_MAINTAINER=0`、`GROK2API_TOKEN_MAINTAIN=0`、`GROK2API_MODEL_HEALTH=0`）；
+  - 全面熔断管理后台的“刷新选中账号”、“全量刷新”、“模型探测”等 API 路由，即便在 Web UI 手动点击或脚本触发也会在接口层直接拦截，避免误触发外部刷新操作。
+
+- **CPA 凭证生命周期独占保障 (Codex OAuth Refresh Sovereignty)**：
+  - 彻底规避 OpenAI OAuth Refresh Token 单次消耗轮换规则（Single-Use Token Rotation）导致的并发竞争作废问题；
+  - 账号注册并完成 Codex PKCE 授权后，凭证文件一次性出厂落盘至 `data/cpa_auth_files/codex-{email}.json`，本地杜绝任何后续二次请求，凭证的刷新与健康维护完全由下游新加坡 CPA 独占接管。
+
+- **优质接码国家轮换池优化 (England / Brazil / Portugal Rotation Pool)**：
+  - 优化短信服务商（SMSBower / Hero-SMS）的号码轮换配置，默认按英格兰 (`16`)、巴西 (`73`)、葡萄牙 (`117`) 等高通过率号段智能轮询；
+  - 在 `add-phone/send` 与 `phone-otp/validate` 环节全面注入真实 Sentinel PoW 挑战防欺诈 Token，有效绕过官方 `fraud_guard` 400 校验。
+
+- **Cloudflare 临时邮箱全局拉取增强 (CF Mail Admin Fallback)**：
+  - 增强 Cloudflare Temp Mail 邮件拉取逻辑，支持在缺少独立 Session JWT 的场景下自动使用管理员秘钥全局回溯 `/admin/mails` 邮件流，并在应用层精准过滤目标地址，彻底解决登录验证码拉取超时。
+
+---
+
 ## [v1.0] - 2026-10-04
 
 ### 🚀 核心架构与里程碑发布 (Initial Release)

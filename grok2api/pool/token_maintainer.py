@@ -263,35 +263,14 @@ def _next_wait_seconds() -> float:
 
 
 def run_once(*, force: bool = False) -> dict[str, Any]:
-    """
-    Normalize keys + refresh tokens.
-    force=True refreshes every account that has refresh_token (updates expires_at),
-    still batch-capped so a single cycle never fans out to all 700 accounts.
-    """
-    result: dict[str, Any] = {
+    """纯注册机模式：禁止执行任何账号刷新与探活，维护权归属 CPA。"""
+    return {
         "ok": True,
-        "normalized": None,
-        "refresh": None,
-        "force": force,
+        "message": "纯注册机模式：已禁用 Token 维护，凭证由 CPA 独占维护",
+        "refreshed": 0,
+        "skipped": 0,
         "accounts": [],
-        "deferred_busy": False,
     }
-    # Prefer waiting for model probes to finish (tokens are more important),
-    # but never hang forever if a probe cycle is stuck on network.
-    with maintenance_slot("token_maintainer", blocking=True, timeout=180.0) as got:
-        if not got:
-            result["ok"] = True
-            result["deferred_busy"] = True
-            result["error"] = "maintenance slot busy — deferred"
-            _last_run.clear()
-            _last_run.update(result)
-            _last_run["at"] = time.time()
-            print("  [token-maintainer] deferred: maintenance slot busy")
-            return result
-        try:
-            from grok2api.upstream.oidc_auth import normalize_auth_file_keys, refresh_all_accounts
-
-            result["normalized"] = normalize_auth_file_keys()
             # Reclaim free-usage cooldowns whose wall-clock TTL elapsed so they
             # re-enter rotation without waiting for a successful model probe.
             try:
@@ -542,57 +521,20 @@ def run_once(*, force: bool = False) -> dict[str, Any]:
 
 
 def request_run_soon(*, force: bool = True) -> None:
-    """Wake the background worker for an early cycle."""
-    global _force_next
-    with _force_lock:
-        _force_next = bool(force)
-    _wakeup.set()
+    """纯注册机模式：禁用唤醒。"""
+    return
 
 
 def _worker() -> None:
-    # Stagger startup so normalize + first HTTP requests aren't simultaneous
-    # with model-health probe fan-out (large pools freeze WSL otherwise).
-    if _stop.wait(_startup_delay()):
-        return
-    while not _stop.is_set():
-        if not is_enabled():
-            # paused via admin toggle — idle until re-enabled / stop
-            _wakeup.clear()
-            _wakeup.wait(timeout=5.0)
-            continue
-        run_once(force=False)
-        wait = _next_wait_seconds()
-        # Wait either for interval or an admin-triggered wakeup
-        _wakeup.clear()
-        triggered = _wakeup.wait(timeout=wait)
-        if _stop.is_set():
-            break
-        if triggered:
-            with _force_lock:
-                global _force_next
-                do_force = _force_next
-                _force_next = False
-            # admin asked for refresh — do a force pass (still batch-capped)
-            run_once(force=do_force)
+    return
 
 
 def is_enabled() -> bool:
-    try:
-        from grok2api.admin.settings_store import get_token_maintain_enabled
-        return bool(get_token_maintain_enabled())
-    except Exception:
-        return os.getenv("GROK2API_TOKEN_MAINTAIN", "1").lower() not in ("0", "false", "no")
+    return False
 
 
 def start_background() -> None:
-    global _thread
-    if not is_enabled():
-        return
-    if _thread and _thread.is_alive():
-        return
-    _stop.clear()
-    _thread = threading.Thread(target=_worker, name="g2a-token-maintainer", daemon=True)
-    _thread.start()
+    return
 
 
 def stop_background() -> None:

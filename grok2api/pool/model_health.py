@@ -899,18 +899,13 @@ def probe_single_account(
     auto_disable: bool | None = None,
     source: str = "manual",
 ) -> dict[str, Any]:
-    """Probe one account with one model (default DEFAULT / PROBE_MODELS[0])."""
-    defaults = _live_probe_models()
-    model = (model or (defaults[0] if defaults else DEFAULT_MODEL)).strip()
-    creds = load_credentials_by_id(account_id)
-    result = probe_model_for_creds(
-        creds, model, auto_disable=auto_disable, source=source
-    )
+    """纯注册机模式：跳过账号探测，避免向上游发包触发风控或抢刷。"""
     return {
-        "ok": bool(result.get("available")),
-        "account_id": result.get("account_id") or account_id,
-        "email": result.get("email") or creds.email,
-        "result": result,
+        "ok": True,
+        "account_id": account_id,
+        "email": "",
+        "status": "skipped",
+        "result": {"available": True, "skipped": True, "message": "纯注册机模式：跳过探测"},
     }
 
 
@@ -1737,31 +1732,21 @@ def _interval() -> float:
 
 
 def run_once(*, source: str = "background") -> dict[str, Any]:
-    """Probe a batch of live accounts with PROBE_MODELS (error check cycle)."""
-    # Background cycles defer quickly if token refresh holds the slot so they
-    # never stampede together. Manual admin "probe all" waits longer.
-    wait_timeout = 5.0 if source == "background" else None
-    with maintenance_slot(
-        f"model_health:{source}",
-        blocking=True,
-        timeout=wait_timeout,
-    ) as got:
-        if not got:
-            result = {
-                "ok": True,
-                "deferred_busy": True,
-                "error": "maintenance slot busy — deferred",
-                "source": source,
-                "probed_at": time.time(),
-                "count": 0,
-                "available_count": 0,
-                "unavailable_count": 0,
-                "auto_action_count": 0,
-                "kick_cooldown": 0,
-                "kick_disabled": 0,
-                "results": [],
-            }
-            with _lock:
+    """纯注册机模式：已禁用模型健康探测。"""
+    return {
+        "ok": True,
+        "running": False,
+        "source": source,
+        "probed_at": time.time(),
+        "count": 0,
+        "available_count": 0,
+        "unavailable_count": 0,
+        "auto_action_count": 0,
+        "kick_cooldown": 0,
+        "kick_disabled": 0,
+        "results": [],
+        "message": "纯注册机模式：已禁用模型健康探测与账号探活",
+    }
                 _last_run.clear()
                 _last_run.update(result)
                 _last_run["at"] = time.time()
@@ -1994,24 +1979,11 @@ def _worker() -> None:
 
 
 def is_enabled() -> bool:
-    try:
-        from grok2api.admin.settings_store import get_model_health_enabled
-        return bool(get_model_health_enabled())
-    except Exception:
-        return os.getenv("GROK2API_MODEL_HEALTH", "1").lower() not in ("0", "false", "no")
+    return False
 
 
 def start_background() -> None:
-    global _thread
-    if not is_enabled():
-        return
-    if _thread and _thread.is_alive():
-        return
-    _stop.clear()
-    _thread = threading.Thread(
-        target=_worker, name="g2a-model-health", daemon=True
-    )
-    _thread.start()
+    return
 
 
 def stop_background() -> None:
