@@ -82,7 +82,7 @@ def load_env(*, override: bool = False) -> Path:
 
 def ensure_loaded() -> None:
     if not _LOADED:
-        load_env(override=False)
+        load_env(override=True)
 
 
 def env_str(key: str, default: str = "") -> str:
