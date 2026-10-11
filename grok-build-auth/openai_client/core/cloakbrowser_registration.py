@@ -288,11 +288,8 @@ def run_cloak_registration(
         logger.debug("[Cloak注册] 失败详情", exc_info=True)
         try:
             if email:
-                from core.email_provider import release_email, release_unconsumed_email
-                if not create_acknowledged:
-                    release_unconsumed_email(email, note=f"Cloak注册未消耗: {str(exc)[:180]}")
-                else:
-                    release_email(email, status="failed", note=f"Cloak注册失败: {str(exc)[:180]}")
+                from core.email_provider import release_email
+                release_email(email, status="failed" if create_acknowledged else "available", note=f"Cloak注册失败: {str(exc)[:180]}")
         except Exception:
             pass
         return {
