@@ -122,6 +122,7 @@ services:
       - ./grok2api:/app/grok2api
       - ./grok-build-auth:/app/grok-build-auth
       - ./scripts:/app/scripts
+      - ./static:/app/static
       - ./data:/app/data
       - ./turnstile-solver/logs:/app/turnstile-solver/logs
       # In-container hot-update: docker CLI talks to host docker daemon.

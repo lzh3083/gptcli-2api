@@ -5,7 +5,7 @@ window.G2A = window.G2A || {};
   const PAGE_META = {
     overview: { title: "概览", sub: "服务状态、账号池与 Token 健康度一览", path: "/admin" },
     keys: { title: "API Keys", sub: "创建、复制、停用客户端访问密钥", path: "/admin/keys" },
-    accounts: { title: "账号 / 轮询", sub: "Grok 账号、设备码登录、额度与导入导出", path: "/admin/accounts" },
+    accounts: { title: "账号 / 轮询", sub: "ChatGPT / Codex 账号、OAuth 授权、额度与导入导出", path: "/admin/accounts" },
     usage: { title: "用量", sub: "Token 消耗与请求使用情况（今日 / 近 N 天 / 累计）", path: "/admin/usage" },
     logs: { title: "任务日志", sub: "查询后台任务结果（协议注册、SSO 导入、测活、Token 续期等）", path: "/admin/logs" },
     models: { title: "模型", sub: "上游模型缓存与探测结果", path: "/admin/models" },

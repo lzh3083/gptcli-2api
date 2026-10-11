@@ -326,7 +326,7 @@ function renderStoreConn(hostId) {
 const PAGE_META = {
   overview: { title: "概览", sub: "服务状态、账号池与 Token 健康度一览" },
   keys: { title: "API Keys", sub: "创建、复制、停用客户端访问密钥" },
-  accounts: { title: "账号 / 轮询", sub: "Grok 账号、设备码登录、额度与导入导出" },
+  accounts: { title: "账号 / 轮询", sub: "ChatGPT / Codex 账号、OAuth 授权、额度与导入导出" },
   usage: { title: "用量", sub: "Token 消耗与请求使用情况（今日按上海时间日切 / 近 N 天 / 累计）" },
   logs: { title: "任务日志", sub: "查询后台任务结果（协议注册、SSO 导入、测活、Token 续期等）" },
   models: { title: "模型", sub: "上游模型目录（入库）与探测结果" },
@@ -1270,7 +1270,7 @@ function rebindPageControls() {
     label.textContent = f ? `已选择：${f.name}（${(f.size / 1024).toFixed(1)} KB）` : "未选择文件";
   });
   on("btn-logout-cli", "onclick", async () => {
-    if (!confirm("注销全部 Grok 账号？（将清空数据库账号池与本地镜像）")) return;
+    if (!confirm("注销全部 ChatGPT / Codex 账号？（将清空数据库账号池与本地镜像）")) return;
     try {
       const r = await api("/accounts/logout", { method: "POST" });
       toast(r.message || "完成", !!r.ok);
@@ -3039,8 +3039,8 @@ async function loadAccountsPage({ reset = false, silent = false } = {}) {
     if ($("page-sub") && document.body && document.body.dataset.page === "accounts") {
       const src = window.__g2aAccountsStore.source;
       $("page-sub").textContent = src === "postgres"
-        ? "Grok 账号、设备码登录、额度与导入导出 · 数据源：数据库"
-        : "Grok 账号、设备码登录、额度与导入导出";
+        ? "ChatGPT / Codex 账号、OAuth 授权、额度与导入导出 · 数据源：数据库"
+        : "ChatGPT / Codex 账号、OAuth 授权、额度与导入导出";
     }
     console.info(
       "[accounts] page", accountsPage, "/", accountsTotalPages,
@@ -6489,7 +6489,7 @@ function applyRegConfig(cfg) {
     $("reg-sso-risk-rejected-file").value = cfg.sso_risk_rejected_file || "./sso_risk_rejected.txt";
   }
   if ($("reg-novproxy-mode")) {
-    $("reg-novproxy-mode").value = (cfg.novproxy_mode || "").toLowerCase() === "api" ? "api" : "userpass";
+    $("reg-novproxy-mode").value = (cfg.novproxy_mode || "api").toLowerCase() === "userpass" ? "userpass" : "api";
   }
   if ($("reg-novproxy-up-host")) $("reg-novproxy-up-host").value = cfg.novproxy_up_host || "us.novproxy.io:1000";
   if ($("reg-novproxy-up-proto")) $("reg-novproxy-up-proto").value = cfg.novproxy_up_proto || "socks5h";
@@ -6499,8 +6499,8 @@ function applyRegConfig(cfg) {
   if ($("reg-novproxy-up-time")) $("reg-novproxy-up-time").value = cfg.novproxy_up_time != null ? String(cfg.novproxy_up_time) : "60";
   if ($("reg-novproxy-up-num")) $("reg-novproxy-up-num").value = cfg.novproxy_up_num != null ? String(cfg.novproxy_up_num) : "1";
   if ($("reg-novproxy-api")) $("reg-novproxy-api").value = cfg.novproxy_api || "https://white.novproxy.com/white/api";
-  if ($("reg-novproxy-region")) $("reg-novproxy-region").value = cfg.novproxy_region || "US";
-  if ($("reg-novproxy-minutes")) $("reg-novproxy-minutes").value = cfg.novproxy_minutes != null ? String(cfg.novproxy_minutes) : "60";
+  if ($("reg-novproxy-region")) $("reg-novproxy-region").value = cfg.novproxy_region || "SG";
+  if ($("reg-novproxy-minutes")) $("reg-novproxy-minutes").value = cfg.novproxy_minutes != null ? String(cfg.novproxy_minutes) : "120";
   if ($("reg-novproxy-num")) $("reg-novproxy-num").value = cfg.novproxy_num != null ? String(cfg.novproxy_num) : "1";
   syncNovProxyModeUI();
   renderProxyNodesTable();
@@ -9497,7 +9497,7 @@ on("btn-refresh-acc", "onclick", async () => {
     if (loginSessionId) await pollDeviceSession();
   } catch (e) { toast(e.message, false); }
 });
-on("btn-logout-cli", "onclick", async () => {  if (!confirm("注销全部 Grok 账号？（将清空数据库账号池与本地镜像）")) return;
+on("btn-logout-cli", "onclick", async () => {  if (!confirm("注销全部 ChatGPT / Codex 账号？（将清空数据库账号池与本地镜像）")) return;
   try {
     const r = await api("/accounts/logout", { method: "POST" });
     toast(r.message || "完成", !!r.ok);
