@@ -1067,7 +1067,7 @@ def _wait_email_submit_next_state(driver, email: str, timeout: int = 18) -> str:
                 if (
                     "/auth/login" in url
                     and "email=" in url
-                    and now - cleared_seen_at >= 9.0
+                    and now - cleared_seen_at >= 3.5
                     and not getattr(driver, "_nextauth_fallback_tried", False)
                 ):
                     setattr(driver, "_nextauth_fallback_tried", True)
