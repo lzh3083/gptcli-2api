@@ -1421,11 +1421,15 @@ def _do_phone_verification(session: BrowserSession, *, proactive: bool = False) 
                 send_reason = _phone_failure_reason(send_text, send_resp.status_code)
                 if send_resp.status_code not in (200, 204) or send_reason:
                     sms_provider.cancel(activation_id, http)
-                    if send_reason == "invalid_auth_step" and proactive:
-                        logger.info(
-                            "[Codex] 主动触发手机验证返回 invalid_auth_step（当前会话状态无需/不支持强制插入手机步），已释放号码并继续后续授权"
+                    if send_reason == "invalid_auth_step":
+                        if proactive:
+                            logger.info(
+                                "[Codex] 主动触发手机验证返回 invalid_auth_step（当前会话状态无需/不支持强制插入手机步），已释放号码并继续后续授权"
+                            )
+                            return {}
+                        raise RuntimeError(
+                            f"[Codex] add-phone/send 返回 invalid_auth_step (HTTP {send_resp.status_code}): 登录会话已失效，需重新建立 OAuth 会话"
                         )
-                        return {}
                     # 号码无效 / 无法发送 / WhatsApp 通道 / 限流等 → 释放当前号并换号。
                     logger.warning(
                         f"[Codex] add-phone/send 未成功 reason={send_reason or 'unknown'}, "
@@ -2171,10 +2175,11 @@ def run_codex_oauth(
             message=f"账号已废（{exc.error_code}）",
         )
     except Exception as exc:
-        if _is_cpa_callback_reauth_error(exc) and _cpa_reauth_round < 2:
+        err_str = str(exc)
+        if (_is_cpa_callback_reauth_error(exc) or "invalid_auth_step" in err_str) and _cpa_reauth_round < 2:
             logger.warning(
-                "[Codex][CPA] callback 返回 Timeout waiting for OAuth callback，重新开启第 %s/2 轮 Codex 授权：%s",
-                _cpa_reauth_round + 1, email,
+                "[Codex] 遇到会话失效/超时 (%s)，重新开启第 %s/2 轮全新 Codex 授权：%s",
+                err_str[:80], _cpa_reauth_round + 1, email,
             )
             return run_codex_oauth(
                 email,
@@ -2182,6 +2187,7 @@ def run_codex_oauth(
                 proxy=proxy,
                 force=force,
                 _cpa_reauth_round=_cpa_reauth_round + 1,
+                password=password,
             )
         logger.warning(f"[Codex] 失败：{email}，{type(exc).__name__}: {str(exc)[:200]}")
         logger.debug("[Codex] 失败详情:", exc_info=True)
