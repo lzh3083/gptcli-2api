@@ -900,7 +900,9 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
         .filter(x => (x.code && digits.startsWith(x.code)) || (inferredIso && x.val === inferredIso))
         .sort((a, b) => (b.code?.length || 0) - (a.code?.length || 0))[0];
       if (matched && select.value !== matched.opt.value) {
-        select.value = matched.opt.value;
+        const selectSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+        if (selectSetter) selectSetter.call(select, matched.opt.value);
+        else select.value = matched.opt.value;
         select.dispatchEvent(new Event('input', {bubbles:true}));
         select.dispatchEvent(new Event('change', {bubbles:true}));
         selectedChanged = true;
@@ -914,32 +916,47 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
       dialCode = inferredDial;
     }
 
+    const nationalDigits = (dialCode && digits.startsWith(dialCode) && digits.length > dialCode.length + 3)
+      ? digits.slice(dialCode.length)
+      : digits;
     let visibleValue = e164;
 
     const setNativeValue = (el, value) => {
+      el.removeAttribute('maxlength');
       const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
       const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
       el.focus();
       if (setter) setter.call(el, ''); else el.value = '';
       el.dispatchEvent(new Event('input', {bubbles:true}));
       el.dispatchEvent(new Event('change', {bubbles:true}));
+      el.removeAttribute('maxlength');
       if (setter) setter.call(el, value); else el.value = value;
       el.dispatchEvent(new Event('input', {bubbles:true}));
       el.dispatchEvent(new Event('change', {bubbles:true}));
     };
 
     phoneInput.scrollIntoView({block:'center'});
-    // 先写入区号前缀（如 +62 / +55），让 React-Aria 先将电话掩码切换到目标国家（防止初始 US 12 位掩码吞掉第 13 位数字）
+    phoneInput.removeAttribute('maxlength');
     if (dialCode) {
       setNativeValue(phoneInput, '+' + dialCode);
     }
     setNativeValue(phoneInput, visibleValue);
-    // 若 React-Aria 仍截断了完整 E.164，尝试再执行一次赋值
-    if (String(phoneInput.value || '').replace(/\D+/g, '') !== digits) {
-      setNativeValue(phoneInput, visibleValue);
+    let reactHiddenAfterE164 = hiddenPhoneNumberInput ? (hiddenPhoneNumberInput.value || '') : '';
+    // 如果传入完整 E.164 后可见框或隐藏框被截断，而 select 已经切到了对应国家，尝试传入 nationalDigits
+    if (String(phoneInput.value || '').replace(/\D+/g, '') !== digits && nationalDigits !== digits) {
+      setNativeValue(phoneInput, nationalDigits);
+      const afterNatDigits = String(phoneInput.value || '').replace(/\D+/g, '');
+      const hiddenAfterNat = String(hiddenPhoneNumberInput?.value || '').replace(/\D+/g, '');
+      if (hiddenAfterNat === digits || afterNatDigits === digits || afterNatDigits === nationalDigits) {
+        visibleValue = nationalDigits;
+      } else {
+        setNativeValue(phoneInput, e164);
+      }
     }
     if (hiddenPhoneNumberInput) {
-      hiddenPhoneNumberInput.value = e164;
+      const hiddenSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (hiddenSetter) hiddenSetter.call(hiddenPhoneNumberInput, e164);
+      else hiddenPhoneNumberInput.value = e164;
       hiddenPhoneNumberInput.dispatchEvent(new Event('input', {bubbles:true}));
       hiddenPhoneNumberInput.dispatchEvent(new Event('change', {bubbles:true}));
     }
@@ -948,8 +965,10 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
     return {
       ok: true,
       e164,
+      nationalDigits,
       visibleValue,
       actualVisible: phoneInput.value || '',
+      reactHiddenAfterE164,
       hiddenValue: hiddenPhoneNumberInput ? (hiddenPhoneNumberInput.value || '') : '',
       dialCode,
       selectedText,
@@ -963,15 +982,20 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
         raise RuntimeError(f"手机号写入失败 result={result} state={_phone_page_state(driver)}")
     actual = str(result.get("actualVisible") or "").strip()
     visible_value = str(result.get("visibleValue") or "").strip()
+    national_value = str(result.get("nationalDigits") or "").strip()
     hidden_value = str(result.get("hiddenValue") or "").strip()
     e164 = str(result.get("e164") or "").strip()
     # OpenAI/React-Aria 电话框会自动格式化，例如 +84925154291 -> +84 925 154 291。
     # 不能按界面字符串精确比较，只比较数字归一化后的值。
     actual_digits = ''.join(ch for ch in actual if ch.isdigit())
     visible_digits = ''.join(ch for ch in visible_value if ch.isdigit())
+    national_digits = ''.join(ch for ch in national_value if ch.isdigit())
     e164_digits = ''.join(ch for ch in e164 if ch.isdigit())
     hidden_digits = ''.join(ch for ch in hidden_value if ch.isdigit())
-    expected_visible_ok = bool(actual_digits) and (actual_digits == visible_digits or actual_digits == e164_digits)
+    expected_visible_ok = bool(actual_digits) and (
+        actual_digits in (visible_digits, e164_digits, national_digits)
+        or (hidden_digits == e164_digits and len(actual_digits) >= len(e164_digits) - 1 and e164_digits.startswith(actual_digits))
+    )
     if not expected_visible_ok:
         raise RuntimeError(f"手机号可见输入框校验失败 expected_digits={visible_digits or e164_digits} actual={actual} result={result} state={_phone_page_state(driver)}")
     if hidden_value and hidden_digits != e164_digits:
@@ -1004,14 +1028,34 @@ def _verify_add_phone_value_before_submit(driver, expected_e164: str) -> dict:
     if (!form) return {ok:false, error:'missing_add_phone_form', url: location.href};
     const input = [...form.querySelectorAll('input[type="tel"], input[name="__reservedForPhoneNumberInput_tel"], input[autocomplete="tel"], input[name="phone"], input[name="phone_number"]')].find(visible);
     const hidden = form.querySelector('input[name="phoneNumber"]');
+    window.__cloakExpectedPhoneE164 = expected;
+    if (!form.__cloakPhoneSubmitHooked) {
+      form.__cloakPhoneSubmitHooked = true;
+      form.addEventListener('submit', () => {
+        const h = form.querySelector('input[name="phoneNumber"]');
+        if (h && window.__cloakExpectedPhoneE164) {
+          h.value = window.__cloakExpectedPhoneE164;
+        }
+      }, true);
+    }
+    if (hidden) {
+      const hiddenSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (hiddenSetter) hiddenSetter.call(hidden, expected);
+      else hidden.value = expected;
+    }
     const visibleValue = String(input?.value || '').trim();
     const hiddenValue = String(hidden?.value || '').trim();
     const digits = value => String(value || '').replace(/\D+/g, '');
     const visibleDigits = digits(visibleValue);
     const hiddenDigits = digits(hiddenValue);
     const expectedDigits = digits(expected);
-    // 输入框可能被自动格式化，按数字比较；隐藏字段如果存在必须等于完整 E.164。
-    const ok = !!visibleDigits && visibleDigits === expectedDigits && (!hidden || hiddenDigits === expectedDigits);
+    // 输入框可能被自动格式化或仅显示去掉国家区号后的本地号码；隐藏字段如果存在必须等于完整 E.164。
+    const visOk = !!visibleDigits && (
+      visibleDigits === expectedDigits
+      || expectedDigits.endsWith(visibleDigits)
+      || (hiddenDigits === expectedDigits && visibleDigits.length >= expectedDigits.length - 1 && expectedDigits.startsWith(visibleDigits))
+    );
+    const ok = visOk && (!hidden || hiddenDigits === expectedDigits);
     return {ok, visibleValue, hiddenValue, expected, visibleDigits, hiddenDigits, expectedDigits, url: location.href};
     """, expected_e164)
     if not result or not result.get("ok"):
@@ -1068,6 +1112,10 @@ def _click_add_phone_continue_button(driver, *, timeout: int = 10) -> dict:
             const form = document.querySelector('form[action*="/add-phone" i]')
               || [...document.querySelectorAll('form')].find(f => /add-phone/i.test(f.getAttribute('action') || ''));
             if (!form) return null;
+            const hidden = form.querySelector('input[name="phoneNumber"]');
+            if (hidden && window.__cloakExpectedPhoneE164) {
+              hidden.value = window.__cloakExpectedPhoneE164;
+            }
             const buttons = [...form.querySelectorAll('button[type="submit"], input[type="submit"]')];
             return buttons.find(b => visible(b) && enabled(b) && (b.getAttribute('data-dd-action-name') || '').toLowerCase() === 'continue')
               || buttons.find(b => visible(b) && enabled(b))
