@@ -865,18 +865,40 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
     let dialCode = '';
     let selectedText = '';
     let selectedChanged = false;
+    const DIAL_TO_ISO = [
+      ['351', 'PT'], ['852', 'HK'], ['886', 'TW'], ['971', 'AE'],
+      ['62', 'ID'], ['44', 'GB'], ['55', 'BR'], ['60', 'MY'], ['63', 'PH'],
+      ['66', 'TH'], ['84', 'VN'], ['65', 'SG'], ['81', 'JP'], ['82', 'KR'],
+      ['91', 'IN'], ['33', 'FR'], ['49', 'DE'], ['34', 'ES'], ['39', 'IT'],
+      ['31', 'NL'], ['48', 'PL'], ['52', 'MX'], ['54', 'AR'], ['57', 'CO'],
+      ['56', 'CL'], ['27', 'ZA'], ['61', 'AU'], ['64', 'NZ'], ['1', 'US']
+    ];
+    let inferredDial = '';
+    let inferredIso = '';
+    for (const [dc, iso] of DIAL_TO_ISO) {
+      if (digits.startsWith(dc)) {
+        inferredDial = dc;
+        inferredIso = iso;
+        break;
+      }
+    }
     const optionDialCode = (opt) => {
       const text = String(opt?.textContent || opt?.label || opt?.value || '').replace(/\s+/g, ' ').trim();
       const m = text.match(/\+(\d{1,4})\b/);
-      return m ? m[1] : '';
+      if (m) return m[1];
+      const val = String(opt?.value || '').trim().toUpperCase();
+      for (const [dc, iso] of DIAL_TO_ISO) {
+        if (val === iso) return dc;
+      }
+      return '';
     };
     if (select) {
-      // 参考 FlowPilot ensureCountrySelected：按号码前缀选择对应国家/区号，避免默认国家与号码不一致。
+      // 参考 FlowPilot ensureCountrySelected：按号码前缀或 ISO 国家代码选择对应国家/区号，避免默认国家(US)掩码截断 13 位号码。
       const options = [...select.options];
       const matched = options
-        .map(opt => ({opt, code: optionDialCode(opt)}))
-        .filter(x => x.code && digits.startsWith(x.code))
-        .sort((a, b) => b.code.length - a.code.length)[0];
+        .map(opt => ({opt, code: optionDialCode(opt), val: String(opt?.value || '').trim().toUpperCase()}))
+        .filter(x => (x.code && digits.startsWith(x.code)) || (inferredIso && x.val === inferredIso))
+        .sort((a, b) => (b.code?.length || 0) - (a.code?.length || 0))[0];
       if (matched && select.value !== matched.opt.value) {
         select.value = matched.opt.value;
         select.dispatchEvent(new Event('input', {bubbles:true}));
@@ -886,17 +908,13 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
       if (select.selectedIndex >= 0 && select.options[select.selectedIndex]) {
         const opt = select.options[select.selectedIndex];
         selectedText = String(opt.textContent || opt.label || opt.value || '').replace(/\s+/g, ' ').trim();
-        dialCode = optionDialCode(opt);
+        dialCode = optionDialCode(opt) || inferredDial;
       }
+    } else {
+      dialCode = inferredDial;
     }
 
-    // FlowPilot：可见框一般填 national number；隐藏 phoneNumber 填完整 E.164。
-    // 若无法判断页面区号，则可见框填完整 +E164，避免丢国家码。
     let visibleValue = e164;
-    if (dialCode && digits.startsWith(dialCode) && digits.length > dialCode.length + 3) {
-      visibleValue = digits.slice(dialCode.length);
-      if (!visibleValue) visibleValue = e164;
-    }
 
     const setNativeValue = (el, value) => {
       const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -911,7 +929,15 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
     };
 
     phoneInput.scrollIntoView({block:'center'});
+    // 先写入区号前缀（如 +62 / +55），让 React-Aria 先将电话掩码切换到目标国家（防止初始 US 12 位掩码吞掉第 13 位数字）
+    if (dialCode) {
+      setNativeValue(phoneInput, '+' + dialCode);
+    }
     setNativeValue(phoneInput, visibleValue);
+    // 若 React-Aria 仍截断了完整 E.164，尝试再执行一次赋值
+    if (String(phoneInput.value || '').replace(/\D+/g, '') !== digits) {
+      setNativeValue(phoneInput, visibleValue);
+    }
     if (hiddenPhoneNumberInput) {
       hiddenPhoneNumberInput.value = e164;
       hiddenPhoneNumberInput.dispatchEvent(new Event('input', {bubbles:true}));

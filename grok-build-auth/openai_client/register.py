@@ -125,12 +125,13 @@ def _resolve_novproxy_one_ip(
         pass
 
     last_err = ""
+    fallback_candidate: tuple[str, str, dict[str, Any]] | None = None
     for round_idx in range(1, 5):
         try:
             nodes = novproxy.fetch_nodes(
                 api_base=api_base,
                 region=region,
-                num=5,
+                num=8,
                 minutes=minutes,
                 attempts=2,
                 timeout=15.0,
@@ -139,6 +140,7 @@ def _resolve_novproxy_one_ip(
             for node in nodes:
                 clean_node = node.split("://", 1)[-1].strip()
                 if clean_node in _USED_NOVPROXY_NODES:
+                    last_err = f"节点端口已使用 ({clean_node})"
                     continue
                 probe = novproxy.probe_node(clean_node, expect_country=region, timeout=15.0)
                 if not probe.get("ok"):
@@ -149,8 +151,11 @@ def _resolve_novproxy_one_ip(
                     logger.warning(f"[NovProxy] 跳过机房属性节点 {clean_node}: {last_err}")
                     continue
                 exit_ip = str(probe.get("exit_ip") or "").strip()
+                if fallback_candidate is None:
+                    fallback_candidate = (clean_node, exit_ip, probe)
                 if exit_ip and exit_ip in _USED_NOVPROXY_EXIT_IPS:
-                    logger.info(f"[NovProxy] 跳过已使用过的出口 IP {exit_ip} (保证一号一IP)")
+                    last_err = f"出口 IP {exit_ip} 已在历史记录中"
+                    logger.info(f"[NovProxy] 跳过已使用过的出口 IP {exit_ip} (优先寻找全新住宅IP)")
                     continue
                 _USED_NOVPROXY_NODES.add(clean_node)
                 if exit_ip:
@@ -184,7 +189,21 @@ def _resolve_novproxy_one_ip(
         except Exception as exc:
             last_err = str(exc)
             logger.warning(f"[NovProxy] 第 {round_idx} 轮提取异常: {exc}")
-        time.sleep(2.0)
+        time.sleep(1.5)
+
+    if fallback_candidate is not None:
+        clean_node, exit_ip, probe = fallback_candidate
+        _USED_NOVPROXY_NODES.add(clean_node)
+        assigned = f"socks5h://{clean_node}"
+        msg = (
+            f"已分配 NovProxy 住宅节点(池内复用): {assigned} "
+            f"(出口IP={exit_ip}, 国家={probe.get('country')}, ISP={probe.get('isp')})"
+        )
+        if step_cb:
+            step_cb("proxy_assigned", msg)
+        else:
+            logger.info(f"[NovProxy] {msg}")
+        return assigned
 
     raise RuntimeError(f"无法从 NovProxy 获取可用的独立住宅代理节点 (region={region}): {last_err}")
 

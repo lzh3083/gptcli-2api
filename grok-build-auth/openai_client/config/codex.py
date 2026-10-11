@@ -118,8 +118,8 @@ SMSBOWER_MIN_PRICE: str = ""
 # 服务代码：OpenAI (ChatGPT) = "dr"
 SMS_SERVICE: str = "dr"
 
-# 国家代码：葡萄牙 = "117" / 美国 = "187"
-SMS_COUNTRY: str = "10"
+# 国家代码：印尼 = "6"（首选秒收）/ 英国 = "16"（备选）
+SMS_COUNTRY: str = "6,16"
 
 # 单个号愿意支付的最高价格（留空=不限）。透传给 getNumber 的 maxPrice。
 SMS_MAX_PRICE: str = ""

@@ -142,11 +142,7 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
         service_code = "dr"
-    raw_country = str(country or _cfg.SMS_COUNTRY or "").strip()
-    if "," in raw_country:
-        import random
-        choices = [c.strip() for c in raw_country.split(",") if c.strip()]
-        raw_country = random.choice(choices) if choices else raw_country
+    raw_country = str(country or _cfg.SMS_COUNTRY or "6,16").strip()
     params = {
         "action": "getNumberV2" if bool(getattr(_cfg, "SMSBOWER_USE_V2", True)) else "getNumber",
         "service": service_code,
@@ -166,15 +162,20 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
 
 
 def _request_smsbower_number(http: CurlSession, params: dict) -> tuple[dict, str]:
-    """按兼容性顺序取号，筛选无库存时放宽供应商条件。"""
-    candidates: list[dict] = [dict(params)]
-    if params.get("action") == "getNumberV2":
-        candidates.append({**params, "action": "getNumber"})
-    if params.get("providerIds"):
-        without_provider = {key: value for key, value in params.items() if key != "providerIds"}
-        candidates.append(without_provider)
-        if params.get("action") == "getNumberV2":
-            candidates.append({**without_provider, "action": "getNumber"})
+    """按国家优先级与兼容性顺序取号，筛选无库存时自动切换备选国家或放宽供应商条件。"""
+    raw_country = str(params.get("country") or "6").strip()
+    countries = [c.strip() for c in raw_country.split(",") if c.strip()] or ["6"]
+    candidates: list[dict] = []
+    for c_code in countries:
+        c_params = {**params, "country": c_code}
+        candidates.append(c_params)
+        if c_params.get("action") == "getNumberV2":
+            candidates.append({**c_params, "action": "getNumber"})
+        if c_params.get("providerIds"):
+            without_provider = {key: value for key, value in c_params.items() if key != "providerIds"}
+            candidates.append(without_provider)
+            if c_params.get("action") == "getNumberV2":
+                candidates.append({**without_provider, "action": "getNumber"})
     unique = []
     for candidate in candidates:
         if candidate not in unique:
