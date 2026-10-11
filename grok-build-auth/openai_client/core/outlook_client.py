@@ -254,21 +254,58 @@ def _parse_accounts_file(path: Path) -> list[OutlookAccount]:
 # 公共接口：挑账号 / 取 OTP（统一走 DB）
 # ============================================================
 
+def _check_mailbox_clean_for_openai(account: OutlookAccount) -> tuple[bool, str]:
+    """检测收件箱是否为号商翻新/二手机箱（含历史 OpenAI 封禁、锁号或改别名记录）。"""
+    if str(os.getenv("OUTLOOK_REJECT_RECYCLED_MAILBOX", "true")).strip().lower() in ("0", "false", "no", "off"):
+        return True, "skip_clean_check"
+    try:
+        msgs = _fetch_imap_direct_messages(account)
+    except Exception as exc:
+        logger.debug("[Outlook] 收件箱干净度预检 IMAP 读取跳过 (%s): %s", account.email, exc)
+        return True, "clean_check_skipped"
+
+    now_ts = time.time()
+    dirty_reasons: list[str] = []
+    for m in (msgs or []):
+        subj = str(m.get("subject") or "").strip()
+        subj_low = subj.lower()
+        msg_ts = _parse_email_ts(m)
+        is_old = (msg_ts is None) or ((now_ts - msg_ts) > 7200)
+        if "deactivated" in subj_low:
+            dirty_reasons.append(f"deactivated({subj[:40]})")
+        elif "action required to secure your chatgpt account" in subj_low:
+            dirty_reasons.append("chatgpt_locked")
+        elif "添加邮箱登录名" in subj:
+            dirty_reasons.append("alias_recycled(添加邮箱登录名)")
+        elif is_old and ("openai" in subj_low or "chatgpt" in subj_low or "驗證碼" in subj or "인증 코드" in subj or "ยืนยัน" in subj):
+            dirty_reasons.append(f"historical_openai({subj[:36]})")
+    if dirty_reasons:
+        uniq = ", ".join(dict.fromkeys(dirty_reasons))
+        return False, f"recycled_dirty_mailbox: {uniq[:160]}"
+    return True, f"clean_msgs={len(msgs or [])}"
+
+
 def _verify_outlook_token_alive(account: OutlookAccount) -> tuple[bool, str]:
-    """轻量检测 Outlook/Hotmail 账号的 refresh_token 是否仍然有效。"""
+    """轻量检测 Outlook/Hotmail 账号的 refresh_token 是否仍然有效，并拦截二手翻新黑历史邮箱。"""
     http = _ms_http()
+    token_kind = ""
     try:
         try:
             _ms_access_token(account, http=http)
-            return True, "ok_graph"
+            token_kind = "ok_graph"
         except Exception as exc1:
             try:
                 _live_imap_access_token(account, http=http)
-                return True, "ok_live_imap"
+                token_kind = "ok_live_imap"
             except Exception as exc2:
                 return False, f"{exc1} | {exc2}"
     finally:
         http.close()
+
+    clean_ok, clean_detail = _check_mailbox_clean_for_openai(account)
+    if not clean_ok:
+        return False, clean_detail
+    return True, f"{token_kind},{clean_detail}"
 
 
 def pick_account() -> OutlookAccount:
@@ -297,9 +334,10 @@ def pick_account() -> OutlookAccount:
         ok, detail = _verify_outlook_token_alive(account)
         if not ok:
             logger.warning(
-                f"[Outlook] 挑号预检发现失效账号 {account.email} (DB id={row['id']})，自动标记为 failed 并跳过: {detail[:200]}"
+                f"[Outlook] 挑号预检发现不可用账号 {account.email} (DB id={row['id']})，自动标记为 failed 并跳过: {detail[:200]}"
             )
-            release_outlook(account.email, status="failed", note=f"invalid_refresh_token: {detail[:180]}")
+            note_prefix = "" if detail.startswith("recycled_dirty_mailbox") else "invalid_refresh_token: "
+            release_outlook(account.email, status="failed", note=f"{note_prefix}{detail[:180]}")
             continue
 
         _CONTEXT_CACHE[_cache_key(account.email)] = account
