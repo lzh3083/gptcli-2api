@@ -1028,6 +1028,16 @@ def collect_normalized_entries(raw: str | dict[str, Any] | list[Any]) -> dict[st
             "principal_type",
             "oidc_client_id",
             "oidc_issuer",
+            "type",
+            "cliproxyapi_type",
+            "cliproxyapi_base_url",
+            "cliproxyapi_headers",
+            "plan_type",
+            "totp_secret",
+            "codex_cpa_file",
+            "codex_status",
+            "disable_auto_refresh",
+            "external_managed",
             # Persist registration SSO so it survives process restarts.
             "sso",
             "sso_cookie",
@@ -1116,19 +1126,16 @@ def build_cliproxyapi_export_record(entry: dict[str, Any], *, aid: str = "") -> 
         except Exception:
             expired_iso = ""
 
+    cpa_type = str(
+        entry.get("cliproxyapi_type")
+        or entry.get("type")
+        or "codex"
+    ).strip().lower()
     headers = entry.get("cliproxyapi_headers")
-    if not isinstance(headers, dict) or not headers:
-        headers = {
-            "X-XAI-Token-Auth": "xai-grok-cli",
-            "x-grok-client-version": "1.0.13",
-            "x-grok-client-identifier": "grok-shell",
-        }
-    base_url = (
-        str(entry.get("cliproxyapi_base_url") or "").strip()
-        or "https://cli-chat-proxy.grok.com/v1"
-    )
+    base_url = str(entry.get("cliproxyapi_base_url") or "").strip()
+
     rec: dict[str, Any] = {
-        "type": str(entry.get("cliproxyapi_type") or "xai"),
+        "type": cpa_type,
         "auth_kind": str(entry.get("cliproxyapi_auth_kind") or "oauth"),
         "email": email,
         "sub": sub,
@@ -1138,10 +1145,14 @@ def build_cliproxyapi_export_record(entry: dict[str, Any], *, aid: str = "") -> 
         "token_type": "Bearer",
         "expired": expired_iso,
         "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "base_url": base_url,
         "disabled": bool(entry.get("cliproxyapi_disabled") or False),
-        "headers": dict(headers),
     }
+    if base_url:
+        rec["base_url"] = base_url
+    if isinstance(headers, dict) and headers:
+        rec["headers"] = dict(headers)
+    if entry.get("plan_type"):
+        rec["plan_type"] = entry.get("plan_type")
     if aid:
         rec["local_account_id"] = aid
     if entry.get("account_id"):
@@ -1195,7 +1206,7 @@ def export_cliproxyapi_payload(
         "type": "cliproxyapi-auth-bundle",
         "version": 1,
         "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "source": "grokcli-2api",
+        "source": "gptcli-2api",
         "accounts": accounts_out,
     }
     if skipped:

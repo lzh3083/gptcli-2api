@@ -2807,7 +2807,7 @@ def _preflight_chatgpt_path(proxy_url: str = "", log_callback: Callable[[str], N
             resp = requests.get(
                 url,
                 proxies=req_proxies,
-                impersonate="chrome124",
+                impersonate="chrome",
                 timeout=15,
                 allow_redirects=False,
             )
@@ -3200,19 +3200,22 @@ def _run_registration(
             acct_obj = session_info.get("account") or {}
             cpa_storage = codex_res.get("storage") if isinstance(codex_res, dict) else {}
             cpa_storage = cpa_storage if isinstance(cpa_storage, dict) else {}
+            codex_access_token = str(cpa_storage.get("access_token") or "").strip()
 
             import_payload = {
-                "key": access_token,
-                "auth_mode": "chatgpt_session",
+                "key": codex_access_token or access_token,
+                "type": "codex",
+                "cliproxyapi_type": "codex",
+                "auth_mode": "codex_oauth" if codex_access_token else "chatgpt_session",
                 "email": email,
                 "user_id": user_obj.get("id") or email,
                 "refresh_token": cpa_storage.get("refresh_token") or "",
                 "id_token": cpa_storage.get("id_token") or "",
                 "account_id": cpa_storage.get("account_id") or acct_obj.get("id") or "",
-                "plan_type": acct_obj.get("planType") or "free",
-                "expires_at": session_info.get("expires") or "",
+                "plan_type": cpa_storage.get("plan_type") or acct_obj.get("planType") or "free",
+                "expires_at": cpa_storage.get("expired") or session_info.get("expires") or "",
                 "oidc_issuer": "https://auth.openai.com",
-                "oidc_client_id": "chatgpt-client",
+                "oidc_client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
                 "source": "register-chatgpt",
                 "registration_session_id": sid,
                 "session_cookies": session_cookies,

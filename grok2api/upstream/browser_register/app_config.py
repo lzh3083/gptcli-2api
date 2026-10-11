@@ -105,7 +105,7 @@ DEFAULT_CONFIG = {
     # 多倍率（按 IP 段/地区/时段），固定系数并不靠谱，故回到原始读数。
     # 需要时填实测倍率即可启用校准。
     "traffic_calibration_factor": 1.0,
-    "cpa_base_url": "https://cli-chat-proxy.grok.com/v1",
+    "cpa_base_url": "",
     "cpa_proxy": "",
     "cpa_headless": False,
     "cpa_force_standalone": True,

@@ -71,10 +71,10 @@ API_KEY = os.getenv("GROK2API_API_KEY", "")
 # store once when no hash exists yet; it is NOT a parallel live password.
 ADMIN_PASSWORD = os.getenv("GROK2API_ADMIN_PASSWORD", "")
 
-# Upstream cli-chat-proxy (session-token compatible endpoint)
+# Upstream API endpoint (OpenAI API default)
 UPSTREAM_BASE = os.getenv(
     "GROK_CLI_CHAT_PROXY_BASE_URL",
-    "https://cli-chat-proxy.grok.com/v1",
+    "https://api.openai.com/v1",
 ).rstrip("/")
 
 # App data — fully self-contained under project (or GROK2API_DATA_DIR).
@@ -123,10 +123,10 @@ AFFINITY_MAX = int(os.getenv("GROK2API_AFFINITY_MAX", "5000"))
 TOKEN_MAINTAIN_INTERVAL = float(os.getenv("GROK2API_TOKEN_MAINTAIN_INTERVAL", "90"))
 
 # Background model health probe interval (seconds). 0 = only on demand / on error
-MODEL_HEALTH_INTERVAL = float(os.getenv("GROK2API_MODEL_HEALTH_INTERVAL", "900"))
+MODEL_HEALTH_INTERVAL = float(os.getenv("GROK2API_MODEL_HEALTH_INTERVAL", "0"))
 # Auto-disable account from rotation when model probe fails
 MODEL_HEALTH_AUTO_DISABLE = os.getenv(
-    "GROK2API_MODEL_HEALTH_AUTO_DISABLE", "1"
+    "GROK2API_MODEL_HEALTH_AUTO_DISABLE", "0"
 ).lower() not in ("0", "false", "no")
 # Models to probe periodically (comma-separated); empty = DEFAULT_MODEL only
 _probe_env = os.getenv("GROK2API_PROBE_MODELS", "").strip()
@@ -183,27 +183,26 @@ MAINTENANCE_LOCK_TIMEOUT = _env_float(
     "GROK2API_MAINTENANCE_LOCK_TIMEOUT", 180.0, minimum=5.0
 )
 
-# xAI OIDC (public client — device code + refresh; no local CLI binary)
+# OpenAI / Codex OIDC defaults
 GROK_CLI_CLIENT_ID = os.getenv(
     "GROK2API_OIDC_CLIENT_ID",
-    "b1a00492-073a-47ea-816f-4c329264a828",
+    "app_EMoamEEZ73f0CkXaXp7hrann",
 )
-OIDC_ISSUER = os.getenv("GROK2API_OIDC_ISSUER", "https://auth.x.ai")
+OIDC_ISSUER = os.getenv("GROK2API_OIDC_ISSUER", "https://auth.openai.com")
 OIDC_DEVICE_URL = os.getenv(
     "GROK2API_OIDC_DEVICE_URL",
-    f"{OIDC_ISSUER.rstrip('/')}/oauth2/device/code",
+    f"{OIDC_ISSUER.rstrip('/')}/oauth/authorize",
 )
 OIDC_TOKEN_URL = os.getenv(
     "GROK2API_OIDC_TOKEN_URL",
-    f"{OIDC_ISSUER.rstrip('/')}/oauth2/token",
+    f"{OIDC_ISSUER.rstrip('/')}/oauth/token",
 )
 OIDC_SCOPES = os.getenv(
     "GROK2API_OIDC_SCOPES",
-    "openid profile email offline_access grok-cli:access api:access "
-    "conversations:read conversations:write",
+    "openid email profile offline_access",
 )
 # Email-assisted account registration.
-XAI_ACCOUNTS_URL = os.getenv("GROK2API_XAI_ACCOUNTS_URL", "https://accounts.x.ai/")
+XAI_ACCOUNTS_URL = os.getenv("GROK2API_XAI_ACCOUNTS_URL", "https://auth.openai.com/")
 XAI_PROXY = (
     os.getenv("GROK2API_XAI_PROXY")
     or os.getenv("GROK2API_PROXY")
