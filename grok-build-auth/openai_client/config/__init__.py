@@ -1,5 +1,5 @@
 from config.env_loader import load_env
-load_env(override=False)
+load_env(override=True)
 
 # -*- coding: utf-8 -*-
 """

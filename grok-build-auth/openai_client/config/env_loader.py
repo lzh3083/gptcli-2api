@@ -55,7 +55,7 @@ def env_path() -> Path:
     return _ENV_PATH
 
 
-def load_env(*, override: bool = False) -> Path:
+def load_env(*, override: bool = True) -> Path:
     """加载项目根 .env 到进程环境。可重复调用（reload 时用 override=True）。
 
     优先使用 python-dotenv；未安装时使用本文件内置的轻量 parser，避免配置读取强依赖。
