@@ -314,18 +314,35 @@ class CloakSeleniumDriver:
         if element is not None:
             return CloakElement(page, handle=element)
         try:
-            return handle.json_value()
+            val = handle.json_value()
         except Exception as exc:
             msg = str(exc)
             if "Execution context was destroyed" in msg or "navigation" in msg.lower():
                 logger.info("[Cloak] JS 执行后页面发生跳转，忽略返回值读取失败：%s", msg[:160])
                 return {"ok": True, "reason": "navigation_after_script"}
             raise
-        finally:
+        if isinstance(val, dict):
             try:
-                handle.dispose()
+                props = handle.get_properties()
+                for k, prop_handle in (props or {}).items():
+                    try:
+                        prop_el = prop_handle.as_element()
+                    except Exception:
+                        prop_el = None
+                    if prop_el is not None:
+                        val[k] = CloakElement(page, handle=prop_el)
+                    else:
+                        try:
+                            prop_handle.dispose()
+                        except Exception:
+                            pass
             except Exception:
                 pass
+        try:
+            handle.dispose()
+        except Exception:
+            pass
+        return val
 
     def _evaluate(self, script: str, args: tuple[Any, ...], async_mode: bool) -> Any:
         first_el, serial_args = self._serialize_args(args)
