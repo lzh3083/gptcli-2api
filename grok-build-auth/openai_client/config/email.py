@@ -24,7 +24,7 @@ USE_EMAIL_SERVICE = True
 #   "mailnest"          — MailNest/迈巢临时邮箱 API（运行时购买邮箱并自动收码）
 #   "cloudmail"         — CloudMail/Cloud Mail API（自动从平台获取域名并随机生成邮箱）
 #   "remail"            — Remail 开放 API（按项目下单并自动收取验证码）
-EMAIL_SOURCE = "outlook,cloudflare,generic_api,mailnest"
+EMAIL_SOURCE = "outlook"
 
 
 # ============================================================
