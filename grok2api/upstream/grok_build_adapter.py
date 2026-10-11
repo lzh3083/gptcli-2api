@@ -3202,10 +3202,11 @@ def _run_registration(
             cpa_storage = cpa_storage if isinstance(cpa_storage, dict) else {}
             codex_access_token = str(cpa_storage.get("access_token") or "").strip()
 
+            eff_type = "codex" if codex_access_token else "chatgpt"
             import_payload = {
                 "key": codex_access_token or access_token,
-                "type": "codex",
-                "cliproxyapi_type": "codex",
+                "type": eff_type,
+                "cliproxyapi_type": eff_type,
                 "auth_mode": "codex_oauth" if codex_access_token else "chatgpt_session",
                 "email": email,
                 "user_id": user_obj.get("id") or email,

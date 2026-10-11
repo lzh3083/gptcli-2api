@@ -970,7 +970,6 @@ def _bootstrap_authorize(
         "bootstrap authorize",
         lambda: session.get(auth_url, headers=headers, allow_redirects=True),
     )
-    session.rotate_document_navigation_id()
     logger.debug(f"[Codex] authorize 落点: {getattr(resp, 'url', '')}, status={getattr(resp, 'status_code', '')}")
 
 
@@ -1206,7 +1205,6 @@ def _follow_login_continue(session: BrowserSession, continue_url: str, state: st
             setattr(session, "_last_auth_url", url)
         headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/", user_initiated=True)
         resp = session.get(url, headers=headers, allow_redirects=False)
-        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, resp)
         loc = resp.headers.get("location") or resp.headers.get("Location")
         logger.debug(
@@ -1249,18 +1247,6 @@ def _try_password_mfa_login(
         return "not_applicable", None, initial_result or {}
 
     logger.info("[Codex] 账号存在注册密码，优先走密码登录：%s", email)
-    pwd_continue = _extract_continue_url(initial_result) or "https://auth.openai.com/log-in/password"
-    if pwd_continue.startswith("/"):
-        pwd_continue = "https://auth.openai.com" + pwd_continue
-    try:
-        nav_headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/log-in", user_initiated=True)
-        nav_headers["sec-fetch-site"] = "same-origin"
-        pwd_page_resp = session.get(pwd_continue, headers=nav_headers, allow_redirects=True)
-        session.rotate_document_navigation_id()
-        _cache_auth_session_metadata(session, pwd_page_resp)
-    except Exception as nav_exc:
-        logger.debug("[Codex] 导航 log-in/password 异常: %s", nav_exc)
-
     result = _password_verify(session, pwd)
     continue_url = _extract_continue_url(result)
     page_type = _page_type(result)
@@ -1271,18 +1257,7 @@ def _try_password_mfa_login(
         page_type = _page_type(result)
 
     if _is_email_otp_step(result) or page_type in {"email_verification", "email_otp_send"}:
-        logger.info("[Codex] 密码登录后服务端仍要求邮箱 OTP，切换到邮箱 OTP（导航 continue=%s）：%s", continue_url or "-", email)
-        if continue_url:
-            otp_nav_url = continue_url if continue_url.startswith("http") else ("https://auth.openai.com" + continue_url)
-            try:
-                otp_headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/log-in/password", user_initiated=True)
-                otp_headers["sec-fetch-site"] = "same-origin"
-                otp_resp = session.get(otp_nav_url, headers=otp_headers, allow_redirects=True)
-                session.rotate_document_navigation_id()
-                _cache_auth_session_metadata(session, otp_resp)
-                logger.info("[Codex] 邮箱 OTP 页面导航完成: status=%s, url=%s", getattr(otp_resp, "status_code", ""), getattr(otp_resp, "url", ""))
-            except Exception as otp_nav_exc:
-                logger.warning("[Codex] 导航邮箱 OTP continue_url 异常: %s", otp_nav_exc)
+        logger.info("[Codex] 密码登录后服务端仍要求邮箱 OTP，切换到邮箱 OTP：%s", email)
         return "email_otp", None, result
 
     callback_url = _follow_login_continue(session, continue_url, state) if continue_url else None
@@ -1352,23 +1327,18 @@ def _sleep_before_phone_retry(attempt: int, max_retries: int, *, prefix: str = "
     time.sleep(seconds)
 
 
-def _navigate_add_phone_page(session: BrowserSession, continue_url: str = "") -> bool:
+def _navigate_add_phone_page(session: BrowserSession) -> bool:
     """导航到 /add-phone 页面建立手机验证步骤状态。"""
-    target = continue_url or "https://auth.openai.com/add-phone"
-    if not target.startswith("http"):
-        target = "https://auth.openai.com" + target
     try:
         headers = session.get_auth_navigate_headers(
-            referer="https://auth.openai.com/email-verification",
+            referer="https://auth.openai.com/",
             user_initiated=True,
         )
-        headers["sec-fetch-site"] = "same-origin"
         resp = session.get(
-            target,
+            "https://auth.openai.com/add-phone",
             headers=headers,
             allow_redirects=True,
         )
-        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, resp)
         final_url = str(getattr(resp, "url", "") or "")
         logger.info(
@@ -1393,7 +1363,6 @@ def _navigate_phone_verification_page(session: BrowserSession, continue_url: str
             user_initiated=True,
         )
         resp = session.get(target, headers=headers, allow_redirects=True)
-        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, resp)
         logger.info(
             "[Codex] 导航 /phone-verification 状态: status=%s, url=%s",
@@ -2206,11 +2175,10 @@ def run_codex_oauth(
             message=f"账号已废（{exc.error_code}）",
         )
     except Exception as exc:
-        err_str = str(exc)
-        if (_is_cpa_callback_reauth_error(exc) or "invalid_auth_step" in err_str) and _cpa_reauth_round < 2:
+        if _is_cpa_callback_reauth_error(exc) and _cpa_reauth_round < 2:
             logger.warning(
-                "[Codex] 遇到会话失效/超时 (%s)，重新开启第 %s/2 轮全新 Codex 授权：%s",
-                err_str[:80], _cpa_reauth_round + 1, email,
+                "[Codex][CPA] callback 返回 Timeout waiting for OAuth callback，重新开启第 %s/2 轮 Codex 授权：%s",
+                _cpa_reauth_round + 1, email,
             )
             return run_codex_oauth(
                 email,
