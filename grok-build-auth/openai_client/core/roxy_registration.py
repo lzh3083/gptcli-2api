@@ -903,7 +903,14 @@ def _submit_email_via_browser_nextauth(driver, email: str) -> dict:
     except Exception:
         current = ""
 
-    did = str(uuid.uuid4())
+    try:
+        cookie_did = driver.execute_script(r"""
+        const m = document.cookie.match(/(?:^|;\s*)oai-did=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+        """) or ""
+    except Exception:
+        cookie_did = ""
+    did = str(cookie_did).strip() or str(uuid.uuid4())
     auth_log_id = str(uuid.uuid4())
     old_script_timeout = int(getattr(_cfg, "ROXY_SELENIUM_TIMEOUT", 90) or 90)
     try:
@@ -1067,12 +1074,10 @@ def _wait_email_submit_next_state(driver, email: str, timeout: int = 18) -> str:
                 if (
                     "/auth/login" in url
                     and "email=" in url
-                    and now - cleared_seen_at >= 9.0
-                    and not getattr(driver, "_nextauth_fallback_tried", False)
+                    and now - cleared_seen_at >= 14.0
                 ):
-                    setattr(driver, "_nextauth_fallback_tried", True)
-                    na_res = _submit_email_via_browser_nextauth(driver, email)
-                    logger.info("%s 邮箱提交后仍停留在 login?email，触发浏览器内 NextAuth signin 跳转：%s", _log_prefix(driver), na_res)
+                    recover2 = _recover_email_submit_if_stuck(driver, email)
+                    logger.info("%s 邮箱提交后仍停留在 login?email (14s)，二次原生补交表单：%s", _log_prefix(driver), recover2)
                 if now - cleared_seen_at >= debounce:
                     return "email_cleared"
             else:
