@@ -476,6 +476,14 @@ def run_openai_registration(
     except Exception as exc:
         err_msg = str(exc)
         logger.error(f"[注册失败] {email}: {err_msg}", exc_info=True)
+        try:
+            from core.email_provider import release_email, release_unconsumed_email
+            if not create_acknowledged:
+                release_unconsumed_email(email, note=f"pre_register_fail: {err_msg[:120]}")
+            else:
+                release_email(email, status="failed", note=f"post_register_fail: {err_msg[:120]}")
+        except Exception as rel_exc:
+            logger.warning(f"[注册失败] 释放邮箱状态异常 ({email}): {rel_exc}")
         return {
             "success": False,
             "email": email,

@@ -175,6 +175,7 @@ def _codex_result(
     file_path: str | None = None,
     callback_url: str | None = None,
     message: str = "",
+    storage: dict | None = None,
 ) -> dict:
     """构造与 flow_trigger._flow_result 同形态的结构化结果。"""
     return {
@@ -185,6 +186,7 @@ def _codex_result(
         "file_path": file_path,
         "callback_url": callback_url,
         "message": message,
+        "storage": storage or {},
     }
 
 
@@ -1350,6 +1352,29 @@ def _navigate_add_phone_page(session: BrowserSession) -> bool:
         return False
 
 
+def _navigate_phone_verification_page(session: BrowserSession, continue_url: str = "") -> bool:
+    """短信发送成功后导航到 /phone-verification 页面刷新会话状态。"""
+    target = continue_url or "https://auth.openai.com/phone-verification"
+    if not target.startswith("http"):
+        target = "https://auth.openai.com" + target
+    try:
+        headers = session.get_auth_navigate_headers(
+            referer="https://auth.openai.com/add-phone",
+            user_initiated=True,
+        )
+        resp = session.get(target, headers=headers, allow_redirects=True)
+        _cache_auth_session_metadata(session, resp)
+        logger.info(
+            "[Codex] 导航 /phone-verification 状态: status=%s, url=%s",
+            getattr(resp, "status_code", ""),
+            getattr(resp, "url", ""),
+        )
+        return int(getattr(resp, "status_code", 0) or 0) < 400
+    except Exception as exc:
+        logger.warning("[Codex] 导航 /phone-verification 异常: %s", exc)
+        return False
+
+
 def _do_phone_verification(session: BrowserSession, *, proactive: bool = False) -> dict:
     """
     用接码平台拿号 → add-phone/send 发短信（注入 Sentinel PoW） → 收码 → phone-otp/validate（注入 Sentinel PoW）。
@@ -1410,8 +1435,10 @@ def _do_phone_verification(session: BrowserSession, *, proactive: bool = False) 
                     _navigate_add_phone_page(session)
                     continue
 
-                # 通知平台短信已发出（status=1）
+                # 通知平台短信已发出（status=1）并导航到 /phone-verification 页面刷新会话元数据
                 sms_provider.set_status(activation_id, 1, http=http)
+                send_json = _resp_json(send_resp) if send_resp.status_code == 200 else {}
+                _navigate_phone_verification_page(session, _extract_continue_url(send_json))
 
                 # 定时轮询接码平台获取短信。wait_for_sms_code 内部按 SMS_POLL_INTERVAL 轮询，
                 # 最长等待 SMS_CODE_WAIT；超时立即取消当前号并换号。
@@ -2134,6 +2161,7 @@ def run_codex_oauth(
             file_path=str(path),
             callback_url=callback_url,
             message=f"plan={id_claims.get('plan_type') or 'unknown'}",
+            storage=storage,
         )
     except AccountUnusableError as exc:
         logger.warning(f"[Codex] 账号已废（{exc.error_code}）：{email}")

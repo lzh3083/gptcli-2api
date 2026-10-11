@@ -10,7 +10,7 @@ from config.env_loader import env_str, apply_env_overrides
 
 
 # 是否启用 Codex OAuth 授权（False = 跳过，不影响注册结果）
-ENABLE_CODEX: bool = False
+ENABLE_CODEX: bool = True
 
 # Codex OAuth 客户端 ID（固定值，来自 CLIProxyAPI openai_auth.go:27 ClientID）
 CODEX_CLIENT_ID: str = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -45,7 +45,7 @@ CODEX_REQUEST_TIMEOUT: int = 30
 # ============================================================
 
 # 注册成功后是否自动跑 Codex 授权（True=自动，False=跳过）
-ENABLE_CODEX_AUTO: bool = False
+ENABLE_CODEX_AUTO: bool = True
 
 # Codex OAuth 授权驱动：
 #   "protocol" = 原有 curl_cffi 协议授权

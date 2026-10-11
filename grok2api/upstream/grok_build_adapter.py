@@ -3051,7 +3051,7 @@ def _run_registration(
                     up_pass = str(sess.get("novproxy_up_pass") or "").strip()
                     region = str(sess.get("novproxy_up_region") or sess.get("novproxy_region") or "AUTO").strip()
                     if region.upper() in ("AUTO", "*", "ANY", "ALL"):
-                        region = "JP"
+                        region = "SG"
                     time_mins = str(sess.get("novproxy_up_time") or "60").strip()
                     if "-region-" in up_user:
                         up_user = up_user.split("-region-")[0].strip()
@@ -3066,7 +3066,7 @@ def _run_registration(
                         api_base = str(sess.get("novproxy_api") or "https://white.novproxy.com/white/api").strip()
                         region = str(sess.get("novproxy_region") or "AUTO").strip()
                         if region.upper() in ("AUTO", "*", "ANY", "ALL"):
-                            region = "JP"
+                            region = "SG"
                         minutes = int(sess.get("novproxy_minutes") or 60)
                         update("proxy_extract", f"正在从 NovProxy 提取实时动态住宅代理 ({region})...")
                         nodes = novproxy.fetch_nodes(
@@ -3161,9 +3161,10 @@ def _run_registration(
                 return code_str
 
             update("starting", f"开始 ChatGPT 协议注册: {email}")
+            from openai_client.config import codex as _codex_cfg
             enable_codex_val = bool(
-                sess.get("enable_codex", False)
-                or (os.environ.get("ENABLE_CODEX_AUTO", "").strip().lower() in ("1", "true", "yes"))
+                sess.get("enable_codex", getattr(_codex_cfg, "ENABLE_CODEX_AUTO", True))
+                or (os.environ.get("ENABLE_CODEX_AUTO", "1").strip().lower() in ("1", "true", "yes"))
             )
             ores = run_openai_registration(
                 email=email,

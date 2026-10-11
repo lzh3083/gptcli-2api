@@ -18,11 +18,11 @@ import urllib.request
 from typing import Any
 
 # OpenAI 模型官方主力部署与低延迟支持国家列表（按优先级推荐）
-PREFERRED_MODEL_COUNTRIES = ["JP", "US", "SG", "GB", "DE", "FR", "CA", "AU", "KR", "NL"]
+PREFERRED_MODEL_COUNTRIES = ["SG", "JP", "US", "GB", "DE", "FR", "CA", "AU", "KR", "NL"]
 
-# 默认通用时区与语言（未识别时安全兜底，优先模型主力部署国 JP / US）
-DEFAULT_TIMEZONE = "Asia/Tokyo"
-DEFAULT_LOCALE = "ja-JP"
+# 默认通用时区与语言（未识别时安全兜底，优先新加坡 SG）
+DEFAULT_TIMEZONE = "Asia/Singapore"
+DEFAULT_LOCALE = "en-SG"
 
 # 全球 40+ 常见国家代码 -> 官方权威时区、系统 Locale 与 Accept-Language 映射表
 _COUNTRY_PRESETS = {
