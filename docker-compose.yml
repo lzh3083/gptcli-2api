@@ -115,9 +115,9 @@ services:
       retries: 12
       start_period: 90s
     volumes:
-      - ./bin:/app/bin
       - ./grok2api:/app/grok2api
       - ./grok-build-auth:/app/grok-build-auth
+      - ./scripts:/app/scripts
       - ./data:/app/data
       - ./turnstile-solver/logs:/app/turnstile-solver/logs
       # In-container hot-update: docker CLI talks to host docker daemon.
