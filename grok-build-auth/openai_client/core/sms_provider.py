@@ -142,7 +142,7 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
         service_code = "dr"
-    raw_country = str(country or _cfg.SMS_COUNTRY or "6,16").strip()
+    raw_country = str(country or _cfg.SMS_COUNTRY or "52,7,10,16").strip()
     params = {
         "action": "getNumberV2" if bool(getattr(_cfg, "SMSBOWER_USE_V2", True)) else "getNumber",
         "service": service_code,
