@@ -76,10 +76,14 @@ class CloakElement:
             else:
                 self.handle.fill("", timeout=10000)
         except Exception:
-            # 部分非 input 元素不支持 fill，回退键盘清空。
-            self.click()
-            self.page.keyboard.press("Meta+A")
-            self.page.keyboard.press("Backspace")
+            try:
+                self._eval(
+                    "el => { el.focus(); el.value = ''; "
+                    "el.dispatchEvent(new Event('input', {bubbles:true})); "
+                    "el.dispatchEvent(new Event('change', {bubbles:true})); }"
+                )
+            except Exception:
+                pass
 
     @property
     def tag_name(self) -> str:
@@ -89,27 +93,45 @@ class CloakElement:
             return ""
 
     def send_keys(self, *values: str) -> None:
-        # 兼容 Selenium: el.send_keys(Keys.COMMAND, 'a')。
+        # 兼容 Selenium: el.send_keys(Keys.COMMAND, 'a') / Keys.BACKSPACE / 逐字符追加输入。
+        # 注意：绝不能用 locator.fill(text)，因为 fill 会清空已有内容导致逐字符输入只剩最后一个字符！
         text = "".join(str(v or "") for v in values)
+        if not text:
+            return
         lower = text.lower()
         try:
-            self.click()
+            self._eval("el => { if (document.activeElement !== el) el.focus(); }")
         except Exception:
-            pass
-        if "\ue03d" in text or "\ue009" in text or "command" in lower or "control" in lower:
-            # Selenium Keys.CONTROL/COMMAND 编码可能传入私有区字符；这里按全选处理。
             try:
-                self.page.keyboard.press("Meta+A")
+                self.click()
             except Exception:
+                pass
+        if "\ue03d" in text or "\ue009" in text or "command" in lower or "control" in lower:
+            try:
                 self.page.keyboard.press("Control+A")
+            except Exception:
+                self.page.keyboard.press("Meta+A")
             return
-        try:
-            if self.locator is not None:
-                self.locator.fill(text, timeout=10000)
-            else:
-                self.handle.fill(text, timeout=10000)
-        except Exception:
-            self.page.keyboard.type(text, delay=35)
+        if text == "\ue003":  # Keys.BACKSPACE
+            try:
+                self.clear()
+            except Exception:
+                self.page.keyboard.press("Backspace")
+            return
+        if text == "\ue017":  # Keys.DELETE
+            self.page.keyboard.press("Delete")
+            return
+        if text in ("\ue007", "\ue006"):  # Keys.ENTER / Keys.RETURN
+            self.page.keyboard.press("Enter")
+            return
+        if text == "\ue004":  # Keys.TAB
+            self.page.keyboard.press("Tab")
+            return
+        # 过滤掉其它残留 Selenium 私有区控制符后按键盘追加输入
+        clean_text = "".join(ch for ch in text if not ("\ue000" <= ch <= "\uf8ff"))
+        if not clean_text:
+            return
+        self.page.keyboard.type(clean_text)
 
     def get_attribute(self, name: str) -> str | None:
         try:
