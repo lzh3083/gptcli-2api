@@ -12,7 +12,7 @@ from config.env_loader import env_str, apply_env_overrides
 
 # True: REGISTER_EMAIL 留空时从 Outlook 账号池自动获取邮箱，OTP 自动收取
 # False: 走人工输入邮箱 + 人工填 OTP 的流程
-USE_EMAIL_SERVICE = False
+USE_EMAIL_SERVICE = True
 
 # 可选值（也可以用英文逗号配置多个，按顺序兜底，例如 "outlook,generic_api,mailnest,remail"）：
 #   "outlook"           — 外购 Outlook 账号池 + mail.chatai.codes 远端取信
@@ -36,8 +36,8 @@ OUTLOOK_ACCOUNTS_FILE = "用于注册的邮箱.txt"
 # Outlook 取件模式：
 #   "auto"   = 先用远端 mail.chatai.codes；远端 402/DEPLOYMENT_DISABLED 时自动切 Microsoft Graph 直连
 #   "remote" = 只用远端 mail.chatai.codes
-#   "direct" = 只用 Microsoft Graph 直连（使用 clientId + refreshToken 换 access_token）
-OUTLOOK_FETCH_MODE = "auto"
+#   "direct" = 只用 Microsoft Graph + IMAP XOAUTH2 本地直连（使用 clientId + refreshToken 换 access_token）
+OUTLOOK_FETCH_MODE = "direct"
 
 # 取邮件 API 的根 URL（远端模式使用）
 OUTLOOK_API_BASE = "https://mail.chatai.codes"

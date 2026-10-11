@@ -113,6 +113,8 @@ def normalize_mail_provider(provider: str | None, *, base_url: str | None = None
         return "cloudmail"
     if p in {"tempmail", "tempmail.lol", "tempmaillol", "tempmail_lol", "lol", "tmlol"}:
         return "tempmail"
+    if p in {"outlook", "hotmail", "microsoft", "msmail"}:
+        return "outlook"
     if p in {"moemail", "moe", "moe-mail"}:
         return "moemail"
     base = (base_url or "").strip().lower()

@@ -71,7 +71,23 @@ def _finalize_registration_session(
                 f"[登录态] 完成 OAuth 回调并拉取 Token：{email} "
                 f"(尝试 {attempt}/{_FINALIZE_SESSION_MAX_ATTEMPTS})"
             )
-            follow_oauth_callback(session, continue_url, referer=callback_referer)
+            from core.codex_oauth import _do_phone_verification, _extract_continue_url, _is_phone_step
+            if _is_phone_step({"url": continue_url}):
+                logger.info(f"[登录态] 注册回调前命中手机验证步，开始接码验证：{email}")
+                phone_res = _do_phone_verification(session, proactive=False)
+                continue_url = _extract_continue_url(phone_res) or continue_url
+                callback_referer = "https://auth.openai.com/phone-verification"
+
+            landed_url = follow_oauth_callback(session, continue_url, referer=callback_referer)
+            if _is_phone_step({"url": landed_url}):
+                logger.info(f"[登录态] OAuth 回调重定向落入手机验证页 ({landed_url})，开始接码验证：{email}")
+                phone_res = _do_phone_verification(session, proactive=False)
+                phone_continue = _extract_continue_url(phone_res)
+                if phone_continue:
+                    continue_url = phone_continue
+                    landed_url = follow_oauth_callback(
+                        session, continue_url, referer="https://auth.openai.com/phone-verification"
+                    )
             human_delay("post_auth")
             session_info = fetch_session(session)
             access_token = session_info.get("accessToken")

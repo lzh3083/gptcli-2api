@@ -360,17 +360,17 @@ def import_outlook_from_file(path: str | Path | None = None) -> tuple[int, int]:
 
 
 def import_outlook_from_text(text: str) -> tuple[int, int]:
-    """直接给一段多行文本（粘贴用），导入 DB。"""
+    """直接给一段多行文本（粘贴用），导入 DB。支持 ---- 或 ==== 分隔（4段或6段）。"""
     from core.db import import_outlook_accounts
     records = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        parts = line.split("====")
-        if len(parts) != 4:
+        parts = line.split("----") if "----" in line else line.split("====")
+        if len(parts) not in (4, 6):
             continue
-        email, password, client_id, refresh_token = (p.strip() for p in parts)
+        email, password, client_id, refresh_token = (p.strip() for p in parts[:4])
         records.append({
             "email": email, "password": password,
             "client_id": client_id, "refresh_token": refresh_token,

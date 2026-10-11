@@ -1331,6 +1331,46 @@ def _make_email_receiver(
 
     base = (base_url or MOEMAIL_BASE_URL or "").rstrip("/")
     prov = normalize_mail_provider(mail_provider, base_url=base)
+    prefer_outlook = os.environ.get("PREFER_OUTLOOK_POOL", "1").strip().lower() in ("1", "true", "yes")
+    use_outlook = prov == "outlook"
+    if not use_outlook and prefer_outlook:
+        try:
+            ensure_xconsole()
+            from openai_client.core.db import outlook_pool_summary as _ops
+            if int(_ops().get("available", 0) or 0) > 0:
+                use_outlook = True
+        except Exception:
+            pass
+    if use_outlook:
+        ensure_xconsole()
+        from openai_client.core.outlook_client import pick_account as _pick_outlook, fetch_latest_otp as _fetch_outlook_otp
+        acc = _pick_outlook()
+        address = acc.email
+
+        class _OutlookMailReceiver:
+            def __init__(self, email: str):
+                self.email = email
+                self.email_id = email
+                self.provider = "outlook"
+
+            def wait_for_code(
+                self,
+                timeout: float = 120,
+                *,
+                should_cancel=None,
+                poll_interval: float | None = None,
+                on_tick=None,
+                after_ts: float | None = None,
+            ) -> str:
+                return _fetch_outlook_otp(
+                    self.email,
+                    after_ts=after_ts,
+                    max_wait=int(timeout or 120),
+                    poll_interval=int(max(2.0, float(poll_interval or 3.0))),
+                )
+
+        return address, _OutlookMailReceiver(address)
+
     key = (api_key or MOEMAIL_API_KEY or "").strip()
     # GPTMail allows empty key (public gpt-test). YYDS/MoeMail/CF require a key.
     if not key and prov not in {"tempmail"}:

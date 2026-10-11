@@ -60,7 +60,7 @@ services:
       GROK2API_REASONING_COMPAT: "off"
       GROK2API_STORE_BACKEND: "hybrid"
       GROK2API_REG_ENGINE: "openai"
-      SMS_COUNTRY: "${SMS_COUNTRY:-16,73,117}"
+      SMS_COUNTRY: "${SMS_COUNTRY:-16,6,73,117}"
       SMS_PROVIDER: "${SMS_PROVIDER:-smsbower}"
       # Multi-worker: default 2 (enough for hybrid; override via .env for large hosts)
       GROK2API_WORKERS: "${GROK2API_WORKERS:-2}"

@@ -71,3 +71,8 @@ config.json
 cpa_auths/
 *.sqlite3
 turb.sqlite3
+output/
+**/*用于注册的*.txt
+**/*用于注册的*.json
+**/*注册成功*.txt
+**/*注册成功*.json

@@ -912,6 +912,8 @@ def _cache_auth_session_metadata(session: BrowserSession, resp) -> None:
 
 def _phone_failure_reason(text: str, status_code: int | None = None) -> str:
     low = str(text or '').lower()
+    if any(k in low for k in ('invalid_auth_step', 'invalid auth step', 'invalid_state')):
+        return 'invalid_auth_step'
     if 'whatsapp' in low or 'whats app' in low:
         return 'whatsapp_channel'
     if any(k in low for k in (
@@ -1184,10 +1186,11 @@ def _complete_mfa_if_required(session: BrowserSession, email: str, result: dict 
 
 def _follow_login_continue(session: BrowserSession, continue_url: str, state: str) -> str | None:
     """
-    密码/MFA 成功后的 continue URL 可能直接跳 callback，也可能只把会话推进到
-    Codex consent/workspace 页面。这里只负责跟随重定向并保留 Cookie：
+    密码/MFA/OTP 成功后的 continue URL 可能直接跳 callback，也可能跳到 /add-phone 手机验证页
+    或 Codex consent/workspace 页面。这里负责跟随重定向并保留 Cookie：
+      - 命中 add-phone / phone-verification：加载页面并设置 session._landed_phone_step = True，返回 None
       - 命中 localhost callback：返回 callback URL
-      - 停在 200 HTML/无 Location：返回 None，后续继续 workspace/select
+      - 停在 200 HTML/无 Location：返回 None，后续继续手机验证或 workspace/select
     """
     if not continue_url:
         return None
@@ -1195,14 +1198,22 @@ def _follow_login_continue(session: BrowserSession, continue_url: str, state: st
     for hop in range(_MAX_REDIRECTS):
         if _is_redirect_uri(url):
             return url
+        if _is_phone_step({"url": url}):
+            setattr(session, "_landed_phone_step", True)
+            setattr(session, "_last_auth_url", url)
         headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/", user_initiated=True)
         resp = session.get(url, headers=headers, allow_redirects=False)
+        _cache_auth_session_metadata(session, resp)
         loc = resp.headers.get("location") or resp.headers.get("Location")
         logger.debug(
-            "[Codex] 登录 continue 跟随 hop %s: status=%s, location=%s",
-            hop, getattr(resp, "status_code", ""), loc,
+            "[Codex] 登录 continue 跟随 hop %s: url=%s, status=%s, location=%s",
+            hop, url, getattr(resp, "status_code", ""), loc,
         )
+        if _is_phone_step({"url": url, "location": loc or ""}):
+            setattr(session, "_landed_phone_step", True)
+            setattr(session, "_last_auth_url", loc or url)
         if not loc:
+            setattr(session, "_last_auth_url", url)
             return None
         url = loc if loc.startswith("http") else ("https://auth.openai.com" + loc)
     raise RuntimeError(f"[Codex] 登录 continue 跟随超过 {_MAX_REDIRECTS} 跳")
@@ -1314,20 +1325,42 @@ def _sleep_before_phone_retry(attempt: int, max_retries: int, *, prefix: str = "
     time.sleep(seconds)
 
 
-def _do_phone_verification(session: BrowserSession) -> dict:
-    """
-    用接码平台拿号 → add-phone/send 发短信 → 收码 → phone-otp/validate。
-    一个号收不到码或被 OpenAI 拒就取消换号，最多 SMS_MAX_RETRIES 次（热加载）。
+def _navigate_add_phone_page(session: BrowserSession) -> bool:
+    """导航到 /add-phone 页面建立手机验证步骤状态。"""
+    try:
+        headers = session.get_auth_navigate_headers(
+            referer="https://auth.openai.com/",
+            user_initiated=True,
+        )
+        resp = session.get(
+            "https://auth.openai.com/add-phone",
+            headers=headers,
+            allow_redirects=True,
+        )
+        _cache_auth_session_metadata(session, resp)
+        final_url = str(getattr(resp, "url", "") or "")
+        logger.info(
+            "[Codex] 导航 /add-phone 状态: status=%s, url=%s",
+            getattr(resp, "status_code", ""),
+            final_url,
+        )
+        return int(getattr(resp, "status_code", 0) or 0) < 400
+    except Exception as exc:
+        logger.warning("[Codex] 导航 /add-phone 异常: %s", exc)
+        return False
 
-    实际平台适配在 core.sms_provider：
-        - SMS_PROVIDER="grizzly"：GrizzlySMS handler_api.php
-        - SMS_PROVIDER="l"：L_API.md 的 /take-phone 和 /fetch-code JSON 接口
+
+def _do_phone_verification(session: BrowserSession, *, proactive: bool = False) -> dict:
+    """
+    用接码平台拿号 → add-phone/send 发短信（注入 Sentinel PoW） → 收码 → phone-otp/validate（注入 Sentinel PoW）。
+    一个号收不到码或被 OpenAI 拒就取消换号，最多 SMS_MAX_RETRIES 次（热加载）。
     """
     http = sms_provider._http()
     max_retries = _cfg.SMS_MAX_RETRIES
     provider = _sms_provider_name()
-    raw_countries = str(getattr(_cfg, "SMS_COUNTRY", "6") or "6").replace(";", ",").split(",")
-    countries = [c.strip() for c in raw_countries if c.strip()] or ["6"]
+    raw_countries = str(getattr(_cfg, "SMS_COUNTRY", "16,6,73,117") or "16,6,73,117").replace(";", ",").split(",")
+    countries = [c.strip() for c in raw_countries if c.strip()] or ["16", "6", "73", "117"]
+    _navigate_add_phone_page(session)
     try:
         last_err = None
         for attempt in range(1, max_retries + 1):
@@ -1340,23 +1373,41 @@ def _do_phone_verification(session: BrowserSession) -> dict:
                     f"provider={provider}, country={target_country}, activation_id={activation_id}, 号码=+{phone}"
                 )
 
+                # 获取 Sentinel PoW 防欺诈签名（绕过 fraud_guard 400）
+                send_sentinel_header, send_so_header = None, None
+                try:
+                    sentinel_resp = request_sentinel_token(session, "authorize_continue")
+                    send_sentinel_header, send_so_header = build_sentinel_header(
+                        session, sentinel_resp, "authorize_continue"
+                    )
+                except Exception as s_exc:
+                    logger.warning(f"[Codex] add-phone/send 获取 sentinel 失败(降级无签名请求): {s_exc}")
+
                 # 发短信
                 send_resp = _post_json(
                     session,
                     "https://auth.openai.com/api/accounts/add-phone/send",
                     {"phone_number": f"+{phone}", "channel": "sms"},
                     referer="https://auth.openai.com/add-phone",
+                    sentinel_header=send_sentinel_header,
+                    so_header=send_so_header,
                 )
                 send_text = _response_text(send_resp)
                 send_reason = _phone_failure_reason(send_text, send_resp.status_code)
                 if send_resp.status_code not in (200, 204) or send_reason:
+                    sms_provider.cancel(activation_id, http)
+                    if send_reason == "invalid_auth_step" and proactive:
+                        logger.info(
+                            "[Codex] 主动触发手机验证返回 invalid_auth_step（当前会话状态无需/不支持强制插入手机步），已释放号码并继续后续授权"
+                        )
+                        return {}
                     # 号码无效 / 无法发送 / WhatsApp 通道 / 限流等 → 释放当前号并换号。
                     logger.warning(
                         f"[Codex] add-phone/send 未成功 reason={send_reason or 'unknown'}, "
                         f"status={send_resp.status_code}: {send_text[:240]}，换号重试"
                     )
-                    sms_provider.cancel(activation_id, http)
                     _sleep_before_phone_retry(attempt, max_retries)
+                    _navigate_add_phone_page(session)
                     continue
 
                 # 通知平台短信已发出（status=1）
@@ -1374,7 +1425,18 @@ def _do_phone_verification(session: BrowserSession) -> dict:
                     logger.warning(f"[Codex] 号码 +{phone} 在 {_cfg.SMS_CODE_WAIT}s 内未收到短信，取消换号")
                     sms_provider.cancel(activation_id, http)
                     _sleep_before_phone_retry(attempt, max_retries)
+                    _navigate_add_phone_page(session)
                     continue
+
+                # 获取验证阶段的 Sentinel PoW 签名
+                val_sentinel_header, val_so_header = None, None
+                try:
+                    val_sentinel_resp = request_sentinel_token(session, "authorize_continue")
+                    val_sentinel_header, val_so_header = build_sentinel_header(
+                        session, val_sentinel_resp, "authorize_continue"
+                    )
+                except Exception as s_exc:
+                    logger.warning(f"[Codex] phone-otp/validate 获取 sentinel 失败(降级无签名请求): {s_exc}")
 
                 # 验手机码
                 val_resp = _post_json(
@@ -1382,6 +1444,8 @@ def _do_phone_verification(session: BrowserSession) -> dict:
                     "https://auth.openai.com/api/accounts/phone-otp/validate",
                     {"code": sms_code},
                     referer="https://auth.openai.com/phone-verification",
+                    sentinel_header=val_sentinel_header,
+                    so_header=val_so_header,
                 )
                 if val_resp.status_code != 200:
                     val_text = _response_text(val_resp)
@@ -1392,6 +1456,7 @@ def _do_phone_verification(session: BrowserSession) -> dict:
                     )
                     sms_provider.cancel(activation_id, http)
                     _sleep_before_phone_retry(attempt, max_retries)
+                    _navigate_add_phone_page(session)
                     continue
 
                 # 成功
@@ -1957,11 +2022,29 @@ def run_codex_oauth(
             early_callback_url = _follow_login_continue(
                 session, continue_url, state
             ) if continue_url else early_callback_url
+        elif not password_login_done and not _is_phone_step(auth_result):
+            otp_continue = _extract_continue_url(auth_result)
+            if otp_continue:
+                early_callback_url = _follow_login_continue(
+                    session, otp_continue, state
+                ) or early_callback_url
 
-        # 5. 是否需要手机号也完全由 Auth 返回决定，不再因为走过 OTP/密码而固定执行。
-        if _is_phone_step(auth_result):
-            logger.info("[Codex] Auth 明确要求手机号验证，开始接码：%s", email)
-            phone_result = _do_phone_verification(session)
+        # 5. 手机号短信验证：当 Auth 明确要求（或重定向命中 /add-phone），或者开启 FORCE_PHONE_VERIFICATION 时执行。
+        auth_requires_phone = _is_phone_step(auth_result) or bool(getattr(session, "_landed_phone_step", False))
+        force_phone = bool(getattr(_cfg, "FORCE_PHONE_VERIFICATION", True))
+        if auth_requires_phone:
+            logger.info("[Codex] Auth 要求手机号验证，开始接码：%s", email)
+            phone_result = _do_phone_verification(session, proactive=False)
+            phone_continue = _extract_continue_url(phone_result)
+            if phone_continue:
+                early_callback_url = _follow_login_continue(
+                    session, phone_continue, state
+                ) or early_callback_url
+                auth_result = phone_result
+            human_delay("post_auth")
+        elif force_phone:
+            logger.info("[Codex] FORCE_PHONE_VERIFICATION=True，主动发起手机号绑定与短信验证：%s", email)
+            phone_result = _do_phone_verification(session, proactive=True)
             phone_continue = _extract_continue_url(phone_result)
             if phone_continue:
                 early_callback_url = _follow_login_continue(
