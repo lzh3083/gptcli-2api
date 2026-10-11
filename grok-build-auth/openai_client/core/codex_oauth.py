@@ -1699,7 +1699,8 @@ def build_codex_storage(token_resp: dict, id_claims: dict) -> dict:
     expires_in = token_resp.get("expires_in", 0) or 0
     expired_dt = datetime.now(timezone.utc) + _timedelta_seconds(expires_in)
     last_refresh_dt = datetime.now(timezone.utc)
-    return {
+    cpa_proxy_url = os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080").strip()
+    storage = {
         "id_token": token_resp.get("id_token", ""),
         "access_token": token_resp.get("access_token", ""),
         "refresh_token": token_resp.get("refresh_token", ""),
@@ -1709,6 +1710,9 @@ def build_codex_storage(token_resp: dict, id_claims: dict) -> dict:
         "type": "codex",
         "expired": expired_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if cpa_proxy_url:
+        storage["proxy_url"] = cpa_proxy_url
+    return storage
 
 
 def _timedelta_seconds(seconds: int):

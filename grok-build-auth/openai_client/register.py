@@ -517,6 +517,7 @@ def run_openai_registration(
             data_root = os.environ.get("GROK2API_DATA_DIR") or ("/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[2] / "data"))
             cpa_dir = Path(data_root) / "cpa_auth_files"
             cpa_dir.mkdir(parents=True, exist_ok=True)
+            cpa_proxy_url = os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080").strip()
             chatgpt_cpa_record = {
                 "access_token": access_token,
                 "email": email,
@@ -530,6 +531,8 @@ def run_openai_registration(
                 "totp_secret": totp_secret,
                 "cookies": cookies_dict,
             }
+            if cpa_proxy_url:
+                chatgpt_cpa_record["proxy_url"] = cpa_proxy_url
             chatgpt_file_path = cpa_dir / f"chatgpt-{email}.json"
             chatgpt_file_path.write_text(json.dumps(chatgpt_cpa_record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             cpa_chatgpt_file = str(chatgpt_file_path)

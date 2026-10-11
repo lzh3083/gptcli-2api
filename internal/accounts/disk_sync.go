@@ -87,6 +87,13 @@ func SyncCredentialToDisk(entry map[string]any) error {
 	if _, ok := doc["type"]; !ok {
 		doc["type"] = "codex"
 	}
+	if _, ok := doc["proxy_url"]; !ok {
+		cpaProxy := strings.TrimSpace(os.Getenv("CODEX_CPA_PROXY_URL"))
+		if cpaProxy == "" {
+			cpaProxy = "socks5h://warp-relay:1080"
+		}
+		doc["proxy_url"] = cpaProxy
+	}
 
 	if expFloat := ParseExpiresAt(entry["expires_at"], access); expFloat != nil && *expFloat > 0 {
 		expTime := time.Unix(int64(*expFloat), 0).UTC()
