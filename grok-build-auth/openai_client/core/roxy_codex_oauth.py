@@ -317,9 +317,9 @@ def _fill_mfa_challenge_if_present(driver, email: str, timeout: int = 15) -> boo
     return False
 
 
-def _fill_login_password_if_present(driver, email: str, timeout: int = 18) -> str | None:
+def _fill_login_password_if_present(driver, email: str, timeout: int = 18, password: str | None = None) -> str | None:
     """Codex OAuth 若账号有密码，优先在登录密码页输入密码。返回 next_step / email_otp / None。"""
-    password = _account_password_for_email(email)
+    password = str(password or _account_password_for_email(email) or "").strip()
     if not password:
         return None
     end = time.time() + timeout
@@ -373,7 +373,7 @@ def _fill_login_password_if_present(driver, email: str, timeout: int = 18) -> st
     return None
 
 
-def _fill_email_and_otp(driver, email: str, otp_provider, auth_url: str) -> None:
+def _fill_email_and_otp(driver, email: str, otp_provider, auth_url: str, password: str | None = None) -> None:
     otp_after_ts = time.time()
     logger.info("[Codex][Browser] 打开授权地址")
     logger.info("[Codex][Browser] 完整授权地址: %s", auth_url)
@@ -390,7 +390,7 @@ def _fill_email_and_otp(driver, email: str, otp_provider, auth_url: str) -> None
         human_delay("form")
         _submit_email_step(driver)
         logger.info("[Codex][Browser] 已提交邮箱，等待邮箱 OTP 页面")
-        pw_result = _fill_login_password_if_present(driver, email, timeout=18)
+        pw_result = _fill_login_password_if_present(driver, email, timeout=18, password=password)
         if pw_result == "next_step":
             if _is_mfa_challenge_page(driver):
                 _fill_mfa_challenge_if_present(driver, email, timeout=15)
@@ -423,7 +423,7 @@ def _fill_email_and_otp(driver, email: str, otp_provider, auth_url: str) -> None
             human_delay("form")
             _submit_email_step(driver)
             logger.info("[Codex][Browser] 已重新提交邮箱触发 OTP")
-            pw_result = _fill_login_password_if_present(driver, email, timeout=12)
+            pw_result = _fill_login_password_if_present(driver, email, timeout=12, password=password)
             if pw_result == "next_step":
                 if _is_mfa_challenge_page(driver):
                     _fill_mfa_challenge_if_present(driver, email, timeout=15)
@@ -1384,6 +1384,57 @@ def clear_roxy_browser_auth_state(driver) -> None:
     time.sleep(1.0)
     logger.info("[Codex][Browser] 注册窗口登录态清理完成，准备开始 Codex 授权")
 
+def _exchange_codex_token_in_browser(driver, code: str, code_verifier: str) -> dict | None:
+    """优先使用当前真实浏览器的同源 fetch 换取 Codex OAuth Token（共享同一住宅代理与 TLS 指纹）。"""
+    from core import codex_oauth as proto
+    try:
+        cur_url = str(getattr(driver, "current_url", "") or "")
+        if not cur_url.startswith("https://auth.openai.com"):
+            driver.get("https://auth.openai.com/robots.txt")
+        res = driver.execute_async_script(
+            r"""
+            const payload = a0;
+            const done = __cloak_done;
+            const body = new URLSearchParams(payload).toString();
+            fetch("https://auth.openai.com/oauth/token", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json"
+              },
+              body: body,
+              credentials: "include"
+            }).then(async (resp) => {
+              const text = await resp.text();
+              done({ok: resp.ok, status: resp.status, text: text});
+            }).catch((err) => {
+              done({ok: false, status: 0, error: String(err)});
+            });
+            """,
+            {
+                "grant_type": "authorization_code",
+                "client_id": proto._cfg.CODEX_CLIENT_ID,
+                "code": code,
+                "redirect_uri": proto._cfg.CODEX_REDIRECT_URI,
+                "code_verifier": code_verifier,
+            },
+        )
+        if isinstance(res, dict) and res.get("ok") and res.get("text"):
+            import json
+            token_resp = json.loads(res["text"])
+            if isinstance(token_resp, dict) and token_resp.get("access_token"):
+                logger.info(
+                    "[Codex][Browser] 浏览器内原生 fetch 换 token 成功，expires_in=%s access_token=%s...",
+                    token_resp.get("expires_in"),
+                    str(token_resp["access_token"])[:16],
+                )
+                return token_resp
+        logger.warning("[Codex][Browser] 浏览器内 fetch 换 token 未返回有效凭证，回退协议请求：%s", str(res)[:240])
+    except Exception as exc:
+        logger.warning("[Codex][Browser] 浏览器内 fetch 换 token 异常，回退协议请求：%s: %s", type(exc).__name__, str(exc)[:180])
+    return None
+
+
 def _run_roxy_codex_oauth_once(
     email: str,
     otp_provider=None,
@@ -1393,6 +1444,7 @@ def _run_roxy_codex_oauth_once(
     existing_opened=None,
     reuse_existing_profile: bool = False,
     clear_existing_state: bool = True,
+    password: str | None = None,
 ) -> dict:
     """指纹浏览器 Codex OAuth 入口。
 
@@ -1410,6 +1462,13 @@ def _run_roxy_codex_oauth_once(
 
     client = None if reuse_existing_profile else RoxyBrowserClient()
     opened = existing_opened if reuse_existing_profile else client.open_profile()
+    if not proxy and opened is not None:
+        try:
+            raw_open = getattr(opened, "raw", None) or {}
+            if isinstance(raw_open, dict):
+                proxy = str(raw_open.get("proxy_pool_target") or raw_open.get("proxy") or "").strip() or None
+        except Exception:
+            pass
     browser_kind_token = _CODEX_BROWSER_KIND.set(_detect_browser_kind(opened))
     driver = existing_driver if reuse_existing_profile else None
     owns_driver = not reuse_existing_profile
@@ -1442,7 +1501,7 @@ def _run_roxy_codex_oauth_once(
         if reuse_existing_profile and clear_existing_state:
             clear_roxy_browser_auth_state(driver)
 
-        _fill_email_and_otp(driver, email, otp_provider, auth_url)
+        _fill_email_and_otp(driver, email, otp_provider, auth_url, password=password)
         human_delay("api")
         logger.info("[Codex][Browser] 检查是否需要手机号验证")
         _do_phone_verification_if_present(driver)
@@ -1495,8 +1554,10 @@ def _run_roxy_codex_oauth_once(
 
         if not code_verifier:
             raise RuntimeError("[Codex][Browser] local 模式缺少 code_verifier")
-        session = proto.BrowserSession(proxy=proxy, fingerprint_seed=f"account:{email.lower()}")
-        token_resp = proto.exchange_codex_token(session, code, code_verifier)
+        token_resp = _exchange_codex_token_in_browser(driver, code, code_verifier)
+        if not token_resp:
+            session = proto.BrowserSession(proxy=proxy, fingerprint_seed=f"account:{email.lower()}")
+            token_resp = proto.exchange_codex_token(session, code, code_verifier)
         id_claims = proto._parse_id_token(token_resp.get("id_token", ""))
         effective_email = id_claims.get("email") or email
         storage = proto.build_codex_storage(token_resp, id_claims)
@@ -1507,6 +1568,7 @@ def _run_roxy_codex_oauth_once(
             email=effective_email,
             file_path=str(path),
             callback_url=callback_url,
+            storage=storage,
             message=f"{_codex_driver_name()} plan={id_claims.get('plan_type') or 'unknown'}",
         )
     except AccountUnusableError as exc:
@@ -1545,6 +1607,7 @@ def run_roxy_codex_oauth(
     existing_opened=None,
     reuse_existing_profile: bool = False,
     clear_existing_state: bool = True,
+    password: str | None = None,
 ) -> dict:
     """指纹浏览器 Codex OAuth 入口；CPA callback 409 timeout 时重新开启一轮授权。"""
     from core import codex_oauth as proto
@@ -1566,6 +1629,7 @@ def run_roxy_codex_oauth(
             existing_opened=existing_opened,
             reuse_existing_profile=reuse_existing_profile,
             clear_existing_state=clear_existing_state,
+            password=password,
         )
         last_result = result
         if result.get("ok"):

@@ -2,7 +2,9 @@
 """通过 CloakBrowser + Playwright 适配层执行 ChatGPT 注册。"""
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Callable
@@ -34,8 +36,27 @@ def run_cloak_registration(
     otp_code: str = None,
     batch_dir: Path | None = None,
     on_email_acquired: Callable[[str], None] | None = None,
+    password: str | None = None,
+    otp_provider: Callable[[str, float], str] | None = None,
+    on_step: Callable[[str, str], None] | None = None,
+    check_cancel: Callable[[], None] | None = None,
+    enable_codex: bool | None = None,
 ) -> dict:
     """CloakBrowser 自动化注册入口。"""
+    def _step(status: str, msg: str) -> None:
+        logger.info("[Cloak注册][%s] %s", status, msg)
+        if on_step:
+            try:
+                on_step(status, msg)
+            except Exception:
+                pass
+
+    def _cancel() -> None:
+        _check_manual_stop()
+        if check_cancel:
+            check_cancel()
+
+    effective_otp_provider = otp_provider or wait_for_otp
     driver = None
     opened = None
     create_acknowledged = False
@@ -44,7 +65,9 @@ def run_cloak_registration(
     data_saver: BrowserDataSaver | None = None
     network_traffic: dict | None = None
     try:
+        _step("browser_launch", f"启动 CloakBrowser 真实反检测浏览器: {email or '待分配'}")
         driver, opened = build_cloak_driver(proxy=proxy)
+        effective_proxy = ((opened.raw or {}).get("proxy_pool_target") if opened else None) or proxy or None
         try:
             traffic_tracker = PlaywrightTrafficTracker(driver.context, label="Cloak")
         except Exception as exc:
@@ -54,43 +77,51 @@ def run_cloak_registration(
         if traffic_tracker is not None:
             traffic_tracker.attach_data_saver(data_saver)
         data_saver.install_playwright(driver.context)
-        logger.info("[Cloak注册] 开始：%s，profile=%s", email, opened.profile_id)
+        logger.info("[Cloak注册] 开始：%s，profile=%s，proxy=%s", email, opened.profile_id, effective_proxy)
 
         otp_after_ts = time.time()
-        logger.info("[Cloak注册] 打开登录页：https://chatgpt.com/auth/login")
+        _step("navigate_login", "CloakBrowser 打开 https://chatgpt.com/auth/login")
         driver.get("https://chatgpt.com/auth/login")
         human_delay("navigate")
         _maybe_accept(driver)
-        _check_manual_stop()
+        _cancel()
 
         def _email_supplier_after_input() -> str:
             nonlocal email
-            _check_manual_stop()
+            _cancel()
             email = acquire_email_after_input(email)
             if on_email_acquired:
                 on_email_acquired(email)
             return email
 
+        _step("submit_email", f"填写并提交注册邮箱: {email or '自动领取'}")
         next_state = _submit_email_and_wait_next(
             driver,
             email,
             attempts=3,
             email_supplier=_email_supplier_after_input,
         )
-        _check_manual_stop()
+        _cancel()
 
         # 如果邮箱提交后直接进入验证码页，也尝试点击“使用密码继续”进入密码创建页；
         # _fill_password_page_if_present 会在设置成功后返回本次 OpenAI 注册密码。
+        _step("password_step", f"处理密码设置页 (state={next_state})")
         openai_password = _fill_password_page_if_present(driver, email, timeout=25)
-        _check_manual_stop()
+        effective_password = str(openai_password or password or "").strip()
+        if effective_password:
+            create_acknowledged = True
+        _cancel()
 
         current_otp = otp_code
         max_otp_attempts = 3
         for otp_attempt in range(1, max_otp_attempts + 1):
+            _cancel()
             if current_otp is None:
-                logger.info("[Cloak注册][OTP] 等待验证码：%s（第 %s/%s 次）", email, otp_attempt, max_otp_attempts)
+                _step("waiting_otp", f"等待接收 6 位邮箱验证码 ({email}, 第 {otp_attempt}/{max_otp_attempts} 次)")
                 try:
-                    current_otp = wait_for_otp(email, after_ts=otp_after_ts)
+                    current_otp = effective_otp_provider(email, after_ts=otp_after_ts)
+                except TypeError:
+                    current_otp = effective_otp_provider(email, otp_after_ts)
                 except Exception as exc:
                     if otp_attempt >= max_otp_attempts:
                         raise
@@ -106,7 +137,7 @@ def run_cloak_registration(
                     human_delay("api")
                     current_otp = None
                     continue
-            logger.info("[Cloak注册][OTP] 收到验证码：%s", current_otp)
+            _step("validating_otp", f"CloakBrowser 填写并提交验证码: {current_otp}")
             _clear_otp_inputs(driver)
             _type_otp(driver, current_otp)
             human_delay("otp_input")
@@ -117,6 +148,7 @@ def run_cloak_registration(
 
             outcome = _wait_after_email_otp_submit(driver, timeout=10)
             if outcome == "accepted":
+                create_acknowledged = True
                 break
             if otp_attempt >= max_otp_attempts:
                 raise RuntimeError("邮箱验证码连续错误/过期，已达到最大重试次数")
@@ -125,18 +157,52 @@ def run_cloak_registration(
             human_delay("api")
             current_otp = None
 
+        _step("about_you", f"CloakBrowser 填写个人资料 ({name}, {birthday})")
         profile_submitted = _complete_profile_page(driver, name, birthday, timeout=60)
         if profile_submitted:
             create_acknowledged = True
             human_delay("post_auth")
 
+        _step("fetch_session", "CloakBrowser 提取 ChatGPT 登录 Session 与 accessToken")
         session_info = _fetch_chatgpt_session(driver, timeout=120)
         access_token = session_info["accessToken"]
         logger.info("[Cloak注册] 已拿到 accessToken：%s", email)
 
+        cookies_dict = driver.get_cookies_dict() if hasattr(driver, "get_cookies_dict") else {}
+
         if _twofa_cfg.ENABLE_2FA:
             logger.warning("[Cloak注册] 当前 CloakBrowser 自动化路径暂不执行 2FA 设置，已跳过")
         totp_secret = None
+
+        cpa_chatgpt_file = ""
+        try:
+            data_root = os.environ.get("GROK2API_DATA_DIR") or (
+                "/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[3] / "data")
+            )
+            cpa_dir = Path(data_root) / "cpa_auth_files"
+            cpa_dir.mkdir(parents=True, exist_ok=True)
+            cpa_proxy_url = os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080").strip()
+            chatgpt_cpa_record = {
+                "access_token": access_token,
+                "email": email,
+                "type": "chatgpt",
+                "account_id": (session_info.get("account") or {}).get("id") or "",
+                "user_id": (session_info.get("user") or {}).get("id") or "",
+                "plan_type": (session_info.get("account") or {}).get("planType") or "free",
+                "expired": session_info.get("expires") or "",
+                "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "password": effective_password,
+                "totp_secret": totp_secret,
+                "cookies": cookies_dict,
+            }
+            if cpa_proxy_url:
+                chatgpt_cpa_record["proxy_url"] = cpa_proxy_url
+            chatgpt_file_path = cpa_dir / f"chatgpt-{email}.json"
+            chatgpt_file_path.write_text(json.dumps(chatgpt_cpa_record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            cpa_chatgpt_file = str(chatgpt_file_path)
+            logger.info("[Cloak注册][CPA] 已生成 ChatGPT CPA 凭证文件: %s", cpa_chatgpt_file)
+        except Exception as e:
+            logger.warning("[Cloak注册][CPA] 保存 ChatGPT 凭证文件异常: %s", e)
 
         codex_result = {
             "status": "skipped",
@@ -145,17 +211,21 @@ def run_cloak_registration(
         }
         try:
             from config import codex as _codex_cfg
-            if bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
+            should_run_codex = bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", True)) if enable_codex is None else bool(enable_codex)
+            if should_run_codex:
                 from core.roxy_codex_oauth import run_roxy_codex_oauth
-                logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=True，复用当前 CloakBrowser 窗口执行 Codex 授权")
-                _check_manual_stop()
+                _step("codex_oauth", "复用当前 CloakBrowser 窗口执行 Codex OAuth 授权与手机验证")
+                _cancel()
                 codex_result = run_roxy_codex_oauth(
                     email,
+                    otp_provider=effective_otp_provider,
+                    proxy=effective_proxy,
                     reuse_existing_profile=True,
                     existing_driver=driver,
                     existing_opened=opened,
                     force=True,
                     clear_existing_state=True,
+                    password=effective_password,
                 )
             else:
                 logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=False，注册后跳过 Codex OAuth")
@@ -173,26 +243,36 @@ def run_cloak_registration(
             access_token=access_token,
             totp_secret=totp_secret,
             email_source=resolve_email_source(email),
-            proxy_used=((opened.raw or {}).get("proxy_pool_target") if opened else None) or proxy or None,
+            proxy_used=effective_proxy,
             batch_dir=batch_dir,
             extra={
                 "user": session_info.get("user"),
                 "account": session_info.get("account"),
                 "expires": session_info.get("expires"),
                 "cloakbrowser": {"profile_id": opened.profile_id, "open_result": opened.raw},
-                "registration_password": openai_password,
+                "registration_password": effective_password,
                 "codex": codex_result,
                 "network_traffic": network_traffic,
             },
         )
+        cpa_primary_file = (
+            (codex_result.get("file_path") if isinstance(codex_result, dict) else None)
+            or cpa_chatgpt_file
+        )
         codex_ok = codex_result.get("ok") or codex_result.get("status") == "skipped"
+        if codex_ok:
+            _step("success", f"CloakBrowser 真实浏览器注册与 Codex 授权成功: {email}")
         return {
             "success": bool(codex_ok),
             "email": email,
+            "password": effective_password,
             "account_id": account_id,
             "access_token": access_token,
+            "session_info": session_info,
+            "cookies": cookies_dict,
             "totp_secret": totp_secret,
             "codex": codex_result,
+            "cpa_file": cpa_primary_file,
             "network_traffic": network_traffic,
             "error": None if codex_ok else f"Codex 未完成: {codex_result.get('message')}",
         }
@@ -208,14 +288,24 @@ def run_cloak_registration(
         logger.debug("[Cloak注册] 失败详情", exc_info=True)
         try:
             if email:
-                from core.email_provider import release_email
-                release_email(email, status="failed" if create_acknowledged else "available", note=f"Cloak注册失败: {str(exc)[:180]}")
+                from core.email_provider import release_email, release_unconsumed_email
+                if not create_acknowledged:
+                    release_unconsumed_email(email, note=f"Cloak注册未消耗: {str(exc)[:180]}")
+                else:
+                    release_email(email, status="failed", note=f"Cloak注册失败: {str(exc)[:180]}")
         except Exception:
             pass
         return {
             "success": False,
             "email": email,
+            "password": str(openai_password or password or ""),
+            "access_token": "",
+            "session_info": {},
+            "cookies": {},
+            "totp_secret": None,
+            "codex": {"status": "failed", "ok": False, "message": str(exc)[:180]},
             "network_traffic": network_traffic,
+            "create_acknowledged": create_acknowledged,
             "error": f"{type(exc).__name__}: {str(exc)[:300]}",
         }
     finally:

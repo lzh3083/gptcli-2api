@@ -305,15 +305,6 @@ def run_openai_registration(
     # 0. 优先提取并校验 NovProxy 一号一IP 独立住宅代理（避免代理异常时锁死邮箱）
     proxy = _resolve_novproxy_one_ip(proxy, step_cb=_step)
 
-    # 1. 准备注册参数
-    if not email:
-        if _email_cfg.USE_EMAIL_SERVICE:
-            from core.email_provider import acquire_email
-            email = acquire_email()
-            _step("email_acquired", f"已从邮箱池获取邮箱: {email}")
-        else:
-            raise RuntimeError("未提供邮箱且未开启邮箱池服务")
-
     if not name:
         name = random_display_name()
     if not birthday:
@@ -325,6 +316,41 @@ def run_openai_registration(
         enable_codex = bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", True))
     if enable_twofa is None:
         enable_twofa = bool(getattr(_twofa_cfg, "ENABLE_2FA", False))
+
+    # 默认使用 CloakBrowser 真实反检测浏览器驱动（彻底替代容易触发 6~10 分钟异步封号的纯协议 Node VM 模拟模式）
+    from config import roxybrowser as _roxy_cfg
+    reg_driver = str(
+        os.environ.get("REGISTRATION_DRIVER")
+        or getattr(_roxy_cfg, "REGISTRATION_DRIVER", "cloak")
+        or "cloak"
+    ).strip().lower()
+
+    if reg_driver in ("cloak", "cloakbrowser", "browser", "roxy"):
+        from core.cloakbrowser_registration import run_cloak_registration
+        proxy_label = (proxy.split("@")[-1] if "@" in proxy else proxy) if proxy else "直连"
+        _step("starting", f"开始 CloakBrowser 真实浏览器注册: {email or '待分配'} (代理: {proxy_label})")
+        return run_cloak_registration(
+            email=email,
+            name=name,
+            birthday=birthday,
+            proxy=proxy,
+            otp_code=otp_code,
+            on_email_acquired=lambda acq: _step("email_acquired", f"已从邮箱池获取邮箱: {acq}"),
+            password=password,
+            otp_provider=otp_provider,
+            on_step=on_step,
+            check_cancel=check_cancel,
+            enable_codex=enable_codex,
+        )
+
+    # 1. 准备注册参数（仅当显式指定 REGISTRATION_DRIVER=protocol 时回退纯协议）
+    if not email:
+        if _email_cfg.USE_EMAIL_SERVICE:
+            from core.email_provider import acquire_email
+            email = acquire_email()
+            _step("email_acquired", f"已从邮箱池获取邮箱: {email}")
+        else:
+            raise RuntimeError("未提供邮箱且未开启邮箱池服务")
 
     fingerprint_seed = None
     if bool(getattr(_register_cfg, "PROTOCOL_REUSE_FINGERPRINT_BY_EMAIL", False)):

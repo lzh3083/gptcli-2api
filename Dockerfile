@@ -118,8 +118,9 @@ RUN python -m pip install --no-cache-dir -U pip setuptools wheel \
     && python -m pip install --no-cache-dir -r /app/requirements-store.txt \
     && python -m pip install --no-cache-dir -r /app/turnstile-solver-requirements.txt
 
-# Prefetch browser binaries used by inline solver
+# Prefetch browser binaries used by inline solver and CloakBrowser registration
 RUN python -m camoufox fetch \
+    && (python -c "from cloakbrowser import ensure_binary; ensure_binary()" || true) \
     && python -m patchright install chromium || true
 
 COPY . /app

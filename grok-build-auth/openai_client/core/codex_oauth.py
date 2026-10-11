@@ -1923,6 +1923,12 @@ def run_codex_oauth(
             from core.skyvern_codex_oauth import run_skyvern_codex_oauth
             return run_skyvern_codex_oauth(email, otp_provider=otp_provider, proxy=proxy, force=True)
         if oauth_driver in ("cloak", "cloakbrowser"):
+            if not proxy or any(k in str(proxy).lower() for k in ("novproxy", "residential", "dynamic")):
+                try:
+                    from register import _resolve_novproxy_one_ip
+                    proxy = _resolve_novproxy_one_ip(proxy)
+                except Exception as np_exc:
+                    logger.warning(f"[Codex] 自动解析 NovProxy 代理异常: {np_exc}")
             from config import cloakbrowser as _cloak_cfg
             from core.cloakbrowser_driver import build_cloak_driver
             from core.roxy_codex_oauth import run_roxy_codex_oauth
@@ -1937,6 +1943,7 @@ def run_codex_oauth(
                     existing_opened=opened,
                     reuse_existing_profile=True,
                     clear_existing_state=True,
+                    password=password,
                 )
             finally:
                 if not bool(getattr(_cloak_cfg, "CLOAK_KEEP_BROWSER_OPEN", False)):
