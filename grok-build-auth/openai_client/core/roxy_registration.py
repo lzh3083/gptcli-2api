@@ -1059,11 +1059,20 @@ def _wait_email_submit_next_state(driver, email: str, timeout: int = 18) -> str:
                     not cleared_recover_done
                     and "/auth/login" in url
                     and "email=" in url
-                    and now - cleared_seen_at >= 2.0
+                    and now - cleared_seen_at >= 3.0
                 ):
                     recover = _recover_email_submit_if_stuck(driver, email)
                     cleared_recover_done = True
                     logger.info("%s 邮箱提交后仍停留在 login?email，中途补交一次表单：%s", _log_prefix(driver), recover)
+                if (
+                    "/auth/login" in url
+                    and "email=" in url
+                    and now - cleared_seen_at >= 9.0
+                    and not getattr(driver, "_nextauth_fallback_tried", False)
+                ):
+                    setattr(driver, "_nextauth_fallback_tried", True)
+                    na_res = _submit_email_via_browser_nextauth(driver, email)
+                    logger.info("%s 邮箱提交后仍停留在 login?email，触发浏览器内 NextAuth signin 跳转：%s", _log_prefix(driver), na_res)
                 if now - cleared_seen_at >= debounce:
                     return "email_cleared"
             else:
@@ -1133,6 +1142,13 @@ def _submit_email_and_wait_next(
                 raise RuntimeError(f"邮箱提交后进入登录密码页，按已注册/不可用邮箱处理并停用: url={getattr(driver, 'current_url', '') or 'https://auth.openai.com/log-in/password'}")
             logger.info("%s 邮箱提交诊断期间页面已进入下一步：%s", _log_prefix(driver), advanced)
             return advanced
+        if attempt < attempts and "chatgpt.com/auth/login" in str(getattr(driver, "current_url", "") or ""):
+            na_res = _submit_email_via_browser_nextauth(driver, current_email)
+            logger.info("%s 重填前尝试浏览器内 NextAuth signin 跳转：%s", _log_prefix(driver), na_res)
+            state_after_na = _wait_email_submit_next_state(driver, current_email, timeout=15)
+            if state_after_na in ("password", "otp", "logged_in"):
+                logger.info("%s 浏览器内 NextAuth 跳转后已进入下一步：%s", _log_prefix(driver), state_after_na)
+                return state_after_na
         logger.warning("%s 邮箱提交后仍未进入下一步：%s，准备重填重试 state=%s", _log_prefix(driver), state_name, diagnostic_state)
         time.sleep(1.0)
     raise RuntimeError(f"邮箱提交后未进入密码页/验证码页，最后状态={last_state}")
