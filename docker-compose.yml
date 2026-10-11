@@ -40,8 +40,7 @@ services:
     image: gptcli-2api:local
     container_name: gptcli-2api
     env_file:
-      - path: .env
-        required: false
+      - .env
     ports:
       # Only the app API is published. Postgres/Redis stay internal-only
       # (compose network). Inline Turnstile Solver listens on container
