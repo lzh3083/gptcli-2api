@@ -2618,11 +2618,22 @@ def run_roxy_registration(
             data_saver.stop()
         logger.error("[Roxy注册] 失败：%s: %s", type(exc).__name__, exc)
         logger.debug("[Roxy注册] 失败详情", exc_info=True)
-        # 未确认创建前回收邮箱；确认后避免重复使用。
+        # 未确认创建前回收邮箱；若邮箱早已注册（already exists / login_password），直接标记 failed 避免死循环重试。
         try:
             if email:
                 from core.email_provider import release_email
-                release_email(email, status="failed" if create_acknowledged else "available", note=f"Roxy注册失败: {str(exc)[:180]}")
+                err_lower = str(exc).lower()
+                already_exists = (
+                    "already exists" in err_lower
+                    or "登录密码页" in err_lower
+                    or "login_password" in err_lower
+                    or "不可用邮箱" in err_lower
+                )
+                release_email(
+                    email,
+                    status="failed" if (create_acknowledged or already_exists) else "available",
+                    note=f"Roxy注册失败: {str(exc)[:180]}",
+                )
         except Exception:
             pass
         return {
