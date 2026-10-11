@@ -1008,12 +1008,29 @@ async def probe_proxy_pool(request: Request) -> dict[str, Any]:
     def _test_one(proxy_raw: str) -> dict[str, Any]:
         p = proxy_raw.strip()
         node_addr = p
+        if p.lower().startswith("novproxy") or p.lower() in ("residential", "dynamic"):
+            reg_code = "SG"
+            if "-" in p:
+                reg_code = p.split("-", 1)[1].strip().upper() or "SG"
+            try:
+                fetched = novproxy.fetch_nodes(
+                    api_base="https://white.novproxy.com/white/api",
+                    region=reg_code,
+                    num=1,
+                    minutes=120,
+                    attempts=2,
+                    timeout=12.0,
+                )
+                if fetched:
+                    node_addr = fetched[0].strip()
+            except Exception as exc:
+                return {"node": p, "raw": p, "ok": False, "reason": f"NovProxy提取失败: {exc}"}
         for prefix in ("socks5h://", "socks5://", "http://", "https://"):
             if node_addr.startswith(prefix):
                 node_addr = node_addr[len(prefix):]
                 break
         res = novproxy.probe_node(node_addr, expect_country="", timeout=15.0)
-        res["raw"] = p
+        res["raw"] = f"socks5h://{node_addr}" if p.lower().startswith("novproxy") else p
         return res
 
     results = []

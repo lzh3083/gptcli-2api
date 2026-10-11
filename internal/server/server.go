@@ -4847,10 +4847,10 @@ func serveRegistrationProxyTest(w http.ResponseWriter, r *http.Request, options 
 	} else if len(targets) > maxTest {
 		targets = targets[:maxTest]
 	}
-	// Probe target for HTTP CONNECT / TCP reachability (registration hits accounts.x.ai).
+	// Probe target for HTTP CONNECT / TCP reachability (registration hits auth.openai.com).
 	probeHost := strings.TrimSpace(stringValue(body["probe_host"]))
 	if probeHost == "" {
-		probeHost = "accounts.x.ai:443"
+		probeHost = "auth.openai.com:443"
 	}
 	timeoutMs := 8000
 	if v, ok := asInt(body["timeout_ms"]); ok && v > 0 {
@@ -5097,7 +5097,7 @@ func probeRegistrationProxy(proxyURL, probeHost string, timeout time.Duration) m
 		// HTTP proxy: send CONNECT probeHost HTTP/1.1
 		target := strings.TrimSpace(probeHost)
 		if target == "" {
-			target = "accounts.x.ai:443"
+			target = "auth.openai.com:443"
 		}
 		if !strings.Contains(target, ":") {
 			target = target + ":443"
