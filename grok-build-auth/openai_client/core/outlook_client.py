@@ -254,30 +254,57 @@ def _parse_accounts_file(path: Path) -> list[OutlookAccount]:
 # 公共接口：挑账号 / 取 OTP（统一走 DB）
 # ============================================================
 
+def _verify_outlook_token_alive(account: OutlookAccount) -> tuple[bool, str]:
+    """轻量检测 Outlook/Hotmail 账号的 refresh_token 是否仍然有效。"""
+    http = _ms_http()
+    try:
+        try:
+            _ms_access_token(account, http=http)
+            return True, "ok_graph"
+        except Exception as exc1:
+            try:
+                _live_imap_access_token(account, http=http)
+                return True, "ok_live_imap"
+            except Exception as exc2:
+                return False, f"{exc1} | {exc2}"
+    finally:
+        http.close()
+
+
 def pick_account() -> OutlookAccount:
     """
-    原子地挑一个 status='available' 的 Outlook 账号并标记为 'used'（DB 事务）。
+    原子地挑一个 status='available' 且 OAuth refresh_token 测活通过的 Outlook 账号并标记为 'used'（DB 事务）。
+    若遇到 refresh_token 失效的死号，自动将其标记为 status='failed' 并继续挑下一个。
     多线程并发安全。
     """
-    from core.db import claim_next_outlook, outlook_pool_summary
+    from core.db import claim_next_outlook, outlook_pool_summary, release_outlook
 
-    row = claim_next_outlook()
-    if row is None:
-        summary = outlook_pool_summary()
-        raise OutlookClientError(
-            f"Outlook 账号池没有可用账号: {summary}. "
-            "请在 WebUI 的邮箱库中导入新邮箱。"
+    while True:
+        row = claim_next_outlook()
+        if row is None:
+            summary = outlook_pool_summary()
+            raise OutlookClientError(
+                f"Outlook 账号池没有可用账号: {summary}. "
+                "请在 WebUI 的邮箱库中导入新邮箱。"
+            )
+
+        account = OutlookAccount(
+            email=row["email"],
+            password=row["password"],
+            client_id=row["client_id"],
+            refresh_token=row["refresh_token"],
         )
+        ok, detail = _verify_outlook_token_alive(account)
+        if not ok:
+            logger.warning(
+                f"[Outlook] 挑号预检发现失效账号 {account.email} (DB id={row['id']})，自动标记为 failed 并跳过: {detail[:200]}"
+            )
+            release_outlook(account.email, status="failed", note=f"invalid_refresh_token: {detail[:180]}")
+            continue
 
-    account = OutlookAccount(
-        email=row["email"],
-        password=row["password"],
-        client_id=row["client_id"],
-        refresh_token=row["refresh_token"],
-    )
-    _CONTEXT_CACHE[_cache_key(account.email)] = account
-    logger.info(f"[Outlook] 选中账号: {account.email}（DB id={row['id']}）")
-    return account
+        _CONTEXT_CACHE[_cache_key(account.email)] = account
+        logger.info(f"[Outlook] 选中测活通过账号: {account.email}（DB id={row['id']}, {detail}）")
+        return account
 
 
 def get_account_context(email: str) -> OutlookAccount | None:

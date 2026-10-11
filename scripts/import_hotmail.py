@@ -19,8 +19,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR / "grok-build-auth"))
 sys.path.insert(0, str(ROOT_DIR / "grok-build-auth" / "openai_client"))
 
-from openai_client.core.outlook_client import import_outlook_from_text, OUTLOOK_ACCOUNTS_FILE
-from openai_client.core.db import outlook_pool_summary
+from openai_client.core.outlook_client import (
+    OutlookAccount,
+    import_outlook_from_text,
+    OUTLOOK_ACCOUNTS_FILE,
+    _verify_outlook_token_alive,
+)
+from openai_client.core.db import list_outlook_pool, outlook_pool_summary, release_outlook
 
 
 def main() -> int:
@@ -55,9 +60,29 @@ def main() -> int:
     target_txt.write_text("\n".join(merged_lines) + "\n", encoding="utf-8")
 
     inserted, skipped = import_outlook_from_text(text)
+    print(f"[导入完成] 新增={inserted}, 已存在跳过={skipped}，正在执行 OAuth2 Token 批量测活...")
+    alive_count = 0
+    dead_count = 0
+    for row in list_outlook_pool():
+        if row.get("status") != "available":
+            continue
+        acc = OutlookAccount(
+            email=row["email"],
+            password=row["password"],
+            client_id=row["client_id"],
+            refresh_token=row["refresh_token"],
+        )
+        ok, detail = _verify_outlook_token_alive(acc)
+        if ok:
+            alive_count += 1
+            print(f"  [✅ 存活] {acc.email} ({detail})")
+        else:
+            dead_count += 1
+            release_outlook(acc.email, status="failed", note=f"invalid_refresh_token: {detail[:180]}")
+            print(f"  [❌ 失效已剔除] {acc.email} (原因: refresh_token 失效/被回收)")
+
     summary = outlook_pool_summary()
-    print(f"[成功] 导入完成: 新增={inserted}, 已存在跳过={skipped}")
-    print(f"[邮箱池状态] {summary}")
+    print(f"[邮箱池最终状态] {summary} (本次测活: 存活={alive_count}, 剔除死号={dead_count})")
     return 0
 
 
