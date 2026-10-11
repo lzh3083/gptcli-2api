@@ -970,6 +970,7 @@ def _bootstrap_authorize(
         "bootstrap authorize",
         lambda: session.get(auth_url, headers=headers, allow_redirects=True),
     )
+    session.rotate_document_navigation_id()
     logger.debug(f"[Codex] authorize 落点: {getattr(resp, 'url', '')}, status={getattr(resp, 'status_code', '')}")
 
 
@@ -1205,6 +1206,7 @@ def _follow_login_continue(session: BrowserSession, continue_url: str, state: st
             setattr(session, "_last_auth_url", url)
         headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/", user_initiated=True)
         resp = session.get(url, headers=headers, allow_redirects=False)
+        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, resp)
         loc = resp.headers.get("location") or resp.headers.get("Location")
         logger.debug(
@@ -1254,6 +1256,7 @@ def _try_password_mfa_login(
         nav_headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/log-in", user_initiated=True)
         nav_headers["sec-fetch-site"] = "same-origin"
         pwd_page_resp = session.get(pwd_continue, headers=nav_headers, allow_redirects=True)
+        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, pwd_page_resp)
     except Exception as nav_exc:
         logger.debug("[Codex] 导航 log-in/password 异常: %s", nav_exc)
@@ -1275,6 +1278,7 @@ def _try_password_mfa_login(
                 otp_headers = session.get_auth_navigate_headers(referer="https://auth.openai.com/log-in/password", user_initiated=True)
                 otp_headers["sec-fetch-site"] = "same-origin"
                 otp_resp = session.get(otp_nav_url, headers=otp_headers, allow_redirects=True)
+                session.rotate_document_navigation_id()
                 _cache_auth_session_metadata(session, otp_resp)
                 logger.info("[Codex] 邮箱 OTP 页面导航完成: status=%s, url=%s", getattr(otp_resp, "status_code", ""), getattr(otp_resp, "url", ""))
             except Exception as otp_nav_exc:
@@ -1364,6 +1368,7 @@ def _navigate_add_phone_page(session: BrowserSession, continue_url: str = "") ->
             headers=headers,
             allow_redirects=True,
         )
+        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, resp)
         final_url = str(getattr(resp, "url", "") or "")
         logger.info(
@@ -1388,6 +1393,7 @@ def _navigate_phone_verification_page(session: BrowserSession, continue_url: str
             user_initiated=True,
         )
         resp = session.get(target, headers=headers, allow_redirects=True)
+        session.rotate_document_navigation_id()
         _cache_auth_session_metadata(session, resp)
         logger.info(
             "[Codex] 导航 /phone-verification 状态: status=%s, url=%s",
