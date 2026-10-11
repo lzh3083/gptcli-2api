@@ -139,9 +139,6 @@ def _resolve_novproxy_one_ip(
             )
             for node in nodes:
                 clean_node = node.split("://", 1)[-1].strip()
-                if clean_node in _USED_NOVPROXY_NODES:
-                    last_err = f"节点端口已使用 ({clean_node})"
-                    continue
                 probe = novproxy.probe_node(clean_node, expect_country=region, timeout=15.0)
                 if not probe.get("ok"):
                     last_err = str(probe.get("reason") or "probe_failed")
@@ -153,6 +150,9 @@ def _resolve_novproxy_one_ip(
                 exit_ip = str(probe.get("exit_ip") or "").strip()
                 if fallback_candidate is None:
                     fallback_candidate = (clean_node, exit_ip, probe)
+                if clean_node in _USED_NOVPROXY_NODES:
+                    last_err = f"节点端口已使用 ({clean_node})"
+                    continue
                 if exit_ip and exit_ip in _USED_NOVPROXY_EXIT_IPS:
                     last_err = f"出口 IP {exit_ip} 已在历史记录中"
                     logger.info(f"[NovProxy] 跳过已使用过的出口 IP {exit_ip} (优先寻找全新住宅IP)")
