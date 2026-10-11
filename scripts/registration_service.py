@@ -306,10 +306,24 @@ async def start_job(
         )
     except Exception:
         prov = str(kwargs.get("mail_provider") or "moemail").strip().lower() or "moemail"
+
+    prefer_outlook = os.environ.get("PREFER_OUTLOOK_POOL", "1").strip().lower() in ("1", "true", "yes")
+    if prov != "outlook" and prefer_outlook:
+        try:
+            from openai_client.core.db import outlook_pool_summary as _ops
+            if int(_ops().get("available", 0) or 0) > 0:
+                prov = "outlook"
+        except Exception:
+            pass
+
     kwargs["mail_provider"] = prov
     # Active domain from provider-specific slot.
     dom = str(kwargs.get("domain") or "").strip()
-    if prov == "yyds":
+    if prov == "outlook":
+        kwargs["moemail_api_key"] = ""
+        kwargs["moemail_base_url"] = ""
+        kwargs["domain"] = ""
+    elif prov == "yyds":
         dom = str(kwargs.get("yyds_domain") or dom).strip()
         key = str(kwargs.get("yyds_api_key") or kwargs.get("api_key") or "").strip()
         # Prefer dedicated slot; only fall back to moemail_api_key if it looks like YYDS.

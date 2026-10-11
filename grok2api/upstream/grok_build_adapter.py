@@ -1243,6 +1243,14 @@ def registration_available() -> dict[str, Any]:
         moemail_configured = moemail_configured or bool(_cfg_moemail)
     except Exception:
         pass
+    if not moemail_configured:
+        try:
+            ensure_xconsole()
+            from openai_client.core.db import outlook_pool_summary as _ops
+            if int(_ops().get("available", 0) or 0) > 0:
+                moemail_configured = True
+        except Exception:
+            pass
     provider = (
         CAPTCHA_PROVIDER
         or os.environ.get("GROK2API_CAPTCHA_PROVIDER")
