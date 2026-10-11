@@ -142,10 +142,15 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
         service_code = "dr"
+    raw_country = str(country or _cfg.SMS_COUNTRY or "").strip()
+    if "," in raw_country:
+        import random
+        choices = [c.strip() for c in raw_country.split(",") if c.strip()]
+        raw_country = random.choice(choices) if choices else raw_country
     params = {
         "action": "getNumberV2" if bool(getattr(_cfg, "SMSBOWER_USE_V2", True)) else "getNumber",
         "service": service_code,
-        "country": str(country or _cfg.SMS_COUNTRY or "").strip(),
+        "country": raw_country,
     }
     for key, value in (
         ("maxPrice", getattr(_cfg, "SMS_MAX_PRICE", "")),
@@ -496,10 +501,15 @@ def acquire_number(
             )
             return activation_id, phone
 
+        raw_grizzly_country = str(country or _cfg.SMS_COUNTRY or "").strip()
+        if "," in raw_grizzly_country:
+            import random
+            choices = [c.strip() for c in raw_grizzly_country.split(",") if c.strip()]
+            raw_grizzly_country = random.choice(choices) if choices else raw_grizzly_country
         params = {
             "action": "getNumber",
             "service": service or _cfg.SMS_SERVICE,
-            "country": country or _cfg.SMS_COUNTRY,
+            "country": raw_grizzly_country,
         }
         if _cfg.SMS_MAX_PRICE:
             params["maxPrice"] = _cfg.SMS_MAX_PRICE

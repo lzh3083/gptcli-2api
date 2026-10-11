@@ -296,14 +296,18 @@ def _fill_mfa_challenge_if_present(driver, email: str, timeout: int = 15) -> boo
             if (!input) return {ok:false, reason:'missing_code_input'};
             const button = [...form.querySelectorAll('button[type="submit"], button[data-dd-action-name="Continue"], button')].find(visible);
             if (!button) return {ok:false, reason:'missing_submit'};
-            return {ok:true, input, button};
+            input.setAttribute('data-cloak-mfa-input', '1');
+            button.setAttribute('data-cloak-mfa-submit', '1');
+            return {ok:true};
             """) or {}
             if not result.get("ok"):
                 time.sleep(0.4)
                 continue
-            _human_type_text(driver, result.get("input"), code, clear=True)
+            input_el = driver.find_element("css selector", "[data-cloak-mfa-input='1']")
+            btn_el = driver.find_element("css selector", "[data-cloak-mfa-submit='1']")
+            _human_type_text(driver, input_el, code, clear=True)
             human_delay("otp_input")
-            _human_click(driver, result.get("button"), label="codex_mfa_submit")
+            _human_click(driver, btn_el, label="codex_mfa_submit")
             logger.info("[Codex][Browser] 已填写并提交 MFA 验证码：%s", email)
             wait_end = time.time() + 12
             while time.time() < wait_end:
@@ -349,15 +353,19 @@ def _fill_login_password_if_present(driver, email: str, timeout: int = 18, passw
           .sort((a,b) => a.dist - b.dist || a.idx - b.idx);
         if (!buttons.length) return {ok:false, reason:'missing_submit'};
         buttons[0].el.scrollIntoView({block:'center'});
-        return {ok:true, reason:'password_targets', input, button: buttons[0].el};
+        input.setAttribute('data-cloak-pw-input', '1');
+        buttons[0].el.setAttribute('data-cloak-pw-submit', '1');
+        return {ok:true, reason:'password_targets'};
         """) or {}
         if not result.get("ok"):
             logger.info("[Codex][Browser] 登录密码页未找到输入/提交按钮：%s", result)
             time.sleep(0.5)
             continue
-        _human_type_text(driver, result.get("input"), password, clear=True)
+        input_el = driver.find_element("css selector", "[data-cloak-pw-input='1']")
+        btn_el = driver.find_element("css selector", "[data-cloak-pw-submit='1']")
+        _human_type_text(driver, input_el, password, clear=True)
         human_delay("form", minimum=2.0, maximum=3.6)
-        _human_click(driver, result.get("button"), label="codex_password_submit")
+        _human_click(driver, btn_el, label="codex_password_submit")
         logger.info("[Codex][Browser] 已填写并提交登录密码：%s", email)
         wait_end = time.time() + 12
         while time.time() < wait_end:
