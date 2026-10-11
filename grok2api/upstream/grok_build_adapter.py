@@ -3038,21 +3038,21 @@ def _run_registration(
             from openai_client.register import run_openai_registration
             import grok2api.pool.accounts as accounts
 
-            # 1. 代理自适应解析与 NovProxy 动态住宅家宽提取
+            # 1. 代理自适应解析与 NovProxy 动态住宅家宽提取（默认开启一号一IP）
             active_proxy = str(proxy or sess.get("proxy") or "").strip()
-            proxy_mode = str(sess.get("proxy_mode") or "").strip().lower()
+            proxy_mode = str(sess.get("proxy_mode") or "novproxy").strip().lower()
 
-            if active_proxy.lower() in ("novproxy", "residential") or (not active_proxy and proxy_mode in ("novproxy", "residential")):
-                novproxy_mode = str(sess.get("novproxy_mode") or "userpass").strip().lower()
+            if active_proxy.lower().startswith("novproxy") or active_proxy.lower() in ("residential", "dynamic") or (not active_proxy and proxy_mode in ("novproxy", "residential", "auto", "")):
+                novproxy_mode = str(sess.get("novproxy_mode") or "api").strip().lower()
                 if novproxy_mode == "userpass" and sess.get("novproxy_up_user") and sess.get("novproxy_up_pass"):
-                    host = str(sess.get("novproxy_up_host") or "us.novproxy.io:1000").strip()
+                    host = str(sess.get("novproxy_up_host") or "sg.novproxy.io:1000").strip()
                     proto = str(sess.get("novproxy_up_proto") or "socks5h").strip()
                     up_user = str(sess.get("novproxy_up_user") or "").strip()
                     up_pass = str(sess.get("novproxy_up_pass") or "").strip()
-                    region = str(sess.get("novproxy_up_region") or sess.get("novproxy_region") or "AUTO").strip()
+                    region = str(sess.get("novproxy_up_region") or sess.get("novproxy_region") or "SG").strip()
                     if region.upper() in ("AUTO", "*", "ANY", "ALL"):
                         region = "SG"
-                    time_mins = str(sess.get("novproxy_up_time") or "60").strip()
+                    time_mins = str(sess.get("novproxy_up_time") or "120").strip()
                     if "-region-" in up_user:
                         up_user = up_user.split("-region-")[0].strip()
                     import secrets
@@ -3061,32 +3061,14 @@ def _run_registration(
                     active_proxy = f"{proto}://{formatted_user}:{up_pass}@{host}"
                     update("proxy_assigned", f"已分配 NovProxy 住宅账密节点: {proto}://{up_user}:***@{host} ({region})")
                 else:
-                    try:
-                        from grok2api.upstream.browser_register import novproxy
-                        api_base = str(sess.get("novproxy_api") or "https://white.novproxy.com/white/api").strip()
-                        region = str(sess.get("novproxy_region") or "AUTO").strip()
-                        if region.upper() in ("AUTO", "*", "ANY", "ALL"):
-                            region = "SG"
-                        minutes = int(sess.get("novproxy_minutes") or 60)
-                        update("proxy_extract", f"正在从 NovProxy 提取实时动态住宅代理 ({region})...")
-                        nodes = novproxy.fetch_nodes(
-                            api_base=api_base,
-                            region=region,
-                            num=1,
-                            minutes=minutes,
-                            attempts=2,
-                            timeout=12.0,
-                            log=lambda m: update("proxy_extract", f"[NovProxy] {m}"),
-                        )
-                        if nodes:
-                            node = nodes[0]
-                            active_proxy = node if "://" in node else f"socks5h://{node}"
-                            update("proxy_assigned", f"成功分配 NovProxy 住宅节点: {active_proxy}")
-                        else:
-                            raise RuntimeError("NovProxy 接口未返回任何可用节点")
-                    except Exception as n_exc:
-                        update("proxy_error", f"NovProxy 提取失败: {n_exc}")
-                        raise RuntimeError(f"NovProxy 动态住宅代理提取失败: {n_exc}") from n_exc
+                    from openai_client.register import _resolve_novproxy_one_ip
+                    region_hint = str(sess.get("novproxy_region") or "SG").strip().upper()
+                    if region_hint in ("AUTO", "*", "ANY", "ALL", ""):
+                        region_hint = "SG"
+                    active_proxy = _resolve_novproxy_one_ip(
+                        f"novproxy-{region_hint.lower()}",
+                        step_cb=lambda st, m: update(st, m),
+                    ) or ""
 
             if active_proxy.lower() in ("direct", "none", "off", "0"):
                 active_proxy = ""

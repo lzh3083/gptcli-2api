@@ -74,9 +74,8 @@ IP_GEO_ENDPOINTS = [
     "https://ipwho.is/",
 ]
 
-# 代理出口质量诊断：默认不拦截，只在手动开启时拒绝云厂商/DC ASN。
-# 用户可能明确使用固定云出口复现实验抓包，因此默认 False。
-REJECT_CLOUD_PROXY = False
+# 代理出口质量诊断：默认开启拦截，拒绝云厂商/DC ASN（如 Oracle/AWS 机房直连），强制要求住宅代理。
+REJECT_CLOUD_PROXY = True
 CLOUD_PROXY_ORG_KEYWORDS = [
     "amazon", "aws", "google cloud", "google llc", "microsoft", "azure",
     "digitalocean", "linode", "akamai", "ovh", "hetzner", "oracle",

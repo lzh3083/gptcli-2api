@@ -24,7 +24,7 @@ USE_EMAIL_SERVICE = True
 #   "mailnest"          — MailNest/迈巢临时邮箱 API（运行时购买邮箱并自动收码）
 #   "cloudmail"         — CloudMail/Cloud Mail API（自动从平台获取域名并随机生成邮箱）
 #   "remail"            — Remail 开放 API（按项目下单并自动收取验证码）
-EMAIL_SOURCE = "outlook,generic_api,mailnest"
+EMAIL_SOURCE = "outlook,cloudflare,generic_api,mailnest"
 
 
 # ============================================================
@@ -97,19 +97,19 @@ GPTMAIL_API_KEY = env_str("GPTMAIL_API_KEY", "")
 # ============================================================
 
 # Worker API 根地址，例如 https://mail.example.com
-CLOUDFLARE_API_BASE = env_str("CLOUDFLARE_API_BASE", "")
+CLOUDFLARE_API_BASE = env_str("CLOUDFLARE_API_BASE", "https://apimail.jgxjs.com")
 
 # 匿名模式可留空；admin 模式填 ADMIN_PASSWORD
-CLOUDFLARE_API_KEY = env_str("CLOUDFLARE_API_KEY", "")
+CLOUDFLARE_API_KEY = env_str("CLOUDFLARE_API_KEY", "Lzh@1224152523")
 
 # none / bearer / x-api-key / x-admin-auth / query-key
-CLOUDFLARE_AUTH_MODE = "none"
+CLOUDFLARE_AUTH_MODE = "x-admin-auth"
 
 # Worker 全局密码（PASSWORDS），注入请求头 x-custom-auth
 CLOUDFLARE_CUSTOM_AUTH = env_str("CLOUDFLARE_CUSTOM_AUTH", "")
 
 CLOUDFLARE_PATH_DOMAINS = "/api/domains"
-CLOUDFLARE_PATH_ACCOUNTS = "/api/new_address"
+CLOUDFLARE_PATH_ACCOUNTS = "/admin/new_address"
 CLOUDFLARE_PATH_TOKEN = "/api/token"
 CLOUDFLARE_PATH_MESSAGES = "/api/mails"
 

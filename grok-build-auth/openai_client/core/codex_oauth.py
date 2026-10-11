@@ -1949,6 +1949,13 @@ def run_codex_oauth(
     if otp_provider is None:
         from core.email_provider import wait_for_otp as otp_provider
 
+    if not proxy or any(k in str(proxy).lower() for k in ("novproxy", "residential", "dynamic")):
+        try:
+            from register import _resolve_novproxy_one_ip
+            proxy = _resolve_novproxy_one_ip(proxy)
+        except Exception as np_exc:
+            logger.warning(f"[Codex] 自动解析 NovProxy 代理异常: {np_exc}")
+
     # 单次 Codex 授权全程统一身份；下一任务即使是同一账号也生成全新的隔离身份。
     task_seed = f"codex-oauth:{email.lower()}:{uuid.uuid4()}"
     session = BrowserSession(proxy=proxy, fingerprint_seed=task_seed)

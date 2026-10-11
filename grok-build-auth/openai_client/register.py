@@ -50,6 +50,111 @@ logger = logging.getLogger(__name__)
 
 _FINALIZE_SESSION_MAX_ATTEMPTS = 3
 _FINALIZE_SESSION_BACKOFF_BASE = 2.0
+_USED_NOVPROXY_EXIT_IPS: set[str] = set()
+_USED_NOVPROXY_NODES: set[str] = set()
+
+
+def _resolve_novproxy_one_ip(
+    proxy: str | None,
+    step_cb: Callable[[str, str], None] | None = None,
+) -> str | None:
+    """
+    若未传入具体代理 URL 或传入 novproxy/residential 哨兵词，自动从 NovProxy 提取并验证
+    一个未使用过的独立住宅 IP（一号一IP，校验 hosting=False）。
+    """
+    raw = str(proxy or "").strip()
+    if raw.lower() in ("direct", "none", "off", "0"):
+        return None
+    if raw and "://" in raw and not any(k in raw.lower() for k in ("novproxy", "residential", "dynamic")):
+        return raw
+
+    # 读取 data/config.json 中的 NovProxy 配置（若存在）
+    cfg_data: dict[str, Any] = {}
+    try:
+        import json
+        for cand_path in ("/app/data/config.json", str(Path(__file__).resolve().parents[2] / "data" / "config.json")):
+            if Path(cand_path).is_file():
+                cfg_data = json.loads(Path(cand_path).read_text(encoding="utf-8")) or {}
+                break
+    except Exception:
+        cfg_data = {}
+
+    proxy_mode = str(cfg_data.get("proxy_mode") or os.environ.get("NOVPROXY_MODE") or "novproxy").strip().lower()
+    if not raw and proxy_mode in ("direct", "none", "off"):
+        return None
+
+    api_base = str(
+        cfg_data.get("novproxy_api")
+        or os.environ.get("NOVPROXY_API")
+        or "https://white.novproxy.com/white/api"
+    ).strip()
+    region = str(
+        cfg_data.get("novproxy_region")
+        or os.environ.get("NOVPROXY_REGION")
+        or "SG"
+    ).strip().upper()
+    if "-" in raw and raw.lower().startswith("novproxy-"):
+        region = raw.split("-", 1)[1].strip().upper() or region
+    if region in ("AUTO", "*", "ANY", "ALL", ""):
+        region = "SG"
+    minutes = int(cfg_data.get("novproxy_minutes") or os.environ.get("NOVPROXY_MINUTES") or 120)
+
+    # 优先引入项目内置的 novproxy 模块
+    repo_root = str(Path(__file__).resolve().parents[2])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    from grok2api.upstream.browser_register import novproxy
+
+    if step_cb:
+        step_cb("proxy_extract", f"正在从 NovProxy 提取一号一IP独立住宅代理 ({region}, {minutes}min)...")
+
+    last_err = ""
+    for round_idx in range(1, 5):
+        try:
+            nodes = novproxy.fetch_nodes(
+                api_base=api_base,
+                region=region,
+                num=5,
+                minutes=minutes,
+                attempts=2,
+                timeout=15.0,
+                log=lambda m: logger.info(f"[NovProxy] {m}"),
+            )
+            for node in nodes:
+                clean_node = node.split("://", 1)[-1].strip()
+                if clean_node in _USED_NOVPROXY_NODES:
+                    continue
+                probe = novproxy.probe_node(clean_node, expect_country=region, timeout=15.0)
+                if not probe.get("ok"):
+                    last_err = str(probe.get("reason") or "probe_failed")
+                    continue
+                if probe.get("hosting"):
+                    last_err = f"节点出口为机房 IP ({probe.get('exit_ip')} / {probe.get('isp')})"
+                    logger.warning(f"[NovProxy] 跳过机房属性节点 {clean_node}: {last_err}")
+                    continue
+                exit_ip = str(probe.get("exit_ip") or "").strip()
+                if exit_ip and exit_ip in _USED_NOVPROXY_EXIT_IPS:
+                    logger.info(f"[NovProxy] 跳过本轮已使用过的出口 IP {exit_ip} (保证一号一IP)")
+                    continue
+                _USED_NOVPROXY_NODES.add(clean_node)
+                if exit_ip:
+                    _USED_NOVPROXY_EXIT_IPS.add(exit_ip)
+                assigned = f"socks5h://{clean_node}"
+                msg = (
+                    f"已分配 NovProxy 一号一IP 住宅节点: {assigned} "
+                    f"(出口IP={exit_ip}, 国家={probe.get('country')}, ISP={probe.get('isp')})"
+                )
+                if step_cb:
+                    step_cb("proxy_assigned", msg)
+                else:
+                    logger.info(f"[NovProxy] {msg}")
+                return assigned
+        except Exception as exc:
+            last_err = str(exc)
+            logger.warning(f"[NovProxy] 第 {round_idx} 轮提取异常: {exc}")
+        time.sleep(2.0)
+
+    raise RuntimeError(f"无法从 NovProxy 获取可用的独立住宅代理节点 (region={region}): {last_err}")
 
 
 def _finalize_registration_session(
@@ -164,6 +269,9 @@ def run_openai_registration(
     def _cancel():
         if check_cancel:
             check_cancel()
+
+    # 0. 优先提取并校验 NovProxy 一号一IP 独立住宅代理（避免代理异常时锁死邮箱）
+    proxy = _resolve_novproxy_one_ip(proxy, step_cb=_step)
 
     # 1. 准备注册参数
     if not email:
@@ -437,7 +545,7 @@ def run_openai_registration(
                 codex_result = run_codex_oauth(
                     email,
                     otp_provider=otp_provider,
-                    proxy=proxy,
+                    proxy=session.proxy or proxy,
                     force=True,
                     password=password,
                 )
