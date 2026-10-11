@@ -108,6 +108,22 @@ def _resolve_novproxy_one_ip(
     if step_cb:
         step_cb("proxy_extract", f"正在从 NovProxy 提取一号一IP独立住宅代理 ({region}, {minutes}min)...")
 
+    data_root = os.environ.get("GROK2API_DATA_DIR") or (
+        "/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[2] / "data")
+    )
+    used_ip_file = Path(data_root) / "used_novproxy_ips.json"
+    try:
+        if used_ip_file.is_file():
+            persisted = json.loads(used_ip_file.read_text(encoding="utf-8") or "{}")
+            for ip_item in persisted.get("exit_ips") or []:
+                if ip_item:
+                    _USED_NOVPROXY_EXIT_IPS.add(str(ip_item).strip())
+            for nd_item in persisted.get("nodes") or []:
+                if nd_item:
+                    _USED_NOVPROXY_NODES.add(str(nd_item).strip())
+    except Exception:
+        pass
+
     last_err = ""
     for round_idx in range(1, 5):
         try:
@@ -134,11 +150,27 @@ def _resolve_novproxy_one_ip(
                     continue
                 exit_ip = str(probe.get("exit_ip") or "").strip()
                 if exit_ip and exit_ip in _USED_NOVPROXY_EXIT_IPS:
-                    logger.info(f"[NovProxy] 跳过本轮已使用过的出口 IP {exit_ip} (保证一号一IP)")
+                    logger.info(f"[NovProxy] 跳过已使用过的出口 IP {exit_ip} (保证一号一IP)")
                     continue
                 _USED_NOVPROXY_NODES.add(clean_node)
                 if exit_ip:
                     _USED_NOVPROXY_EXIT_IPS.add(exit_ip)
+                try:
+                    used_ip_file.parent.mkdir(parents=True, exist_ok=True)
+                    used_ip_file.write_text(
+                        json.dumps(
+                            {
+                                "exit_ips": list(_USED_NOVPROXY_EXIT_IPS)[-200:],
+                                "nodes": list(_USED_NOVPROXY_NODES)[-200:],
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
                 assigned = f"socks5h://{clean_node}"
                 msg = (
                     f"已分配 NovProxy 一号一IP 住宅节点: {assigned} "
