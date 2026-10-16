@@ -2966,7 +2966,6 @@ func ProjectShellArgsForClient(argsJSON, toolName, preferredKey string) string {
 	return encoded
 }
 
-
 // coerceShellNumericField converts JSON float-looking numbers for Codex shell
 // integer fields (yield_time_ms, max_output_tokens, timeout, etc.) to int64.
 // Codex rejects float literals such as 10000.0 with "expected u64".
@@ -3288,4 +3287,3 @@ func truncateForLog(s string, n int) string {
 // - Do NOT inject PowerShell instructions into the prompt (would bust cache).
 // - Do NOT rewrite command text (bash↔PS heuristics removed).
 // - Upstream shell schema is string-only; residual arrays are flattened without bash-style single quotes.
-

@@ -124,12 +124,12 @@ func TestProbeAccountBudgetCutDoesNotDisable(t *testing.T) {
 }
 
 func TestRunOnceManualAllBoostsWorkersAndReportsMeta(t *testing.T) {
-	// Without a store, RunOnce should fail closed early.
+	// Pure-registration mode: RunOnce is a disabled no-op that reports ok.
 	s := New(nil, nil, "http://example.invalid", []string{"grok-4.5"})
 	s.Workers = 3
 	out := s.RunOnce(context.Background(), "manual_all")
-	if out["ok"] != false {
-		t.Fatalf("expected store unavailable: %#v", out)
+	if out["ok"] != true || out["running"] != false {
+		t.Fatalf("expected pure-registration disabled no-op: %#v", out)
 	}
 	// Status should expose workers.
 	st := s.Status()
@@ -191,7 +191,8 @@ func TestStartProbeAllAlreadyRunning(t *testing.T) {
 	s.job = map[string]any{"running": true, "wave": 2}
 	s.jobMu.Unlock()
 	out := s.StartProbeAll()
-	if out["already_running"] != true {
-		t.Fatalf("expected already_running: %#v", out)
+	// Pure-registration mode: StartProbeAll is a disabled no-op.
+	if out["ok"] != true {
+		t.Fatalf("expected pure-registration disabled no-op: %#v", out)
 	}
 }

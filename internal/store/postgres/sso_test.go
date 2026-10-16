@@ -33,10 +33,9 @@ func TestBuildAccountListWhereHasSSOUsesNestedPaths(t *testing.T) {
 	}
 }
 
-
 func TestCanonicalizeSSOFieldsFromNested(t *testing.T) {
 	payload := map[string]any{
-		"email": "a@x.ai",
+		"email":           "a@x.ai",
 		"session_cookies": map[string]any{"sso": "nested-cookie-val"},
 	}
 	canonicalizeSSOFields(payload)
@@ -55,7 +54,7 @@ func TestCanonicalizeSSOFieldsFromNested(t *testing.T) {
 func TestMergeDurableLocalCanonicalizesSSO(t *testing.T) {
 	// New entry only has nested SSO; merge must write top-level for export-all.
 	entry := map[string]any{
-		"key": "tok",
+		"key":     "tok",
 		"cookies": map[string]any{"sso-rw": "from-cookies"},
 	}
 	out := mergeDurableLocal(entry, nil)

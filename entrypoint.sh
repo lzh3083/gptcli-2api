@@ -243,9 +243,15 @@ if ! run_migrations; then
   exit 1
 fi
 
-# Force local solver URL to loopback when using inline mode. This only keeps the
-# existing registration/solver sidecar path available; the Go runtime does not
-# implement captcha solving or registration execution.
+# Use supervisord to manage all three processes (solver, sidecar, go app) when available.
+# This ensures automatic self-healing restart if turnstile-solver or the sidecar crashes
+# during continuous batch registration.
+if [[ "${USE_SUPERVISOR:-1}" != "0" && -x "$(command -v supervisord)" && -f /app/deploy/supervisord.conf && "${APP_CMD[*]}" == *"/app/bin/grok2api"* ]]; then
+  echo "[entrypoint] starting process supervisor (supervisord) with /app/deploy/supervisord.conf"
+  exec supervisord -c /app/deploy/supervisord.conf
+fi
+
+# Fallback: start processes individually when supervisord is disabled or missing.
 if [[ "${provider}" == "local" && "${enable_solver}" != "0" ]]; then
   export GROK2API_CAPTCHA_PROVIDER=local
   export CAPTCHA_PROVIDER=local
@@ -254,10 +260,6 @@ if [[ "${provider}" == "local" && "${enable_solver}" != "0" ]]; then
   start_inline_solver
 fi
 
-# When the main runtime is Go, keep Python only for registration/captcha/SSO.
-# The registration sidecar is loopback-only and implements:
-#   /internal/registration/v1/*
-#   /internal/sso/v1/*
 if [[ "${runtime}" == "go" && "${GROK2API_REGISTRATION_SIDECAR:-1}" != "0" ]]; then
   start_registration_sidecar
 fi

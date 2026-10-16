@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -865,7 +866,10 @@ func (c *Connector) DeleteAccount(ctx context.Context, accountID string) (bool, 
 	if err != nil {
 		return false, err
 	}
-	_, _ = c.Pool.Exec(ctx, `DELETE FROM account_pool WHERE account_id = $1`, accountID)
+	// 池记录清理失败会留下孤儿行（account_pool 指向已删账号），必须可观测。
+	if _, err := c.Pool.Exec(ctx, `DELETE FROM account_pool WHERE account_id = $1`, accountID); err != nil {
+		slog.Warn("delete account_pool orphan row failed", "account_id", accountID, "error", err)
+	}
 	return tag.RowsAffected() > 0, nil
 }
 

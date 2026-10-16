@@ -50,7 +50,15 @@ API_PREFIX = "/internal/registration/v1"
 def _require_auth(request: Request) -> None:
     expected = (os.environ.get("GROK2API_REGISTRATION_TOKEN") or "").strip()
     if not expected:
-        return
+        # 空 token 只允许 loopback 调用；非本机访问一律拒绝，防止侧车被
+        # 改绑 0.0.0.0 或经反代暴露后成为无认证的批量注册接口。
+        client = request.client.host if request.client else ""
+        if client.startswith("127.") or client == "::1":
+            return
+        raise HTTPException(
+            status_code=503,
+            detail="GROK2API_REGISTRATION_TOKEN is not set; refusing non-loopback access",
+        )
     auth = (request.headers.get("authorization") or "").strip()
     if not auth.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="registration token required")
@@ -570,6 +578,102 @@ def _kick_prune_background() -> None:
     t.start()
 
 
+def _classify_session_failure(session: dict[str, Any]) -> str:
+    """对注册会话的失败原因进行标准化归类。"""
+    err = str(session.get("error") or "").lower()
+    last_stage = str(session.get("stage") or session.get("status") or "").lower()
+    logs = " ".join([str(l) for l in session.get("logs", [])]).lower()
+    combined = f"{err} {last_stage} {logs}"
+
+    if any(k in combined for k in ["turnstile", "captcha", "cf_clearance", "cloudflare challenge", "5073"]):
+        return "turnstile_solver_failed"
+    if any(k in combined for k in ["sentinel", "pow", "fnv", "sdk.js", "sentinel-runner"]):
+        return "sentinel_challenge_failed"
+    if any(k in combined for k in ["otp", "mail", "inbox", "verify code", "verification code", "邮件验证码", "取信超时"]):
+        return "email_otp_timeout"
+    if any(k in combined for k in ["phone", "sms", "no_numbers", "smsbower", "hero-sms", "接码"]):
+        return "sms_phone_failed"
+    if any(k in combined for k in ["dirty", "recycled", "deactivated", "already exists", "account already", "二手", "已存在"]):
+        return "mailbox_dirty_recycled"
+    if any(k in combined for k in ["fraud", "blocked", "forbidden", "403", "denied", "fraud_guard"]):
+        return "openai_risk_blocked"
+    if any(k in combined for k in ["proxy", "socks5", "connect", "timeout", "network", "reset by peer"]):
+        return "proxy_network_error"
+    return "other_error"
+
+
+@app.get(f"{API_PREFIX}/funnel")
+def get_registration_funnel(request: Request) -> dict[str, Any]:
+    """汇总分析当前批次与历史会话的成功率漏斗及结构化失败归因。"""
+    _require_auth(request)
+    adapter = _adapter()
+    data = adapter.list_registration_sessions()
+    sessions = []
+    if isinstance(data, dict):
+        sessions = data.get("sessions") or []
+
+    total = len(sessions)
+    success_count = 0
+    failed_count = 0
+    active_count = 0
+    breakdown: dict[str, int] = {
+        "turnstile_solver_failed": 0,
+        "sentinel_challenge_failed": 0,
+        "email_otp_timeout": 0,
+        "sms_phone_failed": 0,
+        "mailbox_dirty_recycled": 0,
+        "openai_risk_blocked": 0,
+        "proxy_network_error": 0,
+        "other_error": 0,
+    }
+    stages: dict[str, int] = {
+        "started": 0,
+        "captcha_passed": 0,
+        "account_submitted": 0,
+        "otp_verified": 0,
+        "codex_authorized": 0,
+    }
+
+    terminal = _TERMINAL_STATUSES
+    for s in sessions:
+        stages["started"] += 1
+        status = str(s.get("status") or "").lower()
+        stage = str(s.get("stage") or status).lower()
+        
+        # 统计阶段漏斗
+        if any(k in stage for k in ["captcha", "challenge", "registering", "otp", "profile", "codex", "success", "done"]):
+            stages["captcha_passed"] += 1
+        if any(k in stage for k in ["registering", "otp", "profile", "codex", "success", "done"]):
+            stages["account_submitted"] += 1
+        if any(k in stage for k in ["profile", "codex", "success", "done"]):
+            stages["otp_verified"] += 1
+        if status in {"success", "done"} or "codex" in stage:
+            stages["codex_authorized"] += 1
+
+        if status in {"success", "done"}:
+            success_count += 1
+        elif status in terminal:
+            failed_count += 1
+            cat = _classify_session_failure(s)
+            breakdown[cat] = breakdown.get(cat, 0) + 1
+        else:
+            active_count += 1
+
+    decided = success_count + failed_count
+    rate = round((success_count / decided * 100), 2) if decided > 0 else 0.0
+
+    return {
+        "ok": True,
+        "total": total,
+        "active": active_count,
+        "success": success_count,
+        "failed": failed_count,
+        "success_rate": rate,
+        "failure_breakdown": breakdown,
+        "stage_funnel": stages,
+    }
+
+
 @app.get(f"{API_PREFIX}/sessions")
 def list_sessions(request: Request) -> dict[str, Any]:
     _require_auth(request)
@@ -1049,10 +1153,22 @@ async def http_error_handler(_: Request, exc: HTTPException) -> JSONResponse:
 
 
 def main() -> None:
+    import sys
+
     import uvicorn
 
     host = os.environ.get("GROK2API_REGISTRATION_HOST", "127.0.0.1")
     port = int(os.environ.get("GROK2API_REGISTRATION_PORT", "18080") or 18080)
+    # 安全护栏：绑定非 loopback 地址时必须配置注册 token，否则拒绝启动——
+    # 避免"改绑 0.0.0.0 忘配 token"导致批量注册接口无认证暴露。
+    token = (os.environ.get("GROK2API_REGISTRATION_TOKEN") or "").strip()
+    if not host.startswith("127.") and host != "::1" and host != "localhost" and not token:
+        print(
+            "[registration_service] FATAL: refusing to bind non-loopback host "
+            f"{host!r} without GROK2API_REGISTRATION_TOKEN",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     uvicorn.run(
         "scripts.registration_service:app",
         host=host,

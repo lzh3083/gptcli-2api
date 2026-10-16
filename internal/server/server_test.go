@@ -40,6 +40,37 @@ func TestLive(t *testing.T) {
 	}
 }
 
+func TestRegisterOnlyModeMux(t *testing.T) {
+	mux := NewMux(Options{
+		Ready:  func() bool { return true },
+		Config: config.Config{Mode: "register-only"},
+	})
+
+	// 1. /health 正常
+	reqHealth := httptest.NewRequest(http.MethodGet, "/health", nil)
+	recHealth := httptest.NewRecorder()
+	mux.ServeHTTP(recHealth, reqHealth)
+	if recHealth.Code != http.StatusOK {
+		t.Fatalf("expected /health to return 200, got %d", recHealth.Code)
+	}
+
+	// 2. /v1/chat/completions 应该直接未挂载 (404)
+	reqChat := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("{}"))
+	recChat := httptest.NewRecorder()
+	mux.ServeHTTP(recChat, reqChat)
+	if recChat.Code != http.StatusNotFound {
+		t.Fatalf("expected /v1/chat/completions to be 404 in register-only mode, got %d", recChat.Code)
+	}
+
+	// 3. /v1/models 也应该 404
+	reqModels := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	recModels := httptest.NewRecorder()
+	mux.ServeHTTP(recModels, reqModels)
+	if recModels.Code != http.StatusNotFound {
+		t.Fatalf("expected /v1/models to be 404 in register-only mode, got %d", recModels.Code)
+	}
+}
+
 func TestReadyFailClosed(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/ready", nil)
@@ -1882,7 +1913,6 @@ func TestStreamOpenAIResponsesTextSoftShortWriteNotTruncated(t *testing.T) {
 		t.Fatal("missing response.completed")
 	}
 }
-
 
 func TestEnsureOpenAIChatPromptCacheKeyStable(t *testing.T) {
 	// Turn 1: no explicit pck → mint from first user seed.

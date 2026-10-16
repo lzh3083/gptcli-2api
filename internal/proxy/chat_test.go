@@ -1077,7 +1077,6 @@ func TestParseChatDeltaNestedResponseUsage(t *testing.T) {
 	}
 }
 
-
 func TestGuardStreamAgainstEmptyHollowTimeoutIsEmpty(t *testing.T) {
 	// Continuous hollow frames with no [DONE] for longer than abs budget must
 	// be empty so OpenStream can failover (anthropic empty-output main path).
@@ -1118,7 +1117,6 @@ func TestGuardStreamAgainstEmptyHollowTimeoutIsEmpty(t *testing.T) {
 	}
 	_ = done
 }
-
 
 func TestShouldDropStickyPinClassifiesErrors(t *testing.T) {
 	// Transient transport must KEEP pin (return false).

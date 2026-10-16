@@ -8,6 +8,7 @@
 整体复用注册阶段的 BrowserSession（同一 cookie jar / 同一 IP / 同一 UA），
 避免再起新会话被风控关联或缺失登录态。
 """
+import hashlib
 import json
 import logging
 import random
@@ -22,6 +23,11 @@ from core.session import BrowserSession
 from core.humanize import delay as human_delay
 
 logger = logging.getLogger(__name__)
+
+
+def _token_fp(value: str) -> str:
+    """敏感值日志指纹：不可逆、可比对，绝不落明文片段。"""
+    return hashlib.sha256(value.encode()).hexdigest()[:12]
 
 
 def _clear_twofa_session_circuit(
@@ -452,7 +458,8 @@ def _exchange_new_token(session: BrowserSession, continue_url: str) -> str:
     # 拿新的 accessToken
     new_session = fetch_session(session)
     new_token = new_session["accessToken"]
-    logger.info(f"[2FA] 新 accessToken（含新鲜 pwd_auth_time）: {new_token[:40]}...")
+    # 安全：访问令牌是账号完全控制权凭证，日志只保留长度与不可逆指纹。
+    logger.info(f"[2FA] 新 accessToken（含新鲜 pwd_auth_time）: sha256={_token_fp(new_token)} len={len(new_token)}")
     return new_token
 
 
@@ -478,7 +485,8 @@ def _enroll_totp(session: BrowserSession, access_token: str) -> tuple[str, str]:
     session_id = data.get("session_id")
     if not secret or not session_id:
         raise RuntimeError(f"enroll 响应字段缺失: {data}")
-    logger.info(f"[2FA] TOTP secret 已获取: {secret[:4]}...{secret[-4:]}")
+    # 安全：TOTP 种子仅 16-32 字符，任何明文片段都会缩小爆破空间。
+    logger.info(f"[2FA] TOTP secret 已获取: sha256={_token_fp(secret)}")
     return secret, session_id
 
 
@@ -647,7 +655,7 @@ def setup_2fa(
     logger.info("[2FA] TOTP 激活完成")
 
     logger.info("=" * 60)
-    logger.info(f"✅ 2FA 设置完成! Secret: {secret[:4]}...{secret[-4:]}")
+    logger.info(f"✅ 2FA 设置完成! Secret sha256={_token_fp(secret)}")
     logger.info("=" * 60)
     return secret
 

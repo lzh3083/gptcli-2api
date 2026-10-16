@@ -157,8 +157,12 @@ def _run_twofa(
             account_id,
             {"ok": True, "status": "success", "totp_secret": secret, "message": "2FA 设置完成"},
         )
-        _append_log(email, f"[2FA] 完成：secret={secret[:4]}...{secret[-4:]}")
-        logger.info("[2FA] 完成：email=%s secret=%s...%s", email, secret[:4], secret[-4:])
+        # 安全：TOTP 种子仅 16-32 字符，泄露任何前缀/后缀都会显著缩小爆破
+        # 空间——日志中只记录不可逆指纹，绝不落 secret 明文片段。
+        import hashlib as _hl
+        secret_fp = _hl.sha256(secret.encode()).hexdigest()[:12]
+        _append_log(email, f"[2FA] 完成：secret_sha256={secret_fp}")
+        logger.info("[2FA] 完成：email=%s secret_sha256=%s", email, secret_fp)
         return {"ok": True, "status": "success", "totp_secret": secret, "message": "2FA 设置完成"}
     except Exception as exc:
         result = {"ok": False, "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:500]}"}

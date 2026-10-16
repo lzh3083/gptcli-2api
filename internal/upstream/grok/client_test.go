@@ -368,7 +368,6 @@ func TestReadSSEMultiLineData(t *testing.T) {
 	}
 }
 
-
 func TestExtractConvIDClaudeCodeUser(t *testing.T) {
 	// Claude Code embeds session in metadata.user_id; body.user is the common
 	// post-BuildOpenAIChatBody form (metadata is stripped before upstream).

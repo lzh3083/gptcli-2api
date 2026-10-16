@@ -2,7 +2,9 @@ package pool
 
 import (
 	"errors"
+	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,7 +145,14 @@ func modelBlocked(blocked map[string]any, model string, now time.Time) bool {
 			case int64:
 				u = float64(x)
 			case string:
-				// ignore parse errors -> treat permanent
+				// 解析字符串形式的 until 时间戳；解析失败视为永久封禁并记录——
+				// 脏数据静默当永久封禁会让排障困难（账号莫名不可用）。
+				if parsed, err := strconv.ParseFloat(strings.TrimSpace(x), 64); err == nil {
+					u = parsed
+				} else {
+					slog.Warn("modelBlocked: unparsable until value, treating as permanent block",
+						"until", x, "error", err)
+				}
 			}
 			if u > 1e12 {
 				u = u / 1000

@@ -146,3 +146,23 @@ func TestLoadRejectsPythonRuntime(t *testing.T) {
 		t.Fatal("expected GROK2API_RUNTIME=python to be rejected after public Python main removal")
 	}
 }
+
+func TestGPTCLIAliasAndRegisterOnlyMode(t *testing.T) {
+	t.Setenv("GPTCLI_PORT", "9090")
+	t.Setenv("GROK2API_PORT", "8080")
+	t.Setenv("GPTCLI_MODE", "register-only")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Port != 9090 {
+		t.Fatalf("expected GPTCLI_PORT (9090) to take precedence over GROK2API_PORT, got %d", cfg.Port)
+	}
+	if cfg.Mode != "register-only" {
+		t.Fatalf("expected mode register-only, got %q", cfg.Mode)
+	}
+	if cfg.GoChat || cfg.GoMessages || cfg.GoResponses || cfg.GoPublicRead || cfg.GoMaintainer {
+		t.Fatalf("register-only mode must disable chat/messages/responses/publicRead/maintainer: %+v", cfg)
+	}
+}

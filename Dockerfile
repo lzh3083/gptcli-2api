@@ -94,6 +94,7 @@ RUN apt-get update \
         libxtst6 \
         tzdata \
         xvfb \
+        supervisor \
     && ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo Asia/Shanghai > /etc/timezone \
     && arch="${TARGETARCH:-$(dpkg --print-architecture)}" \
@@ -111,10 +112,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
+# requirements.lock 由 pip-compile 生成，保证镜像重建可复现（供应链防护）。
+# 更新依赖：修改 requirements.txt 后运行
+#   pip-compile -o requirements.lock requirements.txt
+COPY requirements.lock /app/requirements.lock
 COPY requirements-store.txt /app/requirements-store.txt
 COPY turnstile-solver/requirements.txt /app/turnstile-solver-requirements.txt
 RUN python -m pip install --no-cache-dir -U pip setuptools wheel \
-    && python -m pip install --no-cache-dir -r /app/requirements.txt \
+    && python -m pip install --no-cache-dir -r /app/requirements.lock \
     && python -m pip install --no-cache-dir -r /app/requirements-store.txt \
     && python -m pip install --no-cache-dir -r /app/turnstile-solver-requirements.txt
 

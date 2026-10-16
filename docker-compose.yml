@@ -48,20 +48,26 @@ services:
       - "0.0.0.0:8081:8081"
     shm_size: "1gb"
     security_opt:
-      - seccomp:unconfined
+      - seccomp:unconfined # Camoufox/Chromium 沙箱需要；浏览器若改 sandbox 模式可移除
+      - no-new-privileges:true # 阻止容器内提权（setuid 等），缩小逃逸面
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
+      # ── 纯注册机模式（register-only）──────────────────────
+      # 本项目专注于 ChatGPT 自动化协议注册与 Codex OAuth CPA 凭证导出。
+      # register-only 会彻底关闭所有未使用的公共 LLM API 路由、探活协程与用量扫描。
+      GPTCLI_MODE: "${GPTCLI_MODE:-register-only}"
+      GROK2API_MODE: "${GROK2API_MODE:-register-only}"
       GROK2API_HOST: "0.0.0.0"
       GROK2API_PORT: "8081"
       GROK2API_OPEN_BROWSER: "0"
-      GROK2API_TOKEN_MAINTAIN: "${GROK2API_TOKEN_MAINTAIN:-0}"
-      GROK2API_MODEL_HEALTH: "${GROK2API_MODEL_HEALTH:-0}"
+      GROK2API_TOKEN_MAINTAIN: "0"
+      GROK2API_MODEL_HEALTH: "0"
       GROK2API_REASONING_COMPAT: "off"
       GROK2API_STORE_BACKEND: "hybrid"
       GROK2API_REG_ENGINE: "openai"
       GROK2API_MODEL_HEALTH_INTERVAL: "0"
       GROK2API_MODEL_HEALTH_AUTO_DISABLE: "0"
-      GROK2API_MAINTAINER_LEADER: "${GROK2API_MAINTAINER_LEADER:-0}"
+      GROK2API_MAINTAINER_LEADER: "0"
       ENABLE_CODEX_AUTO: "${ENABLE_CODEX_AUTO:-True}"
       FORCE_PHONE_VERIFICATION: "${FORCE_PHONE_VERIFICATION:-True}"
       SMS_COUNTRY: "${SMS_COUNTRY:-16,6,73,117}"
@@ -107,6 +113,8 @@ services:
       GROK2API_REGISTRATION_TOKEN: "${GROK2API_REGISTRATION_TOKEN:-}"
       PYTHONPATH: "/app:/app/grok-build-auth:/app/grok-build-auth/openai_client"
       # In-container hot-update (docker.sock + /compose mount; no host watcher)
+      # 安全：默认禁用。启用需同时满足 ①HOT_UPDATE_ENABLED=1 ②挂载 docker.sock。
+      GROK2API_HOT_UPDATE_ENABLED: "${GROK2API_HOT_UPDATE_ENABLED:-0}"
       GROK2API_HOT_UPDATE_MODE: "${GROK2API_HOT_UPDATE_MODE:-docker}"
       GROK2API_COMPOSE_DIR: "${GROK2API_COMPOSE_DIR:-/compose}"
       GROK2API_DOCKER_SERVICE: "${GROK2API_DOCKER_SERVICE:-gptcli-2api}"
@@ -125,10 +133,13 @@ services:
       - ./static:/app/static
       - ./data:/app/data
       - ./turnstile-solver/logs:/app/turnstile-solver/logs
-      # In-container hot-update: docker CLI talks to host docker daemon.
-      - /var/run/docker.sock:/var/run/docker.sock
+      # ── 容器内热更新（默认关闭，安全 opt-in）────────────────────────
+      # 挂载 docker.sock 等于把宿主机 root 控制权交给容器；admin 会话一旦
+      # 失陷即可被完整逃逸。确需"管理台一键热更新"时，取消下面两行注释，
+      # 并同时设置 GROK2API_HOT_UPDATE_ENABLED=1（见上方 environment）。
+      # - /var/run/docker.sock:/var/run/docker.sock
       # Compose project for force-recreate (override file written under /compose).
-      - ./:/compose
+      # - ./:/compose
     depends_on:
       redis:
         condition: service_healthy

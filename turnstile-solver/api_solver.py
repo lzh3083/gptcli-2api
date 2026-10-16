@@ -1513,16 +1513,64 @@ class TurnstileAPIServer:
 
 
     def _check_client_key(self, client_key: Optional[str]) -> Optional[dict]:
-        """校验 clientKey。未设置 API_KEY 时跳过鉴权。"""
+        """校验 clientKey。
+
+        安全策略（加固后）：
+        - 设置了 API_KEY：所有端点必须携带匹配 clientKey；
+        - 未设置 API_KEY：仅允许 loopback 对端（127.0.0.0/8 / ::1）访问，
+          非本机请求一律拒绝——防止服务误绑 0.0.0.0 时成为无鉴权的
+          开放浏览器代理 / SSRF 面。
+        """
         expected = os.getenv("API_KEY", "").strip()
         if not expected:
-            return None
+            remote = (request.remote_addr or "").strip()
+            if remote.startswith("127.") or remote == "::1":
+                return None
+            return {
+                "errorId": 1,
+                "errorCode": "ERROR_KEY_DOES_NOT_EXIST",
+                "errorDescription": "API_KEY not configured: only loopback clients are allowed"
+            }
         if not client_key or client_key.strip() != expected:
             return {
                 "errorId": 1,
                 "errorCode": "ERROR_KEY_DOES_NOT_EXIST",
                 "errorDescription": "Invalid clientKey"
             }
+        return None
+
+    @staticmethod
+    def _validate_target_url(url: str) -> Optional[str]:
+        """校验求解目标 URL，返回错误消息或 None。
+
+        仅允许 http/https，且默认禁止内网/环回地址（page.goto 内网地址会让
+        本服务变成 SSRF 跳板）。确需内网求解时显式设置
+        TURNSTILE_ALLOW_PRIVATE_URLS=1。
+        """
+        from urllib.parse import urlparse
+        import ipaddress
+        import socket
+
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            return "invalid url"
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return "only absolute http(s) urls are allowed"
+        if os.getenv("TURNSTILE_ALLOW_PRIVATE_URLS", "").strip() == "1":
+            return None
+        try:
+            infos = socket.getaddrinfo(parsed.hostname, None)
+            addrs = {info[4][0] for info in infos}
+        except Exception:
+            return f"cannot resolve host: {parsed.hostname}"
+        for raw in addrs:
+            try:
+                ip = ipaddress.ip_address(raw)
+            except ValueError:
+                return f"invalid resolved address: {raw}"
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                return f"private/reserved address not allowed: {parsed.hostname}"
         return None
 
     async def _enqueue_turnstile(
@@ -1614,10 +1662,21 @@ class TurnstileAPIServer:
 
     async def process_turnstile(self):
         """Handle the /turnstile endpoint requests."""
+        auth_err = self._check_client_key(request.args.get('clientKey'))
+        if auth_err:
+            return jsonify(auth_err), 200
         url = request.args.get('url')
         sitekey = request.args.get('sitekey')
         action = request.args.get('action')
         cdata = request.args.get('cdata')
+        if url:
+            url_err = self._validate_target_url(url)
+            if url_err:
+                return jsonify({
+                    "errorId": 1,
+                    "errorCode": "ERROR_WRONG_PAGEURL",
+                    "errorDescription": url_err,
+                }), 200
 
         task_id, err = await self._enqueue_turnstile(url, sitekey, action, cdata)
         if err:
@@ -1626,6 +1685,9 @@ class TurnstileAPIServer:
 
     async def get_result(self):
         """Return solved data"""
+        auth_err = self._check_client_key(request.args.get('clientKey'))
+        if auth_err:
+            return jsonify(auth_err), 200
         task_id = request.args.get('id')
 
         if not task_id:
@@ -1675,6 +1737,14 @@ class TurnstileAPIServer:
         sitekey = task.get("websiteKey") or task.get("sitekey") or task.get("siteKey")
         action = task.get("action") or task.get("pageAction")
         cdata = task.get("cdata") or task.get("data")
+        if url:
+            url_err = self._validate_target_url(url)
+            if url_err:
+                return jsonify({
+                    "errorId": 1,
+                    "errorCode": "ERROR_WRONG_PAGEURL",
+                    "errorDescription": url_err,
+                }), 200
 
         # CapSolver 风格 metadata
         metadata = task.get("metadata") or {}
@@ -1835,7 +1905,9 @@ def parse_args():
     parser.add_argument('--random', action='store_true', help='Use random User-Agent and Sec-CH-UA configuration from pool')
     parser.add_argument('--browser', type=str, help='Specify browser name to use (e.g., chrome, firefox)')
     parser.add_argument('--version', type=str, help='Specify browser version to use (e.g., 139, 141)')
-    parser.add_argument('--host', type=str, default='0.0.0.0', help='Specify the IP address where the API solver runs. (Default: 127.0.0.1)')
+    # Secure default: bind loopback only. Exposing this service without an
+    # API_KEY turns it into an unauthenticated remote-browser/SSRF surface.
+    parser.add_argument('--host', type=str, default=os.getenv('TURNSTILE_HOST', '127.0.0.1'), help='Specify the IP address where the API solver runs. (Default: 127.0.0.1)')
     parser.add_argument('--port', type=str, default='5073', help='Set the port for the API solver to listen on. (Default: 5073)')
     return parser.parse_args()
 

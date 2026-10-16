@@ -96,7 +96,6 @@ func TestAffinityScheduleWriteCoalesces(t *testing.T) {
 	}
 }
 
-
 func TestAffinityCacheDeleteDropsPending(t *testing.T) {
 	affinityCacheMu.Lock()
 	affinityCache = map[string]affinityCacheEntry{}

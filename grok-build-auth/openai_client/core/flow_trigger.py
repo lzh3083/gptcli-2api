@@ -20,6 +20,15 @@ from config.browser import USER_AGENT, ACCEPT_LANGUAGE  # 浏览器指纹固定�
 logger = logging.getLogger(__name__)
 
 
+def _tls_verify() -> bool:
+    """TLS 校验开关：默认开启；仅当显式设置 MAIL_INSECURE_SKIP_VERIFY=1
+    （或通用 INSECURE_SKIP_VERIFY=1）时关闭，用于自签名私有部署。
+    关闭校验会让 OTP / access_token 暴露于中间人攻击，请勿在生产开启。"""
+    import os
+    return os.environ.get("MAIL_INSECURE_SKIP_VERIFY", "").strip() != "1" \
+        and os.environ.get("INSECURE_SKIP_VERIFY", "").strip() != "1"
+
+
 def _flow_result(
     *,
     status: str,
@@ -66,7 +75,7 @@ def _send_sync(access_token: str) -> dict:
             headers=_build_headers(),
             json=body,
             timeout=_cfg.FLOW_TRIGGER_TIMEOUT,
-            verify=False,
+            verify=_tls_verify(),
         )
     except Exception as exc:
         return _flow_result(status="failed", message=f"{type(exc).__name__}: {exc}")

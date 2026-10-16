@@ -25,20 +25,27 @@ const (
 // Config is the startup-only subset needed by the staged Go runtime. New
 // settings are added only with Python parity tests and a manifest entry.
 type Config struct {
-	Host                            string
-	Port                            int
-	DefaultModel                    string
-	UpstreamBase                    string
-	RedisURL                        string
-	DatabaseURL                     string
-	RedisPrefix                     string
-	StoreBackend                    string
-	LegacyAPIKey                    string
-	LegacyAdminPassword             string
-	RequireAPIKey                   string
-	RequireSharedStores             bool
-	RequireMigrations               bool
-	Runtime                         string
+	Host                string
+	Port                int
+	DefaultModel        string
+	UpstreamBase        string
+	RedisURL            string
+	DatabaseURL         string
+	RedisPrefix         string
+	StoreBackend        string
+	LegacyAPIKey        string
+	LegacyAdminPassword string
+	RequireAPIKey       string
+	RequireSharedStores bool
+	RequireMigrations   bool
+	Runtime             string
+	// Mode selects the process profile. "gateway" (default) keeps full
+	// OpenAI/Anthropic API surface; "register-only" strips all chat/model
+	// routes, upstream probing and usage tracking so the process only serves
+	// the admin console + registration sidecar proxying (纯注册机模式).
+	// Individual GROK2API_GO_* flags still apply as additional restrictions
+	// on top of the selected mode.
+	Mode                            string
 	GoPublicRead                    bool
 	GoChat                          bool
 	GoMessages                      bool
@@ -120,6 +127,22 @@ func Load() (Config, error) {
 	goWrites, err := envBool("GROK2API_GO_WRITES", true)
 	if err != nil {
 		return Config{}, err
+	}
+	// GROK2API_MODE=register-only：纯注册机预设，一键关闭全部对外 API 面
+	// 与后台维护面（等效于 GO_CHAT/GO_MESSAGES/GO_RESPONSES/GO_PUBLIC_READ/
+	// GO_MAINTAINER 全 0），仅保留管理台（注册任务/账号导出）与注册侧车。
+	// 显式设置的 GROK2API_GO_* 单项开关无法重新打开被模式关闭的面——
+	// 模式是安全兜底，单项开关只能在模式允许的范围内进一步收紧。
+	mode := strings.ToLower(strings.TrimSpace(envString("GROK2API_MODE", "gateway")))
+	if mode != "gateway" && mode != "register-only" {
+		return Config{}, fmt.Errorf("GROK2API_MODE must be gateway or register-only, got %q", mode)
+	}
+	if mode == "register-only" {
+		goPublicRead = false
+		goChat = false
+		goMessages = false
+		goResponses = false
+		goMaintainer = false
 	}
 	outboundMaxTools, err := envInt("GROK2API_OUTBOUND_MAX_TOOLS", 1, 0, 64)
 	if err != nil {
@@ -208,6 +231,7 @@ func Load() (Config, error) {
 		GoMaintainer:                    goMaintainer,
 		GoWrites:                        goWrites,
 		GoOwnershipMode:                 ownershipMode,
+		Mode:                            mode,
 		RegistrationMode:                registrationMode,
 		RegistrationServiceURL:          strings.TrimRight(envString("GROK2API_REGISTRATION_SERVICE_URL", ""), "/"),
 		RegistrationToken:               envString("GROK2API_REGISTRATION_TOKEN", ""),
@@ -233,8 +257,25 @@ func (c Config) Address() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
 }
 
+func envLookup(name string) string {
+	candidates := []string{name}
+	if strings.HasPrefix(name, "GROK2API_") {
+		gptcliName := "GPTCLI_" + strings.TrimPrefix(name, "GROK2API_")
+		candidates = []string{gptcliName, name}
+	} else if strings.HasPrefix(name, "GPTCLI_") {
+		grokName := "GROK2API_" + strings.TrimPrefix(name, "GPTCLI_")
+		candidates = []string{name, grokName}
+	}
+	for _, k := range candidates {
+		if val := strings.TrimSpace(os.Getenv(k)); val != "" {
+			return val
+		}
+	}
+	return ""
+}
+
 func envString(name, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+	if value := envLookup(name); value != "" {
 		return value
 	}
 	return fallback
@@ -242,7 +283,7 @@ func envString(name, fallback string) string {
 
 func envAlias(names []string, fallback string) string {
 	for _, name := range names {
-		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		if value := envLookup(name); value != "" {
 			return value
 		}
 	}
@@ -250,7 +291,7 @@ func envAlias(names []string, fallback string) string {
 }
 
 func envInt(name string, fallback, minimum, maximum int) (int, error) {
-	raw := strings.TrimSpace(os.Getenv(name))
+	raw := envLookup(name)
 	if raw == "" {
 		return fallback, nil
 	}
@@ -265,7 +306,7 @@ func envInt(name string, fallback, minimum, maximum int) (int, error) {
 }
 
 func envBool(name string, fallback bool) (bool, error) {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	raw := strings.ToLower(envLookup(name))
 	if raw == "" {
 		return fallback, nil
 	}
@@ -280,7 +321,7 @@ func envBool(name string, fallback bool) (bool, error) {
 }
 
 func envEnum(name, fallback string, values ...string) (string, error) {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	raw := strings.ToLower(envLookup(name))
 	if raw == "" {
 		raw = fallback
 	}
@@ -293,7 +334,7 @@ func envEnum(name, fallback string, values ...string) (string, error) {
 }
 
 func envSeconds(name string, fallback, minimum, maximum time.Duration) (time.Duration, error) {
-	raw := strings.TrimSpace(os.Getenv(name))
+	raw := envLookup(name)
 	if raw == "" {
 		return fallback, nil
 	}

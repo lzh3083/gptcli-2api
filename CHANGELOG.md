@@ -4,6 +4,45 @@ All notable changes to `gptcli-2api` will be documented in this file.
 
 ---
 
+## [v1.2.0] - 2026-10-17
+
+### 🛡️ 纯注册机深度加固、高可用守护与流程重构 (Pure Registration Hardening & Process Supervisor)
+
+- **项目定位厘清与原生 GPTCLI_* 命名规范**：
+  - 彻底厘清与 `grokcli-2api` 的定位差异，确立纯 ChatGPT 自动化注册与 CPA 凭证导出专有定位；
+  - 引入 `GPTCLI_*` 环境变量规范，并自动双轨兼容 `GROK2API_*`；
+  - 默认开启 `GPTCLI_MODE=register-only` 纯注册机模式，跳过所有未使用的 LLM API 网关路由，实现零攻击面与零冗余资源占用。
+
+- **多进程自治守护与容灾自愈 (supervisord Integration)**：
+  - 引入 `/app/deploy/supervisord.conf` 进程看门狗，彻底终结旧版 entrypoint 裸后台进程在求解器或侧车崩溃时无人拉起、导致批量注册静默中断的问题；
+  - 将 `turnstile-solver`、`registration-sidecar` 与 `gptcli-2api` 主服务统一纳入进程监管与优雅回收。
+
+- **全链路注册可观测性与转化漏斗 (Registration Funnel & Observability)**：
+  - 新增 `GET /admin/api/accounts/register-email/funnel` 接口；
+  - 将散落日志提炼为 7 大标准错误分类（打码失败、Sentinel PoW 挑战未过、邮箱取信超时、接码缺号、二手邮箱、风控阻断、代理网络故障）；
+  - 提供多阶段漏斗转化率实时统计，直接为住宅代理与接码号段优化提供量化支撑。
+
+- **Python 策略模式重构与上游语法错误修复**：
+  - 在 `email_provider.py` 引入统一的 `_EmailStrategy` 策略注册表，解耦 9 家邮箱服务商同构逻辑，收敛 300+ 行重复代码；
+  - 提取 `BaseRegistrationFlow` 流程抽象与 `RegistrationResult` 标准结构；
+  - 排查并彻底修复上游在 `model_health.py` 与 `token_maintainer.py` 桩实现中残留的缩进语法破坏（`IndentationError`），全库通过 `python -m compileall` 校验。
+
+- **全量安全加固 (P0–P2)**：
+  - `clientIP()` 校验可信代理网段（`GROK2API_TRUSTED_PROXIES`），彻底封堵伪造 XFF 冒充 loopback 夺取管理员特权的攻击链；
+  - 管理员初始化接口引入本地一次性安全令牌 `<dataDir>/admin-setup.token`；
+  - Turnstile Solver 默认绑定 127.0.0.1、强制密钥验证并拦截私网 SSRF；
+  - 37 处请求解码强制 16MiB 长度上限；
+  - Config 热更新采用原子快照消除读写竞态；
+  - TOTP 密钥、OAuth 授权码与 Token 全面指纹化脱敏；
+  - 默认关闭容器内 Docker 热更新并开启 `no-new-privileges:true`；
+  - 管理台登录增加爆破限流（5 次失败锁 10 分钟）；恢复强制 TLS 校验。
+
+- **工程治理与 CI 门禁升级**：
+  - 在 GitHub Actions 新增 `python-gate`（全量 compileall 语法拦截、单元与协议契约测试）与 `docker-smoke` 容器构建校验；
+  - 锁定 Python 运行依赖于 `requirements.lock`。
+
+---
+
 ## [v1.1.0] - 2026-10-06
 
 ### 🎯 纯注册机模式架构重构与 CPA 凭证独占保障 (Pure Registration & CPA Sovereignty)

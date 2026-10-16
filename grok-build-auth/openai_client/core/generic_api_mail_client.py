@@ -26,6 +26,15 @@ from core.otp_utils import extract_otp
 
 logger = logging.getLogger(__name__)
 
+
+def _tls_verify() -> bool:
+    """TLS 校验开关：默认开启；仅当显式设置 MAIL_INSECURE_SKIP_VERIFY=1
+    （或通用 INSECURE_SKIP_VERIFY=1）时关闭，用于自签名私有部署。
+    关闭校验会让 OTP / access_token 暴露于中间人攻击，请勿在生产开启。"""
+    import os
+    return os.environ.get("MAIL_INSECURE_SKIP_VERIFY", "").strip() != "1" \
+        and os.environ.get("INSECURE_SKIP_VERIFY", "").strip() != "1"
+
 _CODE_REGEX = re.compile(r"\b(\d{6})\b")
 _CONTEXT_WORDS = ("code", "verify", "verification", "验证码", "代码", "确认码", "認証", "コード")
 _CONTEXT_CACHE: dict[str, "GenericApiEmailAccount"] = {}
@@ -139,7 +148,7 @@ def _fetch_public_inbox_page_otp(
         api_url,
         headers={**headers, "Accept": "application/json"},
         timeout=20,
-        verify=False,
+        verify=_tls_verify(),
     )
     if resp.status_code != 200:
         logger.debug("[GenericAPI] public inbox 页面 API HTTP %s: %s", resp.status_code, (resp.text or "")[:160])
@@ -192,7 +201,7 @@ def _fetch_public_inbox_page_otp(
                     detail_url,
                     headers={**headers, "Accept": "application/json"},
                     timeout=20,
-                    verify=False,
+                    verify=_tls_verify(),
                 )
                 if detail_resp.status_code == 200:
                     detail = detail_resp.json()
@@ -485,7 +494,7 @@ def _fetch_yangyang_otp(
     # 一般第一页足够；保守支持最多翻 5 页。
     for _ in range(5):
         url = api_url if not cursor else f"{api_url}?cursor={quote(str(cursor), safe='')}"
-        resp = session.get(url, headers={**headers, "Accept": "application/json"}, timeout=20, verify=False)
+        resp = session.get(url, headers={**headers, "Accept": "application/json"}, timeout=20, verify=_tls_verify())
         if resp.status_code != 200:
             if resp.status_code == 404:
                 # 兼容 mail.ai1998.xyz 这类同样是 /messages/{token}/{email}，
@@ -523,7 +532,7 @@ def _fetch_yangyang_otp(
             continue
         detail_url = f"{origin}/message/{quote(str(msg_id), safe='')}/{token_q}/{email_q}"
         try:
-            detail_resp = session.get(detail_url, headers={**headers, "Accept": "application/json"}, timeout=20, verify=False)
+            detail_resp = session.get(detail_url, headers={**headers, "Accept": "application/json"}, timeout=20, verify=_tls_verify())
             if detail_resp.status_code != 200:
                 continue
             detail = detail_resp.json()
@@ -578,7 +587,7 @@ def _fetch_inline_messages_page_otp(
             code_url,
             headers={**headers, "Accept": "text/html,application/xhtml+xml,text/plain,*/*"},
             timeout=20,
-            verify=False,
+            verify=_tls_verify(),
         )
         if resp.status_code != 200:
             logger.debug("[GenericAPI] inline messages 页面 HTTP %s: %s", resp.status_code, (resp.text or "")[:160])
@@ -722,7 +731,7 @@ def _fetch_poll_payload(
     page_result = yy_result or public_result
     if page_result or is_yangyang or public_inbox_api_url:
         return page_result, yy_result, None, ""
-    resp = session.get(poll_url, headers=headers, timeout=20, verify=False)
+    resp = session.get(poll_url, headers=headers, timeout=20, verify=_tls_verify())
     return None, None, resp, resp.text or ""
 
 

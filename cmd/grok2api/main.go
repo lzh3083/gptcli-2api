@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -98,7 +99,11 @@ func main() {
 		}
 	}
 
-	if store != nil {
+	if cfg.Mode == "register-only" {
+		slog.Info("running in pure registration mode (register-only): gateway routes and model probing disabled")
+	}
+
+	if store != nil && cfg.Mode != "register-only" {
 		oidcClient := &oidc.Client{}
 		maintSvc = maintainer.New(store, redisClient, oidcClient)
 		healthSvc = modelhealth.New(store, redisClient, cfg.UpstreamBase, []string{cfg.DefaultModel, "gpt-4o-mini"})
@@ -149,8 +154,10 @@ func main() {
 		}
 	}
 
-	// Live config pointer so admin settings writes hot-reload without restart.
+	// Live config snapshot so admin settings writes hot-reload without restart.
+	// Stored in an atomic.Value and replaced copy-on-write (see server.Options).
 	runtimeCfg := cfg
+	var runtimeCfgAtomic atomic.Value
 	if store != nil {
 		if settings, err := store.PublicSettings(context.Background()); err == nil {
 			runtimeCfg.ApplyStoreSettings(settings)
@@ -263,6 +270,7 @@ func main() {
 			slog.Warn("failed to load durable settings at boot", "error", err)
 		}
 	}
+	runtimeCfgAtomic.Store(runtimeCfg)
 	handler := server.NewMux(server.Options{
 		Ready:             readiness.Ready,
 		Reason:            readiness.Reason,
@@ -286,7 +294,7 @@ func main() {
 		ModelHealth:       healthSvc,
 		Quota:             quota.New(store, cfg.UpstreamBase),
 		Config:            cfg,
-		RuntimeConfig:     &runtimeCfg,
+		RuntimeConfig:     &runtimeCfgAtomic,
 		RegistrationURL:   cfg.RegistrationServiceURL,
 		RegistrationToken: cfg.RegistrationToken,
 	})

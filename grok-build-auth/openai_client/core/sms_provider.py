@@ -23,7 +23,10 @@ import threading
 import time
 from urllib.parse import urljoin
 
-from curl_cffi.requests import Session as CurlSession
+try:
+    from curl_cffi.requests import Session as CurlSession
+except ImportError:
+    CurlSession = object
 
 # 注意：用 `from config import codex` 而不是 `from config.codex import X`，
 # 这样 WebUI 调 config.reload_all() 后，本模块通过 codex.X 读到的是最新值。

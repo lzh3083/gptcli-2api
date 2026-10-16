@@ -72,3 +72,33 @@ jobs:
           assert pin in (f"v{pv}", pv), (pin, pv)
           print("version ok", pv)
           PY2
+
+  python-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax compileall gate
+        run: |
+          python -m compileall -q .
+      - name: Run Python unit and registration contract tests
+        run: |
+          python -m unittest discover -s tests/ -v
+          python tests/test_openai_registration_flow.py
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build smoke image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: gptcli-2api:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

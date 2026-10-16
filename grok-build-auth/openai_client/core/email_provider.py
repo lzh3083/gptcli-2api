@@ -48,33 +48,103 @@ def parse_email_sources(value=None) -> list[str]:
     return out or ["outlook"]
 
 
+class _EmailStrategy:
+    """邮箱客户端策略接口，统一各提供商的领取、收信与释放契约。"""
+
+    def __init__(self, name: str, pick_fn, otp_fn, release_fn, context_fn=None):
+        self.name = name
+        self._pick = pick_fn
+        self._otp = otp_fn
+        self._release = release_fn
+        self._context = context_fn
+
+    def pick(self) -> str:
+        return self._pick()
+
+    def fetch_otp(self, email: str, after_ts: float, **kwargs) -> str:
+        return self._otp(email, after_ts=after_ts, **kwargs)
+
+    def release(self, email: str, status: str = "available", note: str | None = None) -> None:
+        self._release(email, status=status, note=note)
+
+    def has_context(self, email: str) -> bool:
+        if self._context:
+            try:
+                return bool(self._context(email))
+            except Exception:
+                return False
+        return False
+
+
+def _get_registry() -> dict[str, _EmailStrategy]:
+    """延迟加载策略注册表，避免过早导入所有邮箱客户端依赖。"""
+    return {
+        "gptmail": _EmailStrategy(
+            "gptmail",
+            lambda: __import__("core.gptmail_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.gptmail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.gptmail_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+            lambda email: __import__("core.gptmail_client", fromlist=["get_account_context"]).get_account_context(email),
+        ),
+        "cloudflare": _EmailStrategy(
+            "cloudflare",
+            lambda: __import__("core.cf_temp_mail_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.cf_temp_mail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.cf_temp_mail_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+            lambda email: __import__("core.cf_temp_mail_client", fromlist=["get_account_context"]).get_account_context(email),
+        ),
+        "cloudflare_domain": _EmailStrategy(
+            "cloudflare_domain",
+            lambda: __import__("core.qqmail_client", fromlist=["pick_domain_email"]).pick_domain_email(),
+            lambda email, after_ts, **kw: __import__("core.qqmail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.qqmail_client", fromlist=["release_domain_email"]).release_domain_email(email, status=status, note=note),
+        ),
+        "generic_api": _EmailStrategy(
+            "generic_api",
+            lambda: __import__("core.generic_api_mail_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.generic_api_mail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.generic_api_mail_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+        ),
+        "imap": _EmailStrategy(
+            "imap",
+            lambda: __import__("core.imap_mail_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.imap_mail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.imap_mail_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+        ),
+        "mailnest": _EmailStrategy(
+            "mailnest",
+            lambda: __import__("core.mailnest_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.mailnest_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.mailnest_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+            lambda email: __import__("core.mailnest_client", fromlist=["get_account_context"]).get_account_context(email),
+        ),
+        "cloudmail": _EmailStrategy(
+            "cloudmail",
+            lambda: __import__("core.cloudmail_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.cloudmail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.cloudmail_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+            lambda email: __import__("core.cloudmail_client", fromlist=["get_account_context"]).get_account_context(email),
+        ),
+        "remail": _EmailStrategy(
+            "remail",
+            lambda: __import__("core.remail_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.remail_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.remail_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+            lambda email: __import__("core.remail_client", fromlist=["get_account_context"]).get_account_context(email),
+        ),
+        "outlook": _EmailStrategy(
+            "outlook",
+            lambda: __import__("core.outlook_client", fromlist=["pick_account"]).pick_account().email,
+            lambda email, after_ts, **kw: __import__("core.outlook_client", fromlist=["fetch_latest_otp"]).fetch_latest_otp(email, after_ts=after_ts, **kw),
+            lambda email, status="available", note=None: __import__("core.outlook_client", fromlist=["release_account"]).release_account(email, status=status, note=note),
+        ),
+    }
+
+
 def _pick_from_source(source: str) -> str:
-    if source == "gptmail":
-        from core.gptmail_client import pick_account
-        return pick_account().email
-    if source == "cloudflare":
-        from core.cf_temp_mail_client import pick_account
-        return pick_account().email
-    if source == "cloudflare_domain":
-        from core.qqmail_client import pick_domain_email
-        return pick_domain_email()
-    if source == "generic_api":
-        from core.generic_api_mail_client import pick_account
-        return pick_account().email
-    if source == "imap":
-        from core.imap_mail_client import pick_account
-        return pick_account().email
-    if source == "mailnest":
-        from core.mailnest_client import pick_account
-        return pick_account().email
-    if source == "cloudmail":
-        from core.cloudmail_client import pick_account
-        return pick_account().email
-    if source == "remail":
-        from core.remail_client import pick_account
-        return pick_account().email
-    from core.outlook_client import pick_account
-    return pick_account().email
+    registry = _get_registry()
+    strategy = registry.get(source) or registry["outlook"]
+    return strategy.pick()
 
 
 def acquire_email() -> str:
@@ -133,21 +203,10 @@ def resolve_email_source(email: str) -> str:
     if registered_source:
         return registered_source
 
-    from core.gptmail_client import get_account_context as get_gptmail_context
-    if get_gptmail_context(email):
-        return "gptmail"
-    from core.cf_temp_mail_client import get_account_context as get_cf_context
-    if get_cf_context(email):
-        return "cloudflare"
-    from core.mailnest_client import get_account_context as get_mailnest_context
-    if get_mailnest_context(email):
-        return "mailnest"
-    from core.cloudmail_client import get_account_context as get_cloudmail_context
-    if get_cloudmail_context(email):
-        return "cloudmail"
-    from core.remail_client import get_account_context as get_remail_context
-    if get_remail_context(email):
-        return "remail"
+    registry = _get_registry()
+    for name, strategy in registry.items():
+        if strategy.has_context(email):
+            return name
 
     from core import db
     if db.get_imap_email_by_email(email):
@@ -246,32 +305,9 @@ def wait_for_otp(
         or _registered_email_source(email)
         or resolve_email_source(email)
     )
-    if source == "gptmail":
-        from core.gptmail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "cloudflare":
-        from core.cf_temp_mail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "cloudflare_domain":
-        from core.qqmail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "generic_api":
-        from core.generic_api_mail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "imap":
-        from core.imap_mail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "mailnest":
-        from core.mailnest_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "cloudmail":
-        from core.cloudmail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    if source == "remail":
-        from core.remail_client import fetch_latest_otp
-        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
-    from core.outlook_client import fetch_latest_otp
-    return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
+    registry = _get_registry()
+    strategy = registry.get(source) or registry["outlook"]
+    return strategy.fetch_otp(email, after_ts=after_ts, **extra_kwargs)
 
 
 def email_material_line(email: str, source: str | None = None) -> str:
@@ -293,33 +329,9 @@ def email_material_line(email: str, source: str | None = None) -> str:
 def release_email(email: str, status: str = "available", note: str | None = None) -> str:
     """按邮箱实际来源回收状态，返回来源名。"""
     source = resolve_email_source(email)
-    if source == "gptmail":
-        from core.gptmail_client import release_account
-        release_account(email, status=status, note=note)
-    elif source == "cloudflare":
-        from core.cf_temp_mail_client import release_account
-        release_account(email, status=status, note=note)
-    elif source == "cloudflare_domain":
-        from core.qqmail_client import release_domain_email
-        release_domain_email(email, status=status, note=note)
-    elif source == "generic_api":
-        from core.generic_api_mail_client import release_account
-        release_account(email, status=status, note=note)
-    elif source == "imap":
-        from core.imap_mail_client import release_account
-        release_account(email, status=status, note=note)
-    elif source == "mailnest":
-        from core.mailnest_client import release_account
-        release_account(email, status=status, note=note)
-    elif source == "cloudmail":
-        from core.cloudmail_client import release_account
-        release_account(email, status=status, note=note)
-    elif source == "remail":
-        from core.remail_client import release_account
-        release_account(email, status=status, note=note)
-    else:
-        from core.outlook_client import release_account
-        release_account(email, status=status, note=note)
+    registry = _get_registry()
+    strategy = registry.get(source) or registry["outlook"]
+    strategy.release(email, status=status, note=note)
     return source
 
 

@@ -212,9 +212,23 @@ def _coerce_env_value(raw: str, default, vtype: str | None = None):
     return str(raw).strip()
 
 
+def _lookup_env(key: str) -> str | None:
+    """支持 GPTCLI_* 优先，并兼容 GROK2API_* 旧名。"""
+    candidates = [key]
+    if key.startswith("GROK2API_"):
+        candidates = ["GPTCLI_" + key[len("GROK2API_"):], key]
+    elif key.startswith("GPTCLI_"):
+        candidates = [key, "GROK2API_" + key[len("GPTCLI_"):]]
+    for k in candidates:
+        val = os.getenv(k)
+        if val is not None:
+            return val
+    return None
+
+
 def env_value(key: str, default=None, vtype: str | None = None):
     ensure_loaded()
-    raw = os.getenv(key)
+    raw = _lookup_env(key)
     # `.env.example` 和 WebUI 里常见 `KEY=` / `KEY=""` 这种空配置。
     # 空值表示“未配置，使用 config/*.py 里的默认值”，否则 bool 默认 True
     # 会被空字符串误覆盖成 False，str/list 默认值也会被误清空。
@@ -257,7 +271,7 @@ def apply_env_overrides(namespace: dict, schema: dict[str, str] | None = None) -
     ensure_loaded()
     keys = schema.keys() if schema else [k for k in namespace if k.isupper()]
     for key in keys:
-        if os.getenv(key) is None:
+        if _lookup_env(key) is None:
             continue
         default = namespace.get(key)
         vtype = schema.get(key) if schema else None

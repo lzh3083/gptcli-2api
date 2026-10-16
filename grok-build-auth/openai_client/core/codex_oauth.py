@@ -29,7 +29,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, parse_qs, quote
 
-import pyotp
+try:
+    import pyotp
+except ImportError:
+    pyotp = None
 
 # 用模块属性方式访问 config，支持 WebUI 热加载（config.reload_all()）。
 # 协议级常量（CLIENT_ID/URL/SCOPE/OUTPUT_DIRNAME）虽然不会改，统一从 _cfg 读，
@@ -50,7 +53,10 @@ from core.openai_auth import (
 )
 from core import db
 from core import sms_provider
-from curl_cffi import requests as curl_requests
+try:
+    from curl_cffi import requests as curl_requests
+except ImportError:
+    curl_requests = None
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +274,11 @@ def _account_totp_secret(email: str) -> str:
 
 def _account_totp_code(email: str) -> str:
     secret = _account_totp_secret(email)
-    return pyotp.TOTP(secret).now() if secret else ""
+    if not secret:
+        return ""
+    if pyotp is None:
+        raise RuntimeError("pyotp is required for TOTP generation")
+    return pyotp.TOTP(secret).now()
 
 
 # ============================================================
@@ -2112,7 +2122,8 @@ def run_codex_oauth(
         # 6. 选 workspace → 拿 callback code；若登录 continue 已经直接命中 callback，则复用。
         callback_url = early_callback_url or _select_workspace_and_get_callback(session, state)
         code = _extract_code(callback_url, state)
-        logger.info(f"[Codex] 已拿到 authorization code：{code[:24]}...")
+        # 安全：authorization code 可直接换取 token，日志不落明文片段。
+        logger.info(f"[Codex] 已拿到 authorization code：len={len(code)}")
 
         # 7A. CPA 模式：把 callback URL 交给 CPA，由 CPA 持有 verifier 并完成换 token / 写 auth。
         #     本地不再用 code 换 token；仅保存 CPA 返回的授权文件或回调回执。

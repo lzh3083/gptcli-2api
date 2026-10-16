@@ -13,6 +13,10 @@ from typing import Any
 
 from grok2api.config import ACCOUNT_MODE, ADMIN_PASSWORD, DATA_DIR, SETTINGS_FILE
 
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
+
 _lock = threading.RLock()
 
 # All modes treat accounts equally — no "primary" account concept.
@@ -132,7 +136,9 @@ def _load_disk() -> dict[str, Any]:
             data["updated_at"] = time.time()
             return data
         except Exception:
-            pass
+            # 鉴权相关路径（admin_password/sessions 读取）失败绝不能静默——
+            # 存储故障静默回退到文件后端会导致 admin 密码状态误判。
+            _logger.exception("settings_store: PG settings load failed; falling back to file backend")
     if not SETTINGS_FILE.is_file():
         return {}
     try:

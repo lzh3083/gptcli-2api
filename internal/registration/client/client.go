@@ -45,6 +45,10 @@ func (c *Client) Start(ctx context.Context, request map[string]any, idempotencyK
 	return c.do(ctx, http.MethodPost, "/jobs", request, headers)
 }
 
+func (c *Client) Funnel(ctx context.Context) (map[string]any, error) {
+	return c.do(ctx, http.MethodGet, "/funnel", nil, nil)
+}
+
 func (c *Client) Sessions(ctx context.Context) (map[string]any, error) {
 	return c.do(ctx, http.MethodGet, "/sessions", nil, nil)
 }

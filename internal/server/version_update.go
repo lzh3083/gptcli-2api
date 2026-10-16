@@ -199,12 +199,18 @@ func updateMode() (mode string, supported bool, hint string) {
 		}
 	}
 
-	// Explicit custom command always preferred when set.
+	// Explicit custom command preferred when set — but still requires the
+	// explicit opt-in switch, because admin-triggered shell execution plus a
+	// mounted docker.sock is a full host-takeover chain if the admin session
+	// is ever compromised.
+	if !truthyEnv("GROK2API_HOT_UPDATE_ENABLED") {
+		return "disabled", false, "热更新默认禁用（安全策略：admin 会话失陷 + docker.sock = 宿主机逃逸）。确需启用请设置 GROK2API_HOT_UPDATE_ENABLED=1 并知悉风险。"
+	}
 	if cmd := strings.TrimSpace(os.Getenv("GROK2API_HOT_UPDATE_CMD")); cmd != "" {
 		return "cmd", true, "将在容器内执行 GROK2API_HOT_UPDATE_CMD（{{TAG}} / {{IMAGE}} 可替换）。"
 	}
 
-	// Default: in-container docker when sock + CLI are present.
+	// In-container docker mode only when explicitly enabled AND sock + CLI are present.
 	if dockerCLIAvailable() && dockerSockPresent() {
 		return "docker", true, "容器内热更新：docker pull 目标镜像，并通过 compose/容器自重建完成重启（无需宿主机 watcher）。"
 	}
@@ -481,14 +487,19 @@ func fetchGitHubLatestTag(ctx context.Context, repo string) (tag, htmlURL string
 }
 
 func checkLatestVersion(ctx context.Context, force bool) versionCheckResult {
+	// 缓存读取与网络请求分离：GitHub API 最长 8s，绝不能在持锁状态下执行，
+	// 否则一次慢网络会阻塞所有 /admin/api/version 读请求。double-checked
+	// 模式下并发刷新可能重复外呼一次，代价远小于全局阻塞。
 	versionCacheMu.Lock()
-	defer versionCacheMu.Unlock()
-	now := time.Now()
-	if !force && !versionCacheAt.IsZero() && now.Sub(versionCacheAt) < versionCacheTTL && versionCacheResult.Latest != "" {
+	if !force && !versionCacheAt.IsZero() && time.Since(versionCacheAt) < versionCacheTTL && versionCacheResult.Latest != "" {
 		out := versionCacheResult
 		out.Source = "cache"
+		versionCacheMu.Unlock()
 		return out
 	}
+	versionCacheMu.Unlock()
+
+	now := time.Now()
 	repo := ghReleaseRepo()
 	out := versionCheckResult{
 		OK:      true,
@@ -539,8 +550,10 @@ func checkLatestVersion(ctx context.Context, force bool) versionCheckResult {
 		out.ReleaseURL = url
 		out.UpdateAvailable = versionLess(out.Current, out.Latest)
 	}
+	versionCacheMu.Lock()
 	versionCacheAt = now
 	versionCacheResult = out
+	versionCacheMu.Unlock()
 	return out
 }
 

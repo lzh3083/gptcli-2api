@@ -11,7 +11,10 @@ import threading
 import time
 import uuid
 from urllib.parse import urlparse
-from curl_cffi.requests import Session
+try:
+    from curl_cffi.requests import Session
+except ImportError:
+    Session = object  # 允许测试或无编译依赖环境下正常导入非网络模块
 
 from config import (
     USER_AGENT, SEC_CH_UA, SEC_CH_UA_PLATFORM, SEC_CH_UA_MOBILE,
