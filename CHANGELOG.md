@@ -27,10 +27,10 @@ All notable changes to `gptcli-2api` will be documented in this file.
   - 提取 `BaseRegistrationFlow` 流程抽象与 `RegistrationResult` 标准结构；
   - 排查并彻底修复上游在 `model_health.py` 与 `token_maintainer.py` 桩实现中残留的缩进语法破坏（`IndentationError`），全库通过 `python -m compileall` 校验。
 
-- **接码国家轮换池优化：剔除葡萄牙，聚焦菲律宾优先四国池**：
-  - 接码国家策略调整为 `SMS_COUNTRY=4,16,73,6`（菲律宾 4 → 英国 16 → 巴西 73 → 印尼 6 智能轮换）；
-  - 充分利用菲律宾（0.025r 单价与 68 万余量）及与新加坡住宅代理同属东南亚的地理优势；
-  - 单号短信等待时间设为 `SMS_CODE_WAIT=120`（120 秒充足路由窗口），重试上限设为 `SMS_MAX_RETRIES=10`。
+- **接码国家轮换池优化：剔除菲律宾与印尼，锁定英国第一、巴西第二策略**：
+  - 接码国家策略调整为 `SMS_COUNTRY=16,73`（英国 16 第一优先，巴西 73 第二备选）；
+  - 彻底规避菲律宾/印尼低价虚拟卡被 OpenAI 后端短信网关静默弃包导致无意义等待的问题；
+  - 单号短信等待时间设为 `SMS_CODE_WAIT=120`，重试上限设为 `SMS_MAX_RETRIES=10`。
 
 - **全量安全加固 (P0–P2)**：
   - `clientIP()` 校验可信代理网段（`GROK2API_TRUSTED_PROXIES`），彻底封堵伪造 XFF 冒充 loopback 夺取管理员特权的攻击链；
