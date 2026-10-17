@@ -4,6 +4,20 @@ All notable changes to `gptcli-2api` will be documented in this file.
 
 ---
 
+## [v1.2.2] - 2026-10-17
+
+### 🛡️ 手机验证异常状态自愈与网络抖动容灾 (Phone Flow Resilience & Network Fault Recovery)
+
+- **修复网络抖动（ERR_SSL_PROTOCOL_ERROR）导致的虚假退出缺陷**：
+  - 排查并修复了在代理网络瞬时抖动、浏览器页面进入 `chrome-error://chromewebdata/` 异常状态时，代码因找不到手机输入表单误判为“已离开手机验证页”而提前退出，导致在后续阶段白白等待 180 秒超时的严重逻辑漏洞；
+  - 增加对异常页面 URL（`chrome-error`、`about:blank`）与真实后续授权页（`workspace`、`consent`、`callback`）的严格状态判别矩阵；
+  - 遇到页面异常时自动强制重新导航至 `https://auth.openai.com/add-phone` 并无缝继续执行换号重试，保证多轮接码闭环平滑走完。
+
+- **工程版本治理规范持续践行**：
+  - 严格履行代码提交 GitHub 前必须同步 SemVer 版本号递增（v1.2.2）、CHANGELOG 详尽记录与对应版本 Git Tag 的发布铁律。
+
+---
+
 ## [v1.2.1] - 2026-10-17
 
 ### 📱 接码策略重构与工程版本治理规范 (SMS Country Strategy & Version Governance)

@@ -1471,11 +1471,31 @@ def _do_phone_verification_if_present(driver) -> None:
                     else:
                         _find_any(driver, _PHONE_INPUT_SELECTORS, timeout=2)
                 except Exception:
-                    if _is_add_phone_page(driver) or _is_phone_code_page(driver):
+                    current_url = str(getattr(driver, "current_url", "") or "").lower()
+                    if any(k in current_url for k in ("callback", "localhost:1455")):
+                        logger.info("[Codex][Browser] 检测到已重定向至 callback，手机验证成功通过")
+                        return
+                    if any(k in current_url for k in ("chrome-error", "about:blank")):
+                        logger.warning("[Codex][Browser] 页面进入异常状态（%s），尝试重新导航至 add-phone", current_url)
+                        try:
+                            driver.get("https://auth.openai.com/add-phone")
+                            time.sleep(2)
+                        except Exception:
+                            pass
+                    elif _is_add_phone_page(driver) or _is_phone_code_page(driver):
                         logger.info("[Codex][Browser] 仍处于手机号流程，继续换号重试")
                     else:
-                        logger.info("[Codex][Browser] 手机输入页已消失，继续后续流程")
-                        return
+                        page_source = str(getattr(driver, "page_source", "") or "").lower()
+                        has_consent = any(w in page_source for w in ("workspace", "consent", "authorize", "allow", "continue"))
+                        if has_consent and "add-phone" not in current_url:
+                            logger.info("[Codex][Browser] 手机输入页已消失且检测到授权页面，继续后续流程")
+                            return
+                        logger.warning("[Codex][Browser] 手机输入页未找到且未进入正常授权页（url=%s），尝试重新回到 add-phone", current_url)
+                        try:
+                            driver.get("https://auth.openai.com/add-phone")
+                            time.sleep(2)
+                        except Exception:
+                            pass
                 if attempt < max_retries:
                     _refresh_add_phone_for_retry(driver, reason=str(exc)[:120])
                 _sleep_before_phone_retry(attempt, max_retries)
