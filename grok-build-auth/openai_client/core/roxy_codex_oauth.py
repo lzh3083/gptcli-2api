@@ -362,12 +362,59 @@ def _fill_login_password_if_present(driver, email: str, timeout: int = 18, passw
             time.sleep(0.5)
             continue
         input_el = driver.find_element("css selector", "[data-cloak-pw-input='1']")
-        btn_el = driver.find_element("css selector", "[data-cloak-pw-submit='1']")
         _human_type_text(driver, input_el, password, clear=True)
-        human_delay("form", minimum=2.0, maximum=3.6)
-        _human_click(driver, btn_el, label="codex_password_submit")
+        human_delay("form", minimum=1.5, maximum=2.5)
+
+        submit_btn_info = driver.execute_script(r"""
+        const visible = el => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)
+          && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
+        const enabled = el => !!el && !el.disabled && String(el.getAttribute('aria-disabled') || '').toLowerCase() !== 'true';
+        const pass = document.querySelector('input[data-cloak-pw-input="1"]') || document.querySelector('input[type="password"]');
+        const form = pass ? pass.closest('form') : document.querySelector('form');
+        const scope = form || document;
+        const candidates = [...scope.querySelectorAll('button,input[type="submit"],[role="button"]')]
+          .filter(el => visible(el) && enabled(el));
+        const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+        const scored = candidates.map((el, idx) => {
+          const attrs = [
+            el.getAttribute('type'), el.getAttribute('data-dd-action-name'),
+            el.getAttribute('data-login-web-auth-control'), el.getAttribute('aria-label'),
+            el.getAttribute('name'), el.getAttribute('value'), el.textContent
+          ].join(' ').toLowerCase();
+          const text = norm(el.textContent || el.getAttribute('value') || '');
+          let score = 0;
+          if ((el.getAttribute('type') || '').toLowerCase() === 'submit') score += 80;
+          if ((el.getAttribute('data-dd-action-name') || '').toLowerCase() === 'continue') score += 90;
+          if (String(el.getAttribute('data-login-web-auth-control') || '').toLowerCase() === 'true') score += 70;
+          if (/continue|next|submit|log\s*in|sign\s*in|続行|登录|继续/.test(attrs) || /continue|next|submit|log\s*in|sign\s*in|続行|登录|继续/.test(text)) score += 50;
+          return {el, idx, score};
+        }).sort((a,b) => b.score - a.score || a.idx - b.idx);
+        const target = scored[0]?.el;
+        if (target) {
+          target.setAttribute('data-cloak-pw-active-submit', '1');
+          return {ok: true, text: target.textContent?.trim()};
+        }
+        return {ok: false};
+        """) or {}
+
+        clicked_button = False
+        if submit_btn_info.get("ok"):
+            try:
+                active_btn = driver.find_element("css selector", "[data-cloak-pw-active-submit='1']")
+                _human_click(driver, active_btn, label="codex_password_submit")
+                clicked_button = True
+            except Exception:
+                pass
+        if not clicked_button:
+            try:
+                from selenium.webdriver.common.keys import Keys
+                input_el.send_keys(Keys.ENTER)
+            except Exception:
+                pass
+
         logger.info("[Codex][Browser] 已填写并提交登录密码：%s", email)
-        wait_end = time.time() + 12
+        wait_end = time.time() + 15
+        submitted_request = False
         while time.time() < wait_end:
             if _is_mfa_challenge_page(driver):
                 _fill_mfa_challenge_if_present(driver, email, timeout=15)
@@ -376,7 +423,35 @@ def _fill_login_password_if_present(driver, email: str, timeout: int = 18, passw
                 return "email_otp"
             if not _is_login_password_page(driver):
                 return "next_step"
+            if not submitted_request and (wait_end - time.time()) < 10:
+                submitted_request = True
+                driver.execute_script(r"""
+                try {
+                    const input = document.querySelector('input[data-cloak-pw-input="1"]') || document.querySelector('input[type="password"]');
+                    const form = input?.closest('form');
+                    const btn = document.querySelector('[data-cloak-pw-active-submit="1"]') || document.querySelector('button[data-cloak-pw-submit="1"]') || form?.querySelector('button[type="submit"]');
+                    if (form && btn) form.requestSubmit(btn);
+                    else if (form) form.requestSubmit();
+                    else if (btn) btn.click();
+                } catch(e) {}
+                """)
+                try:
+                    from selenium.webdriver.common.keys import Keys
+                    input_el.send_keys(Keys.ENTER)
+                except Exception:
+                    pass
             time.sleep(0.5)
+        err_info = driver.execute_script(r"""
+        const visible = el => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+        const errors = [...document.querySelectorAll('[role="alert"],[aria-live="assertive"],[aria-live="polite"],.react-aria-FieldError,[slot="errorMessage"],[class*="error"]')]
+          .filter(visible).map(el => (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        return errors.join('; ');
+        """) or ""
+        if err_info:
+            logger.warning("[Codex][Browser] 登录密码页提示错误：%s，准备重试", err_info)
+        if _is_login_password_page(driver):
+            logger.warning("[Codex][Browser] 密码提交后仍停留密码页，继续重试")
+            continue
         return "next_step"
     return None
 
@@ -1061,12 +1136,34 @@ def _refresh_add_phone_for_retry(driver, *, reason: str = "") -> None:
         logger.info("[Codex][Browser] 刷新手机号页失败，下一轮会再次尝试回到 add-phone：%s", str(exc)[:180])
 
 
+def _dismiss_phone_country_dropdown(driver) -> None:
+    """关闭可能展开的国家码下拉浮层，避免遮挡 Continue 按钮。"""
+    try:
+        page = getattr(driver, "page", None)
+        if page:
+            page.keyboard.press("Escape")
+            time.sleep(0.15)
+            page.keyboard.press("Tab")
+            time.sleep(0.15)
+    except Exception:
+        pass
+    try:
+        driver.execute_script("""
+        const active = document.activeElement;
+        if (active && typeof active.blur === 'function') active.blur();
+        document.body.click();
+        """)
+    except Exception:
+        pass
+
+
 def _click_add_phone_continue_button(driver, *, timeout: int = 10) -> dict:
     """点击 add-phone 表单里的 Continue/続行 按钮。
 
-    参考 FlowPilot 的 getAddPhoneSubmitButton + simulateClick：优先在 add-phone form 内找
-    enabled submit，点击失败时用 form.requestSubmit(button) 兜底。
+    优先在 add-phone form 及整页内找 enabled submit / continue 按钮，
+    点击前先 dismiss 可能遮挡的国家下拉浮层，点击失败时用 form.requestSubmit(button) 兜底。
     """
+    _dismiss_phone_country_dropdown(driver)
     end = time.time() + timeout
     last = None
     while time.time() < end:
@@ -1086,9 +1183,19 @@ def _click_add_phone_continue_button(driver, *, timeout: int = 10) -> dict:
             if (hidden && window.__cloakExpectedPhoneE164) {
               hidden.value = window.__cloakExpectedPhoneE164;
             }
-            const buttons = [...form.querySelectorAll('button[type="submit"], input[type="submit"]')];
-            return buttons.find(b => visible(b) && enabled(b) && (b.getAttribute('data-dd-action-name') || '').toLowerCase() === 'continue')
-              || buttons.find(b => visible(b) && enabled(b))
+            const buttons = [...form.querySelectorAll('button, input[type="submit"], [role="button"]')];
+            const score = (el) => {
+              if (!visible(el) || !enabled(el)) return -1;
+              const text = [el.innerText, el.textContent, el.value, el.getAttribute('aria-label'), el.getAttribute('data-dd-action-name')].join(' ').trim().toLowerCase();
+              if (/(continue|send|next|verify|submit|続行|送信|次へ|確認|继续|发送|下一步|验证)/i.test(text)) return 100;
+              if ((el.type || '').toLowerCase() === 'submit') return 80;
+              return 10;
+            };
+            const matched = buttons.map(b => [score(b), b]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0])[0]?.[1];
+            if (matched) return matched;
+            // 全局兜底
+            const globalButtons = [...document.querySelectorAll('button, input[type="submit"]')];
+            return globalButtons.map(b => [score(b), b]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0])[0]?.[1]
               || buttons.find(b => visible(b))
               || null;
             """)
@@ -1107,7 +1214,7 @@ def _click_add_phone_continue_button(driver, *, timeout: int = 10) -> dict:
                     last = click_exc
                     submitted = driver.execute_script(r"""
                     const btn = arguments[0];
-                    const form = btn?.form || btn?.closest?.('form');
+                    const form = btn?.form || btn?.closest?.('form') || document.querySelector('form');
                     if (form && typeof form.requestSubmit === 'function') {
                       form.requestSubmit(btn);
                       return true;
@@ -1129,6 +1236,7 @@ def _click_add_phone_continue_button(driver, *, timeout: int = 10) -> dict:
 
 def _force_submit_add_phone_form(driver) -> dict:
     """add-phone 页面点击按钮没生效时，直接 requestSubmit 当前 form。"""
+    _dismiss_phone_country_dropdown(driver)
     try:
         return driver.execute_script(r"""
         const visible = el => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
@@ -1229,14 +1337,15 @@ def _wait_after_phone_otp_submit(driver, timeout: int = 20) -> str:
 def _classify_phone_page_failure(state: dict) -> str:
     if _is_phone_code_state(state):
         return ''
-    # WhatsApp 用 DOM radio value 判断；其它发送失败用服务端/页面错误文本兜底。
     radios = state.get('radios') or []
-    if any('whatsapp' in str(r.get('value','')).lower().replace(' ', '') and r.get('checked') for r in radios):
+    has_sms = any(str(r.get('value','')).lower() in ('sms', 'text', 'text_message', 'text-message') for r in radios)
+    whatsapp_checked = any('whatsapp' in str(r.get('value','')).lower().replace(' ', '') and r.get('checked') for r in radios)
+    if whatsapp_checked and not has_sms:
         return 'whatsapp_channel'
     text = str(state.get('bodyText') or '').lower()
     if 'invalid_auth_step' in text or 'invalid auth step' in text:
         return 'invalid_auth_step'
-    if 'whatsapp' in text or 'whats app' in text:
+    if not has_sms and any(k in text for k in ('only via whatsapp', 'only send via whatsapp', 'sent via whatsapp', 'whatsapp only')):
         return 'whatsapp_channel'
     if any(k in text for k in ('invalid phone', 'not a valid phone', 'phone number is not valid', '号码无效', '手机号无效')):
         return 'invalid_phone'
@@ -1265,12 +1374,17 @@ def _do_phone_verification_if_present(driver) -> None:
     http = sms_provider._http()
     max_retries = int(getattr(sms_provider._cfg, "SMS_MAX_RETRIES", 10) or 10) if hasattr(sms_provider, "_cfg") else 10
     try:
-        # 如果页面没有手机号输入框，直接返回。
+        # 如果页面没有手机号输入框，先等待页面跳转与渲染。
         try:
-            end_detect = time.time() + 8
-            while time.time() < end_detect and not _has_strict_add_phone_form(driver):
-                # 如果已经在验证码页，说明手机步骤之前已提交过；继续处理验证码页，不应当跳过。
-                if _is_phone_code_page(driver):
+            end_detect = time.time() + 18
+            while time.time() < end_detect:
+                if _has_strict_add_phone_form(driver) or _is_phone_code_page(driver):
+                    break
+                current_url = str(getattr(driver, "current_url", "") or "").lower()
+                if "add-phone" in current_url:
+                    # 已经在 add-phone URL 上，给足时间等表单渲染
+                    pass
+                elif any(k in current_url for k in ("callback", "localhost:1455")):
                     break
                 time.sleep(0.5)
             if not (_has_strict_add_phone_form(driver) or _is_phone_code_page(driver)):
@@ -1280,11 +1394,13 @@ def _do_phone_verification_if_present(driver) -> None:
             return
 
         last_err = None
+        raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip()]
         for attempt in range(1, max_retries + 1):
             activation_id = None
             try:
-                activation_id, phone = sms_provider.acquire_number(http)
-                logger.info("[Codex][Browser] 手机验证尝试 %s/%s，provider=%s，号码=+%s", attempt, max_retries, provider, phone)
+                target_country = raw_countries[(attempt - 1) % len(raw_countries)] if raw_countries else None
+                activation_id, phone = sms_provider.acquire_number(http, country=target_country)
+                logger.info("[Codex][Browser] 手机验证尝试 %s/%s，provider=%s，country=%s，号码=+%s", attempt, max_retries, provider, target_country or "default", phone)
                 logger.info("[Codex][Browser] 准备手机号输入页，重新设置新手机号")
                 _ensure_add_phone_input(driver, reason=f"attempt-{attempt}")
                 phone_fill = _set_phone_value(driver, f"+{phone}", timeout=10)
@@ -1294,11 +1410,13 @@ def _do_phone_verification_if_present(driver) -> None:
                     phone_fill.get("dialCode") or "-", (str(phone_fill.get("selectedText") or "-") + (" [changed]" if phone_fill.get("selectedChanged") else "")),
                 )
                 _blur_active_input_and_wait(driver, label="手机号输入完成")
+                _dismiss_phone_country_dropdown(driver)
                 phone_verify = _verify_add_phone_value_before_submit(driver, str(phone_fill.get("e164") or f"+{phone}"))
                 logger.info("[Codex][Browser] 手机号提交前校验通过：visible=%s hidden=%s", phone_verify.get("visibleValue"), phone_verify.get("hiddenValue") or "-")
                 logger.info("[Codex][Browser] 检查并选择 SMS 短信通道")
                 _select_sms_channel_or_raise(driver)
                 _blur_active_input_and_wait(driver, label="短信通道确认完成")
+                _dismiss_phone_country_dropdown(driver)
                 submit_info = _click_add_phone_continue_button(driver, timeout=10)
                 logger.info("[Codex][Browser] 已点击手机号 Continue/続行 按钮：%s，等待进入短信验证码页", submit_info)
                 _wait_page_settle_after_submit()
@@ -1333,14 +1451,12 @@ def _do_phone_verification_if_present(driver) -> None:
                         sms_provider.cancel(activation_id, http)
                     except Exception:
                         pass
-                # 余额不足 / 无可用号码：重试多少次都不会成功，立即失败止损，
-                # 避免白等 N 轮换号重试（每轮还要刷新页面 + 随机等待）。
+                # 余额不足：重试多少次都不会成功，立即失败止损
                 if any(k in err_text for k in (
-                    "NO_BALANCE", "NO_NUMBERS", "BALANCE", "余额不足",
-                    "暂无可用号码", "没有可用号码", "insufficient", "not enough balance",
+                    "NO_BALANCE", "BALANCE", "余额不足", "insufficient", "not enough balance",
                 )):
                     raise RuntimeError(
-                        f"接码平台余额不足或无可用号码，已停止换号止损：{err_text[:180]}"
+                        f"接码平台余额不足，已停止换号止损：{err_text[:180]}"
                     ) from exc
                 if "invalid_auth_step" in str(exc):
                     raise RuntimeError(
@@ -1379,6 +1495,10 @@ def _finish_consent_workspace(driver) -> str:
         if callback:
             return callback
         current = str(driver.current_url or "")
+        if _is_add_phone_page(driver) or _has_strict_add_phone_form(driver) or _is_phone_code_page(driver):
+            logger.info("[Codex][Browser] 等待 callback 期间检测到进入手机号验证页，执行手机号流程")
+            _do_phone_verification_if_present(driver)
+            continue
         clicked = False
         for selectors in [
             ["//button[contains(., 'Allow')]", "//button[contains(., 'Authorize')]", "//button[contains(., 'Continue')]"],
@@ -1398,14 +1518,14 @@ def _finish_consent_workspace(driver) -> str:
 
 
 def clear_roxy_browser_auth_state(driver) -> None:
-    """清空当前 Roxy 浏览器里的 OpenAI/ChatGPT 登录态与缓存，用于注册后复用同一环境跑 Codex。"""
+    """清空当前浏览器里的 OpenAI/ChatGPT 登录态，保留静态资源 HTTP 缓存以节省代理流量。"""
     origins = [
         "https://auth.openai.com",
         "https://chatgpt.com",
         "https://openai.com",
         "https://platform.openai.com",
     ]
-    logger.info("[Codex][Browser] 复用注册窗口：开始清理 Cookie / localStorage / sessionStorage / cache")
+    logger.info("[Codex][Browser] 复用注册窗口：开始清理 Cookie / localStorage / sessionStorage（保留静态资源缓存）")
     try:
         driver.execute_cdp_cmd("Network.enable", {})
     except Exception:
@@ -1414,26 +1534,21 @@ def clear_roxy_browser_auth_state(driver) -> None:
         driver.execute_cdp_cmd("Network.clearBrowserCookies", {})
         logger.info("[Codex][Browser] 已清理浏览器 Cookie")
     except Exception as exc:
-        logger.info("[Codex][Browser] 清理 Cookie 失败，继续尝试其它缓存：%s", str(exc)[:160])
-    try:
-        driver.execute_cdp_cmd("Network.clearBrowserCache", {})
-        logger.info("[Codex][Browser] 已清理浏览器 Cache")
-    except Exception as exc:
-        logger.info("[Codex][Browser] 清理 Cache 失败，继续：%s", str(exc)[:160])
+        logger.info("[Codex][Browser] 清理 Cookie 失败，继续尝试清理站点存储：%s", str(exc)[:160])
     for origin in origins:
         try:
             driver.execute_cdp_cmd("Storage.clearDataForOrigin", {
                 "origin": origin,
-                "storageTypes": "all",
+                "storageTypes": "cookies,local_storage,session_storage,indexeddb",
             })
-            logger.info("[Codex][Browser] 已清理站点数据：%s", origin)
+            logger.info("[Codex][Browser] 已清理站点登录存储：%s", origin)
         except Exception as exc:
             logger.debug("[Codex][Browser] 清理站点数据失败 %s: %s", origin, exc)
     try:
         driver.get("about:blank")
     except Exception:
         pass
-    time.sleep(1.0)
+    time.sleep(0.5)
     logger.info("[Codex][Browser] 注册窗口登录态清理完成，准备开始 Codex 授权")
 
 def _exchange_codex_token_in_browser(driver, code: str, code_verifier: str) -> dict | None:
