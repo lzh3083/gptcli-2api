@@ -28,7 +28,7 @@ All notable changes to `gptcli-2api` will be documented in this file.
   - 排查并彻底修复上游在 `model_health.py` 与 `token_maintainer.py` 桩实现中残留的缩进语法破坏（`IndentationError`），全库通过 `python -m compileall` 校验。
 
 - **接码国家轮换池优化：菲律宾优先与亚太低成本扩容**：
-  - 接码国家策略升级为 `SMS_COUNTRY=4,16,73,117,6`（菲律宾 4 优先，随后英国 16、巴西 73、葡萄牙 117、印尼 6 智能轮换）；
+  - 接码国家策略调整为 `SMS_COUNTRY=4,16,73,6,117`（菲律宾 4 → 英国 16 → 巴西 73 → 印尼 6 → 葡萄牙 117 智能轮换）；
   - 充分利用菲律宾（0.025r 单价与 68 万余量）及与新加坡住宅代理同属东南亚的地理优势；
   - 单号短信等待时间设为 `SMS_CODE_WAIT=120`（120 秒充足路由窗口），重试上限设为 `SMS_MAX_RETRIES=10`。
 
