@@ -4,6 +4,31 @@ All notable changes to `gptcli-2api` will be documented in this file.
 
 ---
 
+## [v1.2.1] - 2026-10-17
+
+### 📱 接码策略重构与工程版本治理规范 (SMS Country Strategy & Version Governance)
+
+- **接码国家轮询池精准优化（英国第一优先，巴西第二备选）**：
+  - 彻底剔除接码成功率极低的菲律宾（`4`）与印尼（`6`）虚拟卡号段，以及欧洲葡萄牙（`117`）；
+  - 国家轮换策略确立为 `SMS_COUNTRY="16,73"`：首选英国（`16`），巴西（`73`）主力实体卡号段高可用轮换；
+  - 彻底解决 OpenAI 后端短信网关（Twilio/Carrier Lookup）对廉价虚拟号静默弃包（Silent Drop）导致的无限死等问题。
+
+- **短信路由与重试时间窗口标准化**：
+  - 单号等待时间严格设定为 `SMS_CODE_WAIT=120` 秒（保障国际跨网短信充分路由下发）；
+  - 单账号换号重试上限设为 `SMS_MAX_RETRIES=10` 次；
+  - 轮询间隔保持 `SMS_POLL_INTERVAL=5` 秒，兼顾实时性与平台配额安全。
+
+- **浏览器自动化与表单提交流程鲁棒性增强**：
+  - 优化 React-Aria 电话输入框国旗选择与掩码适配，支持 E.164 规范多位数精准回填；
+  - 增加候选 Continue 提交按钮评分机制与 `form.requestSubmit()` 自动回退，消除前端点击假死；
+  - 优化 NovProxy 住宅节点分配策略与一号一 IP 释放机制。
+
+- **工程标准与 Git 版本发布治理铁律**：
+  - 建立“每次代码变更推送到 GitHub 必须同步执行 SemVer 版本号递增、CHANGELOG 详细版本说明与 Git Tag 标记”的工程规范；
+  - 保持 `internal/buildinfo.Version`、`grok2api/app.py APP_VERSION` 与 `git tag` 三方严格同频一致。
+
+---
+
 ## [v1.2.0] - 2026-10-17
 
 ### 🛡️ 纯注册机深度加固、高可用守护与流程重构 (Pure Registration Hardening & Process Supervisor)
@@ -26,11 +51,6 @@ All notable changes to `gptcli-2api` will be documented in this file.
   - 在 `email_provider.py` 引入统一的 `_EmailStrategy` 策略注册表，解耦 9 家邮箱服务商同构逻辑，收敛 300+ 行重复代码；
   - 提取 `BaseRegistrationFlow` 流程抽象与 `RegistrationResult` 标准结构；
   - 排查并彻底修复上游在 `model_health.py` 与 `token_maintainer.py` 桩实现中残留的缩进语法破坏（`IndentationError`），全库通过 `python -m compileall` 校验。
-
-- **接码国家轮换池优化：剔除菲律宾与印尼，锁定英国第一、巴西第二策略**：
-  - 接码国家策略调整为 `SMS_COUNTRY=16,73`（英国 16 第一优先，巴西 73 第二备选）；
-  - 彻底规避菲律宾/印尼低价虚拟卡被 OpenAI 后端短信网关静默弃包导致无意义等待的问题；
-  - 单号短信等待时间设为 `SMS_CODE_WAIT=120`，重试上限设为 `SMS_MAX_RETRIES=10`。
 
 - **全量安全加固 (P0–P2)**：
   - `clientIP()` 校验可信代理网段（`GROK2API_TRUSTED_PROXIES`），彻底封堵伪造 XFF 冒充 loopback 夺取管理员特权的攻击链；
