@@ -27,6 +27,10 @@ All notable changes to `gptcli-2api` will be documented in this file.
   - 提取 `BaseRegistrationFlow` 流程抽象与 `RegistrationResult` 标准结构；
   - 排查并彻底修复上游在 `model_health.py` 与 `token_maintainer.py` 桩实现中残留的缩进语法破坏（`IndentationError`），全库通过 `python -m compileall` 校验。
 
+- **接码国家按优先级轮询策略（巴西优先，然后英国，印尼）**：
+  - 接码国家策略调整为 `SMS_COUNTRY=73,16,6`；
+  - 手机验证自动按“巴西（73）优先 → 英国（16）备选 → 印尼（6）兜底”多轮平滑轮询，彻底解决单一国家短信延迟导致的超时熔断。
+
 - **全量安全加固 (P0–P2)**：
   - `clientIP()` 校验可信代理网段（`GROK2API_TRUSTED_PROXIES`），彻底封堵伪造 XFF 冒充 loopback 夺取管理员特权的攻击链；
   - 管理员初始化接口引入本地一次性安全令牌 `<dataDir>/admin-setup.token`；
