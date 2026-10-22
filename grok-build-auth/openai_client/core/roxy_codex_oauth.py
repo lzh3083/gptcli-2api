@@ -1459,11 +1459,23 @@ def _do_phone_verification_if_present(driver) -> None:
                 _type_otp(driver, sms_code)
                 logger.info("[Codex][Browser] 已填写手机 OTP")
                 human_delay("otp_input")
-                if not _click_if_present(driver, ["button[type='submit']", "input[type='submit']"], timeout=10):
-                    raise RuntimeError(f"verify_submit_missing: phone verification submit not found state={_phone_page_state(driver)}")
+                try:
+                    from selenium.webdriver.common.keys import Keys
+                    active_el = driver.switch_to.active_element
+                    if active_el:
+                        active_el.send_keys(Keys.ENTER)
+                except Exception:
+                    pass
+                if not _click_if_present(driver, ["button[type='submit']", "input[type='submit']", "//button[contains(., 'Continue')]", "//button[contains(., 'Verify')]"], timeout=6):
+                    try:
+                        driver.execute_script("const f = document.querySelector('form'); if(f) (f.requestSubmit ? f.requestSubmit() : f.submit());")
+                    except Exception:
+                        pass
                 logger.info("[Codex][Browser] 已提交手机 OTP，等待验证结果")
                 otp_outcome = _wait_after_phone_otp_submit(driver, timeout=60)
                 logger.info("[Codex][Browser] 手机 OTP 提交后状态：%s", otp_outcome)
+                if otp_outcome == "still_code_page":
+                    raise RuntimeError(f"otp_submit_unresponsive: OTP submitted but still stuck on code verification page state={_phone_page_state(driver)}")
                 sms_provider.complete(activation_id, http)
                 return
             except Exception as exc:
