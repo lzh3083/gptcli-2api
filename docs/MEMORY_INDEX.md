@@ -81,11 +81,67 @@ EMAIL_SOURCE=outlook,cloudflare
 | 阶段 | 状态 | 说明 |
 | :--- | :--- | :--- |
 | 1 代理 | ⚠️ 不稳 | NovProxy 偶发 `国家不符: 期望 SG 实际 SA` |
-| 2 邮箱 | 🔴 枯竭 | `available=0`；cooling 54 个 token 已 AADSTS70000 失效 |
+| 2 邮箱 | 🟡 **状态卡死，非枯竭** | `available=0` 是调度 bug：54 个 cooling 冷冻期已过 44h 却无自动恢复；实测 **55 个干净可用** |
 | 3-4 注册 | ✅ 通 | 能正常产出 `chatgpt-*.json` |
 | 5 接码 | 🔴 **根本瓶颈** | 能进验证码页，短信到达率极低 |
 | 6 换 Token | ✅ 通 | 存量 28 个证明可用 |
 | 7 交付 | ✅ 通 | chatgpt2api 37 个在线 |
+
+---
+
+# 邮箱池诊断结论（2026-10-22 23:45 实测）
+
+## 结论：不是枯竭，是状态卡死
+
+`pick_account()` 报 `available=0` 是**调度 bug**，不是没邮箱。
+
+| 状态 | 数量 | 实测结果 |
+| :--- | :--- | :--- |
+| cooling | 54 | 冷冻期标注「24h 后启用」，实际已过 44h，**无自动恢复逻辑** → 永久卡住 |
+| failed | 123 | 混杂多种原因，见下表 |
+| used | 27 | 已消耗 |
+
+## failed 原因分布
+
+| 原因 | 数量 | 可否复用 |
+| :--- | :--- | :--- |
+| 二手脏邮箱 `recycled_dirty_mailbox` | 39 | ❌ 永久废弃 |
+| `audit_target_registered` 第三方客户端授权 | 28 | ❌ 已注册过 |
+| `audit_blacklisted_recycled` 改别名翻新 | 20 | ❌ 黑名单 |
+| `invalid_refresh_token` | 14 | ❌ 失效 |
+| `audit_target_registered` 已存在 OpenAI 账号 | 10 | ❌ 已注册 |
+| 注册流程失败（找不到 OTP 输入框） | 8 | ✅ 可重试 |
+| Cloak 注册失败（Locator / session） | 2 | ✅ 可重试 |
+
+## 关键实测数据
+
+对 64 个候选（54 cooling + 8 可重试 + 2 Cloak失败）跑 `_check_mailbox_clean_for_openai`：
+
+```text
+干净可用 55 | 不可用 9
+```
+
+**55 个邮箱收件箱零消息（clean_msgs=0）、OAuth 有效，完全可用。**
+
+之前抽检 4 个 cooling 全部 `AADSTS70000`，是运气问题（抽到了失效的那批）。
+
+## 恢复方法
+
+把「冷冻期已过且邮箱干净」的 cooling 记录改回 `available`：
+
+```sql
+UPDATE email_pool SET status='available', updated_at=datetime('now')
+WHERE status='cooling' AND created_at <= datetime('now','-24 hours');
+```
+
+建议先用 `_check_mailbox_clean_for_openai` 过滤，只放行 clean_msgs=0 的。
+
+## 教训
+
+**报 `available=0` 时不要直接判定枯竭。** 先跑三项检测：
+1. OAuth 有效性（`_ms_access_token`）
+2. 邮箱干净度（`_check_mailbox_clean_for_openai`）
+3. 状态机是否卡住（cooling 有无恢复逻辑）
 
 ---
 
@@ -98,6 +154,7 @@ EMAIL_SOURCE=outlook,cloudflare
 5. **chatgpt2api 查询字段** — `/api/accounts` 返回 `{"items": [...]}`，不是 `accounts`。
 6. **老挝 25 全虚拟号** — `physicalCount=0`，验证后易触发 `account_deactivated`，仅作末位兜底。
 7. **误跑二阶段脚本** — 白天改的是 `run_batch_hotmail_pipeline.py`，却启动了 `run_batch_existing_codex.py`，白跑 10 分钟。见铁律 2。
+8. **误判邮箱池枯竭** — `available=0` 实为 cooling 状态无自动恢复，实际 55 个可用。抽检 4 个全失效导致误判。
 
 ---
 
