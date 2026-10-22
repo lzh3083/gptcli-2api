@@ -1416,9 +1416,7 @@ def _do_phone_verification_if_present(driver) -> None:
 
         last_err = None
         raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip()]
-        # 老挝第一优先策略：首轮强制优先调度老挝(25)，缺号/异常时依次轮退备选国
-        if "25" in raw_countries:
-            raw_countries = ["25"] + [c for c in raw_countries if c != "25"]
+        # 严格遵循配置指定的国家优先级顺序调度（16英国 -> 73巴西 -> 117葡萄牙 -> 151智利 -> 31南非）
         for attempt in range(1, max_retries + 1):
             activation_id = None
             try:
