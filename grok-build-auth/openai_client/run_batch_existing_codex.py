@@ -45,8 +45,8 @@ def get_candidate_accounts():
             mtime = os.path.getmtime(f)
             from datetime import datetime
             dt = datetime.fromtimestamp(mtime)
-            # 严格筛选 10-21 与 10-22 的最新账号
-            if dt.strftime("%Y-%m-%d") in ("2026-10-21", "2026-10-22"):
+            # 严格筛选 10-21 与 10-22 的最新账号，且必须为支持本地收件箱直连的 hotmail/outlook 域名
+            if dt.strftime("%Y-%m-%d") in ("2026-10-21", "2026-10-22") and (name.lower().endswith("@hotmail.com") or name.lower().endswith("@outlook.com")):
                 d = json.loads(f.read_text(encoding="utf-8"))
                 pwd = d.get("password")
                 if pwd:
