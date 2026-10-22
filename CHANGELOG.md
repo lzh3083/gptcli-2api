@@ -4,6 +4,31 @@ All notable changes to `gptcli-2api` will be documented in this file.
 
 ---
 
+## [v1.3.0] - 2026-10-22
+
+### 🚀 7阶段闭环全自动注册流水线与老挝接码第一优先治理 (7-Stage Closed-Loop Pipeline & Laos SMS Priority)
+
+- **7阶段全链路自动化注册与长效授权闭环 (7-Stage Closed-Loop Architecture)**：
+  - **阶段 1：NovProxy 动态住宅 IP 提取与机房过滤**：每轮动态提取独立住宅代理（`socks5h://`），校验 `hosting=False` 排除机房 ASN，并持久化去重出口 IP。
+  - **阶段 2：邮箱双源自适应与测活兜底**：严格优先从 Outlook/Hotmail 账号池领号，原子化执行微软 OAuth2 `refresh_token` 测活；空池时自动无缝切换至 Cloudflare Worker 临时邮箱（`EMAIL_SOURCE="outlook,cloudflare"`）。
+  - **阶段 3-4：自适应环境对齐与稳定过盾**：按住宅 IP 出口自适应同步浏览器时区与语言指纹，以真实 Chromium 指纹对抗 Turnstile / Sentinel PoW，顺利完成协议注册并自动验证 6 位邮箱 OTP。
+  - **阶段 5：Hero-SMS 手机接码与老挝绝对第一优先**：
+    - 国家调度池固化为 `16,25,73,117`，注入调度队列强制重排算法，确保**首轮取号绝对优先调度老挝（+856 / 25，成本最优 $0.06）**；
+    - 缺号或被拒时依次向后平滑轮退至英国（16）、巴西（73）、葡萄牙（117）；
+    - 固化 240 秒深度等待窗口与满 125 秒后台自动退款机制，100% 保护账户资金；
+    - 增加 HTTP 409 会话失效与 `invalid_auth_step` 即时熔断机制，杜绝无效消耗号码与余额。
+  - **阶段 6：独立 Codex PKCE 授权**：在同一独立住宅代理环境下，直连 ChatGPT 授权端换取 `id_token`、`access_token` 与 `refresh_token` 长效凭证。
+  - **阶段 7：多端资产持久化与热同步**：
+    - 本地落盘标准 `codex-<email>-free.json`；
+    - 自动持久化写入 PostgreSQL `accounts` 表（`cliproxyapi_type='codex'`）；
+    - 自动同步至 CPA 凭证目录 `/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/`；
+    - 自动调用热同步接口更新至本地 `chatgpt2api`（端口 3000）。
+
+- **工程版本治理规范践行**：
+  - 遵循 SemVer 规范，同步推进 `grok2api/app.py`、`internal/buildinfo/buildinfo.go` 版本号至 `v1.3.0`，附带完整发行说明与对应 Git Tag `v1.3.0`。
+
+---
+
 ## [v1.2.2] - 2026-10-17
 
 ### 🛡️ 手机验证异常状态自愈与网络抖动容灾 (Phone Flow Resilience & Network Fault Recovery)

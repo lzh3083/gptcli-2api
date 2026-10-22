@@ -1,3 +1,3 @@
 # Version pin for release/CI gates (public API lives in Go).
 # Keep in lockstep with internal/buildinfo.Version and git tag v*.
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.3.0"
