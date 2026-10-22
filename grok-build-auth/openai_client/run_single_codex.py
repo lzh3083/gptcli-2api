@@ -47,7 +47,7 @@ logger.info("=" * 70)
 
 t0 = time.time()
 try:
-    res = run_codex_oauth(EMAIL, force=True, password=password, proxy=PROXY)
+    res = run_codex_oauth(EMAIL, force=False, password=password, proxy=PROXY)
     el = time.time() - t0
     ok = bool(res and (res.get("ok") or res.get("status") == "success"))
     logger.info("=" * 70)
