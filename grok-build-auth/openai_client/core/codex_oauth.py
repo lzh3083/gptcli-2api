@@ -1332,7 +1332,8 @@ def _sleep_before_phone_retry(attempt: int, max_retries: int, *, prefix: str = "
     """换号前随机等待，至少 3 秒，避免连续提交号码过快。"""
     if attempt >= max_retries:
         return
-    seconds = random.uniform(3.0, 8.0)
+    # 换号防风控休眠：拉长至 8.0 ~ 14.0 秒
+    seconds = random.uniform(8.0, 14.0)
     logger.info(f"{prefix} 换号前随机等待 {seconds:.1f} 秒")
     time.sleep(seconds)
 

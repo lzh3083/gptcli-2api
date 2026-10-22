@@ -127,8 +127,8 @@ SMS_MAX_PRICE: str = ""
 # 一个号收不到短信/被拒时，换号重试的最大次数
 SMS_MAX_RETRIES: int = 10
 
-# 单个号等待短信的最长秒数（超时则取消该号换下一个）
-SMS_CODE_WAIT: int = 240
+# 单个号等待短信的最长秒数（提高到 180 秒，彻底覆盖短信慢速下发长尾时间）
+SMS_CODE_WAIT: int = 180
 
 # 轮询接码平台查短信的间隔（秒）
 SMS_POLL_INTERVAL: int = 5

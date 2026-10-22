@@ -25,6 +25,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("HotmailBatch")
+os.environ["SMS_CODE_WAIT"] = "180"
+import config.codex
+config.codex.SMS_CODE_WAIT = 180
 
 PROXIES = [
     "socks5h://162.128.157.171:32116",  # StarHub SG

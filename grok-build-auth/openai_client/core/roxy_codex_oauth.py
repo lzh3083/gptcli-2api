@@ -1289,7 +1289,7 @@ def _wait_after_phone_send(driver, timeout: int = 12) -> str:
     return 'unknown'
 
 
-def _wait_after_phone_otp_submit(driver, timeout: int = 20) -> str:
+def _wait_after_phone_otp_submit(driver, timeout: int = 60) -> str:
     """手机验证码提交后等待结果。
 
     成功时通常会跳出 phone-verification，进入 consent/workspace/callback；不能在提交后
