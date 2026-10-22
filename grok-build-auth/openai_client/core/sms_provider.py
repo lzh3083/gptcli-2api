@@ -658,8 +658,9 @@ def wait_for_sms_code(
     own_http = http is None
     http = http or _http()
     wait_sec = max_wait or getattr(_cfg, "SMS_CODE_WAIT", 240) or 240
-    if wait_sec < 240:
-        wait_sec = 240
+    # 仅防御极端小值；此前硬编码下限 240s 会覆盖 SMS_CODE_WAIT 配置，导致失败轮转过慢
+    if wait_sec < 60:
+        wait_sec = 60
     deadline = time.time() + wait_sec
     interval = poll_interval or _cfg.SMS_POLL_INTERVAL
     try:
