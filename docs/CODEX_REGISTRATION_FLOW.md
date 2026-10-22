@@ -88,7 +88,7 @@ starting → email_acquired → preflight → bootstrap → auth_init
 | 国家池 | `SMS_COUNTRY=16,73,117,25` |
 | 轮转 | `target_country = countries[(attempt-1) % len(countries)]` |
 | 提交 | 填号 → 选 SMS 通道 → 点击 Continue → 兜底 JS `form.requestSubmit()` |
-| 等待 | `SMS_CODE_WAIT=150`，5 秒间隔轮询 |
+| 等待 | `SMS_CODE_WAIT=180`，5 秒间隔轮询 |
 | 填码 | 收到 6 位 OTP → 填入 → ENTER + 匹配提交按钮 + `requestSubmit` |
 | 退款 | 超时/号段拦截 → 自动 `setStatus=8` 取消，平台 100% 全额原路退款 |
 
@@ -180,7 +180,7 @@ curl -H "Authorization: Bearer <AUTH_KEY>" http://134.185.81.98:3000/api/account
 
 ```bash
 SMS_COUNTRY=16,73,117,25
-SMS_CODE_WAIT=150
+SMS_CODE_WAIT=180
 SMS_MAX_RETRIES=10
 EMAIL_SOURCE=outlook,cloudflare
 ```

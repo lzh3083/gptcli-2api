@@ -60,7 +60,7 @@ sudo -n docker exec -d gptcli-2api bash -c \
 
 ```bash
 SMS_COUNTRY=16,73,117,25   # 英→巴→葡→老挝
-SMS_CODE_WAIT=150
+SMS_CODE_WAIT=180
 SMS_MAX_RETRIES=10
 EMAIL_SOURCE=outlook,cloudflare
 ```
