@@ -29,7 +29,7 @@ sudo -n docker exec -d gptcli-2api bash -c \
 ### 关键配置
 
 ```bash
-SMS_COUNTRY=16,73,117,151,31   # 英→巴→葡→智利→南非
+SMS_COUNTRY=16,73,117,25   # 英→巴→葡→老挝
 SMS_CODE_WAIT=150
 SMS_MAX_RETRIES=10
 EMAIL_SOURCE=outlook,cloudflare
@@ -52,3 +52,4 @@ EMAIL_SOURCE=outlook,cloudflare
 3. **非 Hotmail 域名取不到 OTP** — `@jgxjs.com` 等自定义域名无邮件上下文。已限定候选为 hotmail/outlook（`d431569`）。
 4. **Hero-SMS 伪装限流** — 短时间连续取号返回 `NO_NUMBERS`，并非真缺货。失败后仅等 10s 重试会持续撞限流。
 5. **chatgpt2api 查询字段** — `/api/accounts` 返回 `{"items": [...]}`，不是 `accounts`。
+6. **老挝 25 全虚拟号** — `physicalCount=0`，验证后易触发 `account_deactivated`，仅作末位兜底。

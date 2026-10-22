@@ -82,7 +82,7 @@ starting → email_acquired → preflight → bootstrap → auth_init
 | :--- | :--- |
 | 实现 | `core/roxy_codex_oauth.py` → `_do_phone_verification_if_present()` |
 | 上游 | Hero-SMS（smsbower 适配），`https://hero-sms.com/stubs/handler_api.php`，service `dr` |
-| 国家池 | `SMS_COUNTRY=16,73,117,151,31` |
+| 国家池 | `SMS_COUNTRY=16,73,117,25` |
 | 轮转 | `target_country = countries[(attempt-1) % len(countries)]` |
 | 提交 | 填号 → 选 SMS 通道 → 点击 Continue → 兜底 JS `form.requestSubmit()` |
 | 等待 | `SMS_CODE_WAIT=150`，5 秒间隔轮询 |
@@ -96,10 +96,11 @@ starting → email_acquired → preflight → bootstrap → auth_init
 | 1 | 16 英国 | $0.045 | 最低价，欧洲高权重 |
 | 2 | 73 巴西 | $0.054 | 库存最大（百万级） |
 | 3 | 117 葡萄牙 | $0.060 | 欧盟洁净号段 |
-| 4 | 151 智利 | $0.060 | 实体卡比例高 |
-| 5 | 31 南非 | $0.060 | 后备 |
+| 4 | 25 老挝 | $0.060 | 备选；**physicalCount=0，全虚拟号** |
 
 **注意**：`sms_provider.py` 曾有 `if wait_sec < 240: wait_sec = 240` 硬编码下限，会覆盖 `SMS_CODE_WAIT` 配置。已修为仅防御 60s 以下极端值（commit `8e1ee71`）。
+
+**老挝号段风险**：国家 25 的 `physicalCount` 长期为 0（纯虚拟号）。历史上用老挝号完成验证的账号大量出现 `403 account_deactivated`，故仅在英/巴/葡全部取号失败时作为末位兜底。
 
 ---
 
@@ -175,7 +176,7 @@ curl -H "Authorization: Bearer <AUTH_KEY>" http://134.185.81.98:3000/api/account
 ## 关键环境变量
 
 ```bash
-SMS_COUNTRY=16,73,117,151,31
+SMS_COUNTRY=16,73,117,25
 SMS_CODE_WAIT=150
 SMS_MAX_RETRIES=10
 EMAIL_SOURCE=outlook,cloudflare
