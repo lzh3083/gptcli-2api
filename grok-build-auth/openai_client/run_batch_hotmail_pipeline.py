@@ -27,16 +27,13 @@ logging.basicConfig(
 logger = logging.getLogger("HotmailBatch")
 
 PROXIES = [
-    "socks5h://162.128.157.171:32116",
-    "socks5h://162.128.157.171:33093",
-    "socks5h://198.44.167.42:28819",
-    "socks5h://198.44.167.42:28820",
-    "socks5h://198.44.167.42:28821",
-    "socks5h://198.44.167.42:35501",
-    "socks5h://198.44.167.42:27066",
-    "socks5h://198.44.167.42:27067",
-    "socks5h://198.44.167.198:28819",
-    "socks5h://198.44.167.198:26553"
+    "socks5h://162.128.157.171:32116",  # StarHub SG
+    "socks5h://162.128.157.171:33093",  # StarHub SG
+    "socks5h://198.44.167.42:28821",   # StarHub SG
+    "socks5h://198.44.167.42:35501",   # MyRepublic SG
+    "socks5h://198.44.167.42:27066",   # SingTel SG
+    "socks5h://198.44.167.42:27067",   # StarHub SG
+    "socks5h://198.44.167.198:26553",  # SingTel SG
 ]
 
 TARGET_COUNT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 10
