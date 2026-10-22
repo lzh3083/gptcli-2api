@@ -31,6 +31,47 @@ from deliver_codex import sync_to_chatgpt2api
 
 TARGET_SUCCESS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 20
 CPA_DIR = Path("/app/data/cpa_auth_files")
+FAILED_DB = Path("/app/data/codex_failed_accounts.json")
+# 同一账号累计失败达到该阈值后跳过，避免重启后反复卡在同一批坏号上
+FAIL_SKIP_THRESHOLD = int(os.environ.get("CODEX_FAIL_SKIP", "2"))
+
+
+def _load_failed() -> dict:
+    try:
+        if FAILED_DB.is_file():
+            return json.loads(FAILED_DB.read_text(encoding="utf-8")) or {}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_failed(db: dict) -> None:
+    try:
+        FAILED_DB.parent.mkdir(parents=True, exist_ok=True)
+        FAILED_DB.write_text(json.dumps(db, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except Exception as exc:
+        logger.warning(f"失败库写入异常: {exc}")
+
+
+def _mark_failed(email: str, reason: str) -> int:
+    db = _load_failed()
+    key = email.strip().lower()
+    rec = db.get(key) or {"count": 0, "reasons": []}
+    rec["count"] = int(rec.get("count", 0)) + 1
+    reasons = list(rec.get("reasons") or [])
+    reasons.append(str(reason)[:200])
+    rec["reasons"] = reasons[-5:]
+    rec["last_failed_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    db[key] = rec
+    _save_failed(db)
+    return rec["count"]
+
+
+def _mark_success(email: str) -> None:
+    db = _load_failed()
+    db.pop(email.strip().lower(), None)
+    _save_failed(db)
+
 
 def get_candidate_accounts():
     chatgpt_files = list(CPA_DIR.glob("chatgpt-*.json"))
@@ -73,6 +114,24 @@ def main():
         logger.warning("没有可转化的账号，退出。")
         return
 
+    # 依据历史失败次数降权：失败 >= 阈值的直接跳过，其余按失败次数升序优先
+    failed_db = _load_failed()
+    kept, skipped = [], []
+    for item in candidates:
+        cnt = int((failed_db.get(item[0].strip().lower()) or {}).get("count", 0))
+        if cnt >= FAIL_SKIP_THRESHOLD:
+            skipped.append((item[0], cnt))
+        else:
+            kept.append((cnt, item))
+    kept.sort(key=lambda x: x[0])
+    candidates = [it for _, it in kept]
+    if skipped:
+        logger.info(f"已跳过历史失败 >= {FAIL_SKIP_THRESHOLD} 次的账号 {len(skipped)} 个（避免重复消耗）")
+    logger.info(f"本轮实际可尝试候选: {len(candidates)} 个")
+    if not candidates:
+        logger.warning("候选全部落入失败黑名单，请补充新账号。")
+        return
+
     success_count = 0
     failed_count = 0
 
@@ -101,6 +160,7 @@ def main():
             
             if ok:
                 success_count += 1
+                _mark_success(email)
                 codex_file = res.get("file_path") or str(CPA_DIR / f"codex-{email}-free.json")
                 logger.info(f"★ [Codex 成功] {email} 耗时: {elapsed:.1f}s | 凭证: {codex_file}")
                 
@@ -121,12 +181,14 @@ def main():
             else:
                 failed_count += 1
                 err_msg = res.get("message") if res else "未知错误"
-                logger.warning(f"✕ [Codex 失败] {email} 耗时: {elapsed:.1f}s | 原因: {err_msg}")
+                fc = _mark_failed(email, err_msg)
+                logger.warning(f"✕ [Codex 失败] {email} 耗时: {elapsed:.1f}s | 累计失败 {fc} 次 | 原因: {err_msg}")
 
         except Exception as exc:
             elapsed = time.time() - t0
             failed_count += 1
-            logger.error(f"✕ [Codex 异常] {email} 耗时: {elapsed:.1f}s | 错误: {exc}")
+            fc = _mark_failed(email, f"{type(exc).__name__}: {exc}")
+            logger.error(f"✕ [Codex 异常] {email} 耗时: {elapsed:.1f}s | 累计失败 {fc} 次 | 错误: {exc}")
 
         kill_stray()
         logger.info("账号间休息 6 秒防风控...")
