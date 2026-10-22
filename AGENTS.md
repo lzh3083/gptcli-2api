@@ -27,16 +27,17 @@ sudo -n docker exec -d gptcli-2api bash -c \
    > /app/data/batch_hotmail_10.log 2>&1"
 ```
 
-## ⛔ 铁律 2：禁止启动 `run_batch_existing_codex.py`
+## ⛔ 铁律 2：彻底废除二阶段注册，禁止生产单独 ChatGPT 账号
 
-它是**废的**——只做阶段 5-7 的存量转化，跳过阶段 1-4，产出不符合要求，白耗接码费。
+二阶段存量补跑脚本 `run_batch_existing_codex.py` 及其在流水线内的所有二阶段冗余代码**已全部删除**。
+只做阶段 5-7 的存量转化既耗费接码费又产出低质半成品。
+用户铁令：**"记住不要单独的ChatGPT账号，要接手机号码的codex账号！把二阶段的注册任务，相关代码全部删了，不需要二阶段注册。"**
 
-用户原话：**"下次不要再给我跑二阶段，那是废的。"**
-
-| 脚本 | 判定 |
-| :--- | :--- |
-| `run_batch_hotmail_pipeline.py` | ✅ 唯一正确入口 |
-| `run_batch_existing_codex.py` | ⛔ 禁止启动 |
+| 模块 / 链路 | 状态 | 判定 |
+| :--- | :--- | :--- |
+| `run_batch_hotmail_pipeline.py` | 端到端一体化：从住宅代理、邮箱注册到手机接码、Codex 授权同浏览器一次性完成 | ✅ **唯一生产链路** |
+| 二阶段补跑脚本 `run_batch_existing_codex.py` | 源码已物理删除，禁止任何存量补跑 | ❌ **已彻底删除** |
+| 单独 ChatGPT 账号生产 | 未绑手机号不视为成功，不落盘单独 ChatGPT 凭证 | ❌ **严格禁止** |
 
 ---
 

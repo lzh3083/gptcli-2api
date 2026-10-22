@@ -384,7 +384,10 @@ def _refresh_after_missing_page_element(driver, step: str, retry_index: int) -> 
             "%s %s未找到，刷新页面重试（第 %s/%s 次）：url=%s",
             _log_prefix(driver), step, retry_index + 1, max_retries, current_url[:180],
         )
-        driver.refresh()
+        if "auth/error" in current_url:
+            driver.get("https://chatgpt.com/auth/login")
+        else:
+            driver.refresh()
         time.sleep(1.5)
         _page_warmup(driver, reason=f"missing_{step}")
         return True
