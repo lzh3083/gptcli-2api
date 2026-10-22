@@ -622,6 +622,26 @@ def _ms_access_token(
         attempts = [
             (
                 "graph",
+                "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+                {
+                    "client_id": account.client_id,
+                    "grant_type": "refresh_token",
+                    "refresh_token": account.refresh_token,
+                    "scope": "offline_access https://graph.microsoft.com/.default",
+                },
+            ),
+            (
+                "outlook",
+                "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+                {
+                    "client_id": account.client_id,
+                    "grant_type": "refresh_token",
+                    "refresh_token": account.refresh_token,
+                    "scope": "https://outlook.office.com/IMAP.AccessAsUser.All offline_access",
+                },
+            ),
+            (
+                "graph",
                 "https://login.microsoftonline.com/common/oauth2/v2.0/token",
                 {
                     "client_id": account.client_id,

@@ -941,7 +941,7 @@ def _set_phone_value(driver, phone: str, *, timeout: int = 10) -> dict:
     let selectedText = '';
     let selectedChanged = false;
     const DIAL_TO_ISO = [
-      ['351', 'PT'], ['852', 'HK'], ['886', 'TW'], ['971', 'AE'],
+      ['856', 'LA'], ['351', 'PT'], ['852', 'HK'], ['886', 'TW'], ['971', 'AE'],
       ['62', 'ID'], ['44', 'GB'], ['55', 'BR'], ['60', 'MY'], ['63', 'PH'],
       ['66', 'TH'], ['84', 'VN'], ['65', 'SG'], ['81', 'JP'], ['82', 'KR'],
       ['91', 'IN'], ['33', 'FR'], ['49', 'DE'], ['34', 'ES'], ['39', 'IT'],
@@ -1363,7 +1363,7 @@ def _sleep_before_phone_retry(attempt: int, max_retries: int, *, prefix: str = "
     """换号前随机等待，至少 3 秒，避免连续提交号码过快。"""
     if attempt >= max_retries:
         return
-    seconds = random.uniform(3.0, 8.0)
+    seconds = random.uniform(8.0, 14.0)
     logger.info("%s 换号前随机等待 %.1f 秒", prefix, seconds)
     time.sleep(seconds)
 
@@ -1388,13 +1388,37 @@ def _do_phone_verification_if_present(driver) -> None:
                     break
                 time.sleep(0.5)
             if not (_has_strict_add_phone_form(driver) or _is_phone_code_page(driver)):
-                raise RuntimeError("not_phone_flow")
+                # 强制手机验证模式：主动导航到 add-phone 页面
+                force_phone = bool(getattr(sms_provider._cfg, "FORCE_PHONE_VERIFICATION", False))
+                if force_phone:
+                    logger.info("[Codex][Browser] 未检测到手机验证页，FORCE_PHONE_VERIFICATION=True，强制导航到 add-phone")
+                    for nav_try in range(1, 4):
+                        try:
+                            driver.get("https://auth.openai.com/add-phone")
+                            time.sleep(4)
+                            cur = str(getattr(driver, "current_url", "") or "")
+                            logger.info("[Codex][Browser] 强制导航第 %s/3 次，当前 url=%s", nav_try, cur[:120])
+                            if _has_strict_add_phone_form(driver) or _is_phone_code_page(driver):
+                                logger.info("[Codex][Browser] 强制导航成功，已出现手机验证表单")
+                                break
+                            if any(k in cur.lower() for k in ("callback", "localhost:1455")):
+                                logger.info("[Codex][Browser] 强制导航后已到 callback，停止")
+                                break
+                        except Exception as nav_exc:
+                            logger.warning("[Codex][Browser] 强制导航异常：%s: %s", type(nav_exc).__name__, str(nav_exc)[:120])
+                    if not (_has_strict_add_phone_form(driver) or _is_phone_code_page(driver)):
+                        raise RuntimeError("not_phone_flow_forced")
+                else:
+                    raise RuntimeError("not_phone_flow")
         except Exception:
             logger.info("[Codex][Browser] 未检测到手机号验证页，跳过手机步骤")
             return
 
         last_err = None
         raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip()]
+        # 老挝第一优先策略：首轮强制优先调度老挝(25)，缺号/异常时依次轮退备选国
+        if "25" in raw_countries:
+            raw_countries = ["25"] + [c for c in raw_countries if c != "25"]
         for attempt in range(1, max_retries + 1):
             activation_id = None
             try:
@@ -1438,7 +1462,7 @@ def _do_phone_verification_if_present(driver) -> None:
                 if not _click_if_present(driver, ["button[type='submit']", "input[type='submit']"], timeout=10):
                     raise RuntimeError(f"verify_submit_missing: phone verification submit not found state={_phone_page_state(driver)}")
                 logger.info("[Codex][Browser] 已提交手机 OTP，等待验证结果")
-                otp_outcome = _wait_after_phone_otp_submit(driver, timeout=25)
+                otp_outcome = _wait_after_phone_otp_submit(driver, timeout=60)
                 logger.info("[Codex][Browser] 手机 OTP 提交后状态：%s", otp_outcome)
                 sms_provider.complete(activation_id, http)
                 return
@@ -1458,10 +1482,9 @@ def _do_phone_verification_if_present(driver) -> None:
                     raise RuntimeError(
                         f"接码平台余额不足，已停止换号止损：{err_text[:180]}"
                     ) from exc
-                if "invalid_auth_step" in str(exc):
+                if "invalid_auth_step" in str(exc) or "409" in str(exc) or "session expired" in str(exc).lower():
                     raise RuntimeError(
-                        "手机号流程进入 invalid_auth_step，说明授权状态还未从 email-verification 正常跳转或已失效；"
-                        "已停止继续换号，避免继续消耗号码"
+                        f"手机号流程遭遇 409 会话失效或 invalid_auth_step ({err_text[:120]})，立即熔断以保护接码配额与资金"
                     ) from exc
                 # 如果已经离开手机号/验证码相关页面，认为通过或不再需要；
                 # 如果仍在 phone-verification，则下一轮必须回 add-phone 重新填新号码再提交。

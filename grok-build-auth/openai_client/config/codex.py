@@ -97,7 +97,7 @@ CPA_SAVE_CALLBACK_RECEIPT: bool = True
 #   "h"       = 本地 H 取号服务，接口说明见 H_API.md
 # ============================================================
 
-SMS_PROVIDER: str = "l"
+SMS_PROVIDER: str = "smsbower"
 
 # 接码 API 基址（GET handler）
 SMS_API_BASE: str = "https://api.grizzlysms.com/stubs/handler_api.php"
@@ -119,7 +119,7 @@ SMSBOWER_MIN_PRICE: str = ""
 SMS_SERVICE: str = "dr"
 
 # 国家代码：英国(16)第一，巴西(73)第二（轮询与自动兜底）
-SMS_COUNTRY: str = "16,73"
+SMS_COUNTRY: str = "16,25,73,117"
 
 # 单个号愿意支付的最高价格（留空=不限）。透传给 getNumber 的 maxPrice。
 SMS_MAX_PRICE: str = ""
@@ -128,7 +128,7 @@ SMS_MAX_PRICE: str = ""
 SMS_MAX_RETRIES: int = 10
 
 # 单个号等待短信的最长秒数（超时则取消该号换下一个）
-SMS_CODE_WAIT: int = 120
+SMS_CODE_WAIT: int = 240
 
 # 轮询接码平台查短信的间隔（秒）
 SMS_POLL_INTERVAL: int = 5
@@ -141,6 +141,15 @@ SMS_REQUEST_TIMEOUT: int = 30
 
 
 # ============================================================
+# 5sim 接码（SMS_PROVIDER="fivesim" 时使用）
+# API 文档：https://5sim.net/zh/docs
+FIVESIM_BASE: str = "https://5sim.net/v1"
+FIVESIM_API_KEY: str = ""
+# 运营商：any / virtual34 / virtual58 / virtual66 ...（virtual34 波兰成功率最高）
+FIVESIM_OPERATOR: str = "any"
+# 单号价格上限（USD）；超出则买号后立即取消并报错
+FIVESIM_MAX_PRICE: str = ""
+
 # H 取号服务（SMS_PROVIDER="h" 时使用）
 # ============================================================
 
@@ -174,4 +183,4 @@ L_ADMIN_AUTH_CODE: str = env_str("L_ADMIN_AUTH_CODE", "")
 L_PHONE_PREFIX: str = ""
 
 # ---- .env overrides for WebUI editable fields ----
-apply_env_overrides(globals(), {'ENABLE_CODEX_AUTO': 'bool', 'FORCE_PHONE_VERIFICATION': 'bool', 'CODEX_OAUTH_DRIVER': 'str', 'CODEX_AUTH_URL_SOURCE': 'str', 'CPA_MANAGEMENT_URL': 'str', 'CPA_MANAGEMENT_KEY': 'str', 'CPA_REQUEST_TIMEOUT': 'int', 'CPA_CALLBACK_SUBMIT_RETRIES': 'int', 'CPA_CALLBACK_SUBMIT_RETRY_DELAY': 'int', 'CPA_SAVE_CALLBACK_RECEIPT': 'bool', 'SMS_PROVIDER': 'str', 'SMS_COUNTRY': 'str', 'SMS_SERVICE': 'str', 'SMS_MAX_PRICE': 'str', 'SMS_MAX_RETRIES': 'int', 'SMS_CODE_WAIT': 'int', 'SMS_POLL_INTERVAL': 'int', 'SMS_REQUEST_TIMEOUT': 'int', 'SMS_API_KEY': 'str', 'SMSBOWER_API_BASE': 'str', 'SMSBOWER_API_KEY': 'str', 'SMSBOWER_USE_V2': 'bool', 'SMSBOWER_PROVIDER_IDS': 'str', 'SMSBOWER_EXCEPT_PROVIDER_IDS': 'str', 'SMSBOWER_PHONE_EXCEPTION': 'str', 'SMSBOWER_MIN_PRICE': 'str', 'H_API_BASE': 'str', 'H_ADMIN_AUTH_CODE': 'str', 'H_PHONE_PREFIX': 'str', 'H_PHONE_ACQUIRE_MODE': 'str', 'L_API_BASE': 'str', 'L_ADMIN_AUTH_CODE': 'str', 'L_PHONE_PREFIX': 'str'})
+apply_env_overrides(globals(), {'ENABLE_CODEX_AUTO': 'bool', 'FORCE_PHONE_VERIFICATION': 'bool', 'CODEX_OAUTH_DRIVER': 'str', 'CODEX_AUTH_URL_SOURCE': 'str', 'CPA_MANAGEMENT_URL': 'str', 'CPA_MANAGEMENT_KEY': 'str', 'CPA_REQUEST_TIMEOUT': 'int', 'CPA_CALLBACK_SUBMIT_RETRIES': 'int', 'CPA_CALLBACK_SUBMIT_RETRY_DELAY': 'int', 'CPA_SAVE_CALLBACK_RECEIPT': 'bool', 'SMS_PROVIDER': 'str', 'FIVESIM_BASE': 'str', 'FIVESIM_API_KEY': 'str', 'FIVESIM_OPERATOR': 'str', 'FIVESIM_MAX_PRICE': 'str', 'SMS_COUNTRY': 'str', 'SMS_SERVICE': 'str', 'SMS_MAX_PRICE': 'str', 'SMS_MAX_RETRIES': 'int', 'SMS_CODE_WAIT': 'int', 'SMS_POLL_INTERVAL': 'int', 'SMS_REQUEST_TIMEOUT': 'int', 'SMS_API_KEY': 'str', 'SMSBOWER_API_BASE': 'str', 'SMSBOWER_API_KEY': 'str', 'SMSBOWER_USE_V2': 'bool', 'SMSBOWER_PROVIDER_IDS': 'str', 'SMSBOWER_EXCEPT_PROVIDER_IDS': 'str', 'SMSBOWER_PHONE_EXCEPTION': 'str', 'SMSBOWER_MIN_PRICE': 'str', 'H_API_BASE': 'str', 'H_ADMIN_AUTH_CODE': 'str', 'H_PHONE_PREFIX': 'str', 'H_PHONE_ACQUIRE_MODE': 'str', 'L_API_BASE': 'str', 'L_ADMIN_AUTH_CODE': 'str', 'L_PHONE_PREFIX': 'str'})

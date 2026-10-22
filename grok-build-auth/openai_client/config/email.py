@@ -24,7 +24,7 @@ USE_EMAIL_SERVICE = True
 #   "mailnest"          — MailNest/迈巢临时邮箱 API（运行时购买邮箱并自动收码）
 #   "cloudmail"         — CloudMail/Cloud Mail API（自动从平台获取域名并随机生成邮箱）
 #   "remail"            — Remail 开放 API（按项目下单并自动收取验证码）
-EMAIL_SOURCE = "outlook"
+EMAIL_SOURCE = "outlook,cloudflare"
 
 
 # ============================================================
@@ -87,7 +87,7 @@ QQ_IMAP_PASSWORD = env_str("QQ_IMAP_PASSWORD", "")
 # GPTMail 临时邮箱 API（固定地址：https://mail.chatgpt.org.uk）
 # ============================================================
 
-# 选择 EMAIL_SOURCE="gptmail" 时必填；请在 WebUI「配置 → 邮箱 / OTP」填写。
+# 选择 EMAIL_SOURCE = "outlook,cloudflare" 时必填；请在 WebUI「配置 → 邮箱 / OTP」填写。
 GPTMAIL_API_KEY = env_str("GPTMAIL_API_KEY", "")
 
 
@@ -124,7 +124,7 @@ CLOUDFLARE_NAME_LENGTH = 10
 # MailNest-迈巢 Outlook 临时邮箱：https://mailnest.top/
 # ============================================================
 
-# 选择 EMAIL_SOURCE="mailnest" 时必填；请在 WebUI「配置 → 邮箱 / OTP」填写。
+# 选择 EMAIL_SOURCE = "outlook,cloudflare" 时必填；请在 WebUI「配置 → 邮箱 / OTP」填写。
 MAIL_NEST_API_KEY = env_str("MAIL_NEST_API_KEY", "")
 
 # MailNest 项目代码；OpenAI/ChatGPT 默认 chatgpt001。

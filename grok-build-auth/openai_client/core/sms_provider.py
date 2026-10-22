@@ -141,6 +141,62 @@ def _request_smsbower(http: CurlSession, params: dict) -> str:
     return text
 
 
+def _request_5sim(http: CurlSession, path: str, params: dict | None = None) -> dict:
+    """发 5sim v1 API 请求，返回 JSON dict。认证走 Authorization: Bearer。"""
+    token = str(getattr(_cfg, "FIVESIM_API_KEY", "") or "").strip()
+    if not token:
+        raise SmsProviderError("FIVESIM_API_KEY 不能为空")
+    base = str(getattr(_cfg, "FIVESIM_BASE", "https://5sim.net/v1") or "https://5sim.net/v1").strip().rstrip("/")
+    url = f"{base}/{path.lstrip('/')}"
+    resp = http.get(url, params=params or {}, headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    })
+    text = (resp.text or "").strip()
+    data = None
+    if text:
+        try:
+            data = json.loads(text)
+        except Exception:
+            data = None
+    if isinstance(data, dict):
+        msg = str(data.get("message") or "").strip()
+        if msg:
+            low = msg.lower()
+            if "balance" in low or "money" in low or "payment" in low:
+                raise SmsNoBalanceError(f"5sim 余额不足：{msg}")
+            if "no free phones" in low or "no numbers" in low or "not enough" in low:
+                raise SmsNoNumbersError(f"5sim 暂无可用号码：{msg}")
+            raise SmsProviderError(f"5sim 错误：{msg}")
+        return data
+    if resp.status_code != 200:
+        raise SmsProviderError(f"5sim HTTP {resp.status_code}: {text[:200]}")
+    raise SmsProviderError(f"5sim 响应非 JSON：{text[:200]}")
+
+
+def _fivesim_operator(country: str | None = None) -> str:
+    """
+    解析 5sim 运营商。
+    支持两种写法：
+      FIVESIM_OPERATOR=any                      -> 全局默认
+      FIVESIM_OPERATOR=poland:virtual59,england:virtual51  -> 按国家映射，未命中回落 any
+    """
+    raw = str(getattr(_cfg, "FIVESIM_OPERATOR", "any") or "any").strip().lower()
+    if not raw:
+        return "any"
+    if ":" not in raw:
+        return raw
+    mapping: dict[str, str] = {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        c, op = part.split(":", 1)
+        mapping[c.strip().lower()] = op.strip().lower()
+    target = str(country or "").strip().lower()
+    return mapping.get(target, "any")
+
+
 def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
@@ -168,6 +224,8 @@ def _request_smsbower_number(http: CurlSession, params: dict) -> tuple[dict, str
     """按国家优先级与兼容性顺序取号，筛选无库存时自动切换备选国家或放宽供应商条件。"""
     raw_country = str(params.get("country") or "6").strip()
     countries = [c.strip() for c in raw_country.split(",") if c.strip()] or ["6"]
+    if "25" in countries:
+        countries = ["25"] + [c for c in countries if c != "25"]
     candidates: list[dict] = []
     for c_code in countries:
         c_params = {**params, "country": c_code}
@@ -445,6 +503,48 @@ def acquire_number(
             _ACQUIRED_AT[activation_id] = time.time()
             return activation_id, phone
 
+        if _provider() == "fivesim":
+            f_country = str(country or _cfg.SMS_COUNTRY or "").strip().lower()
+            f_product = str(service or _cfg.SMS_SERVICE or "openai").strip().lower()
+            f_operator = _fivesim_operator(f_country)
+            if not f_country:
+                raise SmsProviderError("5sim 国家不能为空：请填写 SMS_COUNTRY（如 poland）")
+            path = f"/user/buy/activation/{f_country}/{f_operator}/{f_product}"
+            data = _request_5sim(http, path)
+            activation_id = str(data.get("id") or "").strip()
+            raw_phone = str(data.get("phone") or "").strip()
+            phone = raw_phone.lstrip("+").strip()
+            if not activation_id or not phone:
+                raise SmsProviderError(f"5sim buy 响应缺少 id/phone：{str(data)[:200]}")
+            # 价格硬保护：超出上限立即取消并报错
+            max_price = str(getattr(_cfg, "FIVESIM_MAX_PRICE", "") or "").strip()
+            if max_price:
+                try:
+                    actual = float(data.get("price") or 0)
+                    limit = float(max_price)
+                    if actual > limit:
+                        logger.warning(
+                            f"[SMS:5sim] 价格 {actual} 超出上限 {limit}，立即取消 id={activation_id}"
+                        )
+                        try:
+                            _request_5sim(http, f"/user/cancel/{activation_id}")
+                        except Exception as _ce:
+                            logger.warning(f"[SMS:5sim] 超价取消失败：{_ce}")
+                        raise SmsProviderError(
+                            f"5sim 号码价格 {actual} 超出上限 {limit}，已取消"
+                        )
+                except SmsProviderError:
+                    raise
+                except Exception:
+                    pass
+            _ACQUIRED_AT[activation_id] = time.time()
+            logger.info(
+                f"[SMS:5sim] 取号成功 id={activation_id} phone=+{phone} "
+                f"country={f_country} operator={f_operator} product={f_product} "
+                f"price={data.get('price')}"
+            )
+            return activation_id, phone
+
         if _provider() == "l":
             payload = {
                 "service": service or _cfg.SMS_SERVICE,
@@ -557,11 +657,14 @@ def wait_for_sms_code(
     """
     own_http = http is None
     http = http or _http()
-    deadline = time.time() + (max_wait or _cfg.SMS_CODE_WAIT)
+    wait_sec = max_wait or getattr(_cfg, "SMS_CODE_WAIT", 240) or 240
+    if wait_sec < 240:
+        wait_sec = 240
+    deadline = time.time() + wait_sec
     interval = poll_interval or _cfg.SMS_POLL_INTERVAL
     try:
         provider = _provider()
-        total_wait = max_wait or _cfg.SMS_CODE_WAIT
+        total_wait = wait_sec
         logger.info(f"[SMS] 等待短信验证码 activation_id={activation_id}，最长 {total_wait}s...")
         round_no = 0
         while time.time() < deadline:
@@ -577,6 +680,26 @@ def wait_for_sms_code(
                 f"[SMS] 第 {round_no} 轮获取验证码 activation_id={activation_id}，"
                 f"已等 {elapsed}s，剩余约 {remaining_before}s"
             )
+            if provider == "fivesim":
+                data = _request_5sim(http, f"/user/check/{activation_id}")
+                status = str(data.get("status") or "").strip().upper()
+                sms_list = data.get("sms") or []
+                if isinstance(sms_list, list) and sms_list:
+                    for item in sms_list:
+                        if isinstance(item, dict) and item.get("code"):
+                            code = str(item["code"]).strip()
+                            logger.info(f"[SMS:5sim] 第 {round_no} 轮收到验证码：{code}")
+                            return code
+                if status in ("CANCELED", "CANCELLED", "TIMEOUT", "BANNED"):
+                    raise SmsProviderError(f"5sim 激活状态异常：{status}")
+                remaining = max(0, int(deadline - time.time()))
+                logger.info(
+                    f"[SMS:5sim] 第 {round_no} 轮未收到验证码，状态={status or 'WAIT'}，"
+                    f"{interval}s 后重试（剩余 {remaining}s）"
+                )
+                time.sleep(interval)
+                continue
+
             if provider == "l":
                 data = _post_l_json(http, "/api/admin/l/fetch-code", {"id": activation_id})
                 code = str(data.get("code") or "").strip()
@@ -675,6 +798,14 @@ def set_status(activation_id: str, status: int, http: CurlSession | None = None)
     own_http = http is None
     http = http or _http()
     try:
+        if _provider() == "fivesim":
+            if int(status) == 8:
+                try:
+                    _request_5sim(http, f"/user/cancel/{activation_id}")
+                    logger.info(f"[SMS:5sim] 已取消 id={activation_id}")
+                except Exception as exc:
+                    logger.warning(f"[SMS:5sim] 取消失败：{exc}")
+            return "OK"
         if _provider() == "l":
             logger.debug(f"[SMS:L] 忽略状态设置 id={activation_id}, status={status}")
             return "OK"
@@ -690,6 +821,21 @@ def set_status(activation_id: str, status: int, http: CurlSession | None = None)
 
 def complete(activation_id: str, http: CurlSession | None = None) -> None:
     """标记激活完成（status=6）。失败只告警不抛，避免影响主流程。"""
+    if _provider() == "fivesim":
+        try:
+            own = http is None
+            h = http or _http()
+            try:
+                _request_5sim(h, f"/user/finish/{activation_id}")
+                logger.info(f"[SMS:5sim] 已标记完成 id={activation_id}")
+            finally:
+                if own:
+                    h.close()
+        except Exception as exc:
+            logger.warning(f"[SMS:5sim] 标记完成失败（不影响结果）：{exc}")
+        finally:
+            _ACQUIRED_AT.pop(activation_id, None)
+        return
     if _provider() == "l":
         logger.info(f"[SMS:L] 已完成 id={activation_id}")
         _ACQUIRED_AT.pop(activation_id, None)
@@ -779,12 +925,32 @@ def cancel(activation_id: str, http: CurlSession | None = None, background: bool
             _ACQUIRED_AT.pop(activation_id, None)
         return
     if _provider() == "smsbower":
-        try:
-            set_status(activation_id, 8, http=http)
-        except Exception as exc:
-            logger.warning(f"[SMSBower] 释放号码失败（不影响主流程）：{exc}")
-        finally:
-            _ACQUIRED_AT.pop(activation_id, None)
+        # 对齐 HeroSMS/SMSBower 封禁与取消规则：
+        # 号码未满 120s 无法取消会报 EARLY_CANCEL_DENIED。若已满 120s 则直接取消；若未满且允许后台，则交由后台线程等满 125s 后取消退款。
+        acquired = _ACQUIRED_AT.get(activation_id, 0)
+        elapsed = time.time() - acquired if acquired else 999
+        if elapsed >= 120:
+            try:
+                set_status(activation_id, 8, http=http)
+                logger.info(f"[SMSBower] 已成功取消退款: activation_id={activation_id} (已满 {elapsed:.0f}s)")
+            except Exception as exc:
+                logger.warning(f"[SMSBower] 释放号码失败: {exc}")
+            finally:
+                _ACQUIRED_AT.pop(activation_id, None)
+            return
+
+        if not background:
+            _do_cancel_sync(activation_id, _http)
+            return
+
+        t = threading.Thread(
+            target=_do_cancel_sync,
+            args=(activation_id, _http),
+            name=f"smsbower-cancel-{activation_id}",
+            daemon=True,
+        )
+        t.start()
+        logger.debug(f"[SMSBower] 取消退款任务已派后台(等待满 120s 自动退款): activation_id={activation_id}")
         return
 
     if not background:
