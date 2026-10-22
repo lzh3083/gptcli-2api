@@ -1,5 +1,8 @@
 # Codex 账号注册全流程（7 阶段闭环）
 
+> ⛔ **唯一正确入口：`run_batch_hotmail_pipeline.py`（完整 6 阶段链路）。**
+> **禁止启动 `run_batch_existing_codex.py`（只跑阶段 5-7 的存量转化，产出不符合要求，白耗接码费）。**
+
 > 本文档记录从零生成一个可用 Codex 账号的端到端机制。
 > 每个账号在完全隔离的环境下独立流转，任一阶段失败即熔断并释放资源。
 
@@ -159,12 +162,12 @@ curl -H "Authorization: Bearer <AUTH_KEY>" http://134.185.81.98:3000/api/account
 
 ## 运行形态
 
-| 脚本 | 用途 |
-| :--- | :--- |
-| `run_batch_hotmail_pipeline.py <N>` | **完整闭环**：阶段 1 注册 + 阶段 5-6 接码授权 + 阶段 7 落盘 |
-| `run_batch_existing_codex.py <N>` | **存量转化**：跳过注册，只对已有 `chatgpt-*.json` 补 Codex 授权 |
-| `deliver_codex.py <email>` | 单独补交付（PG + CPA + chatgpt2api） |
-| `run_single_codex.py` | 单账号手动触发 |
+| 脚本 | 用途 | 判定 |
+| :--- | :--- | :--- |
+| `run_batch_hotmail_pipeline.py <N>` | **完整闭环**：阶段 1-4 注册 + 阶段 5-6 接码授权 + 阶段 7 落盘 | ✅ **唯一正确入口** |
+| `run_batch_existing_codex.py <N>` | 跳过注册，只对已有 `chatgpt-*.json` 补 Codex 授权 | ⛔ **禁止启动（废的）** |
+| `deliver_codex.py <email>` | 单独补交付（PG + CPA + chatgpt2api） | ✅ 辅助 |
+| `run_single_codex.py` | 单账号手动触发 | ✅ 辅助 |
 
 ### 失败黑名单
 
