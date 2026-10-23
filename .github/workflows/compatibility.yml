@@ -1,11 +1,8 @@
 name: Compatibility contracts
 
+# 自动触发已关闭：每次 push 都跑四个 job（含完整依赖安装 + docker build），
+# 噪音和时长成本高于收益。需要体检时在 Actions 页面点 "Run workflow" 手动触发。
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
