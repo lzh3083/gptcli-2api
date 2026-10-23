@@ -201,14 +201,19 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
         service_code = "dr"
-    raw_country = str(country or _cfg.SMS_COUNTRY or "52,7,10,16").strip()
+    raw_country = str(country or _cfg.SMS_COUNTRY or "4,6,66,2,16,73").strip()
+    # 用户铁令：彻底剔除马来西亚(7)
+    c_list = [c.strip() for c in raw_country.split(",") if c.strip() and c.strip() != "7"]
+    raw_country = ",".join(c_list) if c_list else "4"
     params = {
         "action": "getNumberV2" if bool(getattr(_cfg, "SMSBOWER_USE_V2", True)) else "getNumber",
         "service": service_code,
         "country": raw_country,
     }
+    # 用户铁令：单价超过 0.075 的一律不要
+    max_price = str(getattr(_cfg, "SMS_MAX_PRICE", "0.075") or "0.075").strip()
     for key, value in (
-        ("maxPrice", getattr(_cfg, "SMS_MAX_PRICE", "")),
+        ("maxPrice", max_price),
         ("minPrice", getattr(_cfg, "SMSBOWER_MIN_PRICE", "")),
         ("providerIds", getattr(_cfg, "SMSBOWER_PROVIDER_IDS", "")),
         ("exceptProviderIds", getattr(_cfg, "SMSBOWER_EXCEPT_PROVIDER_IDS", "")),
@@ -482,6 +487,7 @@ def acquire_number(
     try:
         if _provider() == "smsbower":
             params, text = _request_smsbower_number(http, _smsbower_number_params(service, country))
+            activation_id, phone, price = None, None, None
             if params["action"] == "getNumberV2":
                 try:
                     data = json.loads(text)
@@ -490,16 +496,33 @@ def acquire_number(
                 if isinstance(data, dict):
                     activation_id = str(data.get("activationId") or data.get("id") or "").strip()
                     phone = str(data.get("phoneNumber") or data.get("phone") or "").strip()
-                    if activation_id and phone:
-                        _ACQUIRED_AT[activation_id] = time.time()
-                        return activation_id, phone
-                raise SmsProviderError(f"SMSBower getNumberV2 响应格式异常：{text[:200]}")
-            if not text.startswith("ACCESS_NUMBER:"):
-                raise SmsProviderError(f"SMSBower getNumber 非预期响应：{text[:200]}")
-            parts = text.split(":", 2)
-            if len(parts) < 3:
-                raise SmsProviderError(f"SMSBower getNumber 响应格式异常：{text[:200]}")
-            activation_id, phone = parts[1].strip(), parts[2].strip()
+                    price = data.get("activationCost") or data.get("cost") or data.get("price")
+            elif text.startswith("ACCESS_NUMBER:"):
+                parts = text.split(":", 2)
+                if len(parts) >= 3:
+                    activation_id, phone = parts[1].strip(), parts[2].strip()
+            if not activation_id or not phone:
+                raise SmsProviderError(f"SMSBower 取号响应异常：{text[:200]}")
+
+            # 用户硬性约束：严禁使用马来西亚号码 (+60)
+            clean_phone = phone.lstrip("+").strip()
+            if clean_phone.startswith("60"):
+                logger.warning("[SMSBower] 拦截到马来西亚号码 +%s，立即取消退款", phone)
+                cancel(activation_id, http)
+                raise SmsProviderError("用户指定严禁使用马来西亚号码，已自动取消并退款")
+
+            # 用户硬性约束：单价超过 0.075 的一律不要
+            max_price_limit = float(getattr(_cfg, "SMS_MAX_PRICE", "0.075") or "0.075")
+            if price is not None:
+                try:
+                    actual_cost = float(price)
+                    if actual_cost > max_price_limit:
+                        logger.warning("[SMSBower] 号码价格 $%s 超过最高限额 $%s，立即取消退款", actual_cost, max_price_limit)
+                        cancel(activation_id, http)
+                        raise SmsProviderError(f"号码单价 ${actual_cost} 超过最高限额 ${max_price_limit}，已自动取消退款")
+                except ValueError:
+                    pass
+
             _ACQUIRED_AT[activation_id] = time.time()
             return activation_id, phone
 

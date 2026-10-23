@@ -85,7 +85,8 @@ starting → email_acquired → preflight → bootstrap → auth_init
 | :--- | :--- |
 | 实现 | `core/roxy_codex_oauth.py` → `_do_phone_verification_if_present()` |
 | 上游 | Hero-SMS（smsbower 适配），`https://hero-sms.com/stubs/handler_api.php`，service `dr` |
-| 国家池 | `SMS_COUNTRY=4,6,7,2,16,73` |
+| 国家池 | `SMS_COUNTRY=4,6,66,2,16,73` (禁用马来西亚7，单价≤$0.075) |
+| 最高价格 | `SMS_MAX_PRICE=0.075` |
 | 轮转 | `target_country = countries[(attempt-1) % len(countries)]` |
 | 提交 | 填号 → 选 SMS 通道 → 点击 Continue → 兜底 JS `form.requestSubmit()` |
 | 等待 | `SMS_CODE_WAIT=180`，5 秒间隔轮询 |
@@ -178,7 +179,8 @@ curl -H "Authorization: Bearer <AUTH_KEY>" http://134.185.81.98:3000/api/account
 ## 关键环境变量
 
 ```bash
-SMS_COUNTRY=4,6,7,2,16,73
+SMS_COUNTRY=4,6,66,2,16,73
+SMS_MAX_PRICE=0.075
 SMS_CODE_WAIT=180
 SMS_MAX_RETRIES=10
 EMAIL_SOURCE=outlook,cloudflare
