@@ -201,9 +201,9 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
         service_code = "dr"
-    raw_country = str(country or _cfg.SMS_COUNTRY or "4,6,66,2,16,73").strip()
-    # 用户铁令：彻底剔除马来西亚(7)
-    c_list = [c.strip() for c in raw_country.split(",") if c.strip() and c.strip() != "7"]
+    raw_country = str(country or _cfg.SMS_COUNTRY or "4,6,16,73").strip()
+    # 用户铁令：彻底剔除马来西亚(7)、虚拟号(泰国66纯虚拟号、哈萨克斯坦2多虚拟号、老挝25)
+    c_list = [c.strip() for c in raw_country.split(",") if c.strip() and c.strip() not in ("7", "66", "25", "2")]
     raw_country = ",".join(c_list) if c_list else "4"
     params = {
         "action": "getNumberV2" if bool(getattr(_cfg, "SMSBOWER_USE_V2", True)) else "getNumber",
@@ -227,10 +227,8 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
 
 def _request_smsbower_number(http: CurlSession, params: dict) -> tuple[dict, str]:
     """按国家优先级与兼容性顺序取号，筛选无库存时自动切换备选国家或放宽供应商条件。"""
-    raw_country = str(params.get("country") or "6").strip()
-    countries = [c.strip() for c in raw_country.split(",") if c.strip()] or ["6"]
-    if "25" in countries:
-        countries = ["25"] + [c for c in countries if c != "25"]
+    raw_country = str(params.get("country") or "4").strip()
+    countries = [c.strip() for c in raw_country.split(",") if c.strip() and c.strip() not in ("7", "66", "25", "2")] or ["4"]
     candidates: list[dict] = []
     for c_code in countries:
         c_params = {**params, "country": c_code}
@@ -504,12 +502,15 @@ def acquire_number(
             if not activation_id or not phone:
                 raise SmsProviderError(f"SMSBower 取号响应异常：{text[:200]}")
 
-            # 用户硬性约束：严禁使用马来西亚号码 (+60)
+            # 用户硬性约束：严禁使用马来西亚号码 (+60)、虚拟号(泰国 +66、老挝 +856、哈萨克斯坦 +7)
             clean_phone = phone.lstrip("+").strip()
-            if clean_phone.startswith("60"):
-                logger.warning("[SMSBower] 拦截到马来西亚号码 +%s，立即取消退款", phone)
+            # 白名单前缀校验：仅允许合规高质实体卡国家：菲律宾 63, 印尼 62, 英国 44, 巴西 55
+            allowed_prefixes = ("63", "62", "44", "55")
+            is_blacklisted = clean_phone.startswith(("60", "66", "856")) or (clean_phone.startswith("7") and len(clean_phone) >= 10)
+            if is_blacklisted or not clean_phone.startswith(allowed_prefixes):
+                logger.warning("[SMSBower] 拦截到非合规/虚拟号/黑名单号码 +%s，立即取消退款", phone)
                 cancel(activation_id, http)
-                raise SmsProviderError("用户指定严禁使用马来西亚号码，已自动取消并退款")
+                raise SmsProviderError(f"拦截到非合规/虚拟号号码 +{phone}，已自动取消并退款")
 
             # 用户硬性约束：单价超过 0.075 的一律不要
             max_price_limit = float(getattr(_cfg, "SMS_MAX_PRICE", "0.075") or "0.075")
