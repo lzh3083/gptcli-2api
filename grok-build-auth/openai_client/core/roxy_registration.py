@@ -1191,8 +1191,23 @@ def _type_otp(driver, code: str) -> None:
                     _human_scroll_to(driver, e)
                     time.sleep(random.uniform(0.04, 0.18))
                 e.send_keys(ch)
+                try:
+                    driver.execute_script(
+                        "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
+                        "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+                        e
+                    )
+                except Exception:
+                    pass
                 if _browser_actions_enabled():
                     human_delay("keystroke")
+            try:
+                driver.execute_script(
+                    "arguments[0].dispatchEvent(new Event('blur', {bubbles:true}));",
+                    numeric_boxes[-1]
+                )
+            except Exception:
+                pass
             return
 
         if not _refresh_after_missing_page_element(driver, "OTP输入框", refresh_retry):

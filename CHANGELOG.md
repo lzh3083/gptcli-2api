@@ -4,6 +4,29 @@ All notable changes to `gptcli-2api` will be documented in this file.
 
 ---
 
+## [v1.3.1] - 2026-10-23
+
+### 🛡️ 手机验证码提交健壮性重构与两级救卡机制 (Phone OTP Robust Submit & Two-Stage Salvage Mechanism)
+
+- **根治 `otp_submit_unresponsive` 导致的接码费用浪费缺陷**：
+  - **问题根因解决**：排查并修复了在 OpenAI 手机验证码（`phone-verification`）页面上，已成功收到接码平台短信并填入 OTP，但因前端 React 状态未同步或按钮点击未穿透导致页面卡死、原逻辑干等 60 秒后直接判为超时废弃，而接码平台因已接收短信（HTTP 409 `OTP_RECEIVED`）锁死拒绝退款造成的资金损耗漏洞。
+  - **分格 OTP 深度事件派发 (React State Sync)**：
+    - 在 6 分格输入框填入单字符时，为每个输入框注入 `dispatchEvent(new Event('input', {bubbles: true}))` 与 `change` 事件；
+    - 全部填完后对末尾输入框主动派发 `blur` 事件，彻底同步 React 虚拟 DOM 状态，确保提交按钮解除 `disabled` 状态。
+  - **全形态与多语言按钮智能穿透 (Smart Button Penetration)**：
+    - 突破仅匹配英文 `Continue`/`Verify` 的局限，支持多语言文本（`Continue`, `Verify`, `Submit`, `Confirm`, `Next`, `続行`, `次へ`, `Continuar`, `Verificar`, `确认`, `继续` 等）及 SVG 图标按钮、React Aria 按钮穿透点击。
+  - **主动心跳脉冲补触发机制 (Active Pulse Trigger)**：
+    - 在提交后的等待循环中废除单纯的 `time.sleep(1)` 空转，每隔 4 秒若检测到仍停留在验证码页且无报错，自动补发 `ENTER` 键与按钮点击，打破前端动画或焦点丢失引起的偶发卡顿。
+  - **首创已收短信两级救卡机制 (Two-Stage Phone OTP Salvage)**：
+    - **第 1 级救卡（12秒重注入）**：提交 12 秒仍停留验证码页时，自动清空所有输入框并重新按完整事件流注入手中的 `sms_code` 并重新提交；
+    - **第 2 级救卡（28秒整页刷新重填）**：提交 28 秒仍未跳转时，自动执行 `driver.refresh()` 刷新页面，等待页面重新就绪后再次填入手中有效的 `sms_code` 提交；
+    - **零弃卡保障**：只要验证码已到手且 OpenAI 未明确报错，流水线全力救活当前卡，彻底避免接码平台扣费而本地弃卡的情况。
+
+- **工程版本治理规范**：
+  - 同步推进 `grok2api/app.py`、`internal/buildinfo/buildinfo.go` 版本号至 `v1.3.1`，附带完整发行说明与对应 Git Tag `v1.3.1`。
+
+---
+
 ## [v1.3.0] - 2026-10-22
 
 ### 🚀 7阶段闭环全自动注册流水线与老挝接码第一优先治理 (7-Stage Closed-Loop Pipeline & Laos SMS Priority)

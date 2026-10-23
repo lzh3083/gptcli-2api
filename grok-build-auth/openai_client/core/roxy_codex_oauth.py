@@ -1289,6 +1289,149 @@ def _wait_after_phone_send(driver, timeout: int = 12) -> str:
     return 'unknown'
 
 
+def _trigger_phone_otp_submit_action(driver) -> str:
+    """尝试点击验证码提交按钮或触发表单提交。"""
+    try:
+        res = driver.execute_script(r"""
+        const visible = el => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+        const buttons = [...document.querySelectorAll('button, [role=button], input[type=submit], input[type=button]')].filter(visible);
+        const submitBtn = buttons.find(b => {
+            if (b.disabled || b.getAttribute('aria-disabled') === 'true') return false;
+            const txt = (b.innerText || b.textContent || b.value || '').toLowerCase().trim();
+            if (/^(continue|verify|submit|confirm|next|続行|次へ|continuar|verificar|确认|继续|下一步)$/i.test(txt)) return true;
+            if (b.getAttribute('type') === 'submit') return true;
+            if (b.getAttribute('data-dd-action-name')) return true;
+            if (b.querySelector('svg')) return true;
+            return false;
+        });
+        if (submitBtn) {
+            submitBtn.click();
+            return 'btn_clicked:' + (submitBtn.innerText || submitBtn.textContent || '').trim().slice(0, 30);
+        }
+        const form = document.querySelector('form');
+        if (form && form.requestSubmit) {
+            try { form.requestSubmit(); return 'form_requestSubmit'; } catch(e) {}
+        }
+        return 'none';
+        """)
+        try:
+            from selenium.webdriver.common.keys import Keys
+            active_el = driver.switch_to.active_element
+            if active_el:
+                active_el.send_keys(Keys.ENTER)
+        except Exception:
+            pass
+        return str(res or "none")
+    except Exception as exc:
+        return f"error:{exc}"
+
+
+def _submit_phone_otp_with_salvage(driver, sms_code: str, timeout: int = 60) -> str:
+    """全自动提交手机验证码，并在页面未响应时启动心跳补点与两级救卡（重填/刷新），杜绝接码费浪费。"""
+    logger.info("[Codex][Browser] 开始填写手机 OTP：%s", sms_code)
+    _type_otp(driver, sms_code)
+    logger.info("[Codex][Browser] 已填写手机 OTP，开始触发提交")
+    human_delay("otp_input")
+    submit_action = _trigger_phone_otp_submit_action(driver)
+    logger.info("[Codex][Browser] 首次提交 OTP 触发结果：%s", submit_action)
+
+    start_time = time.time()
+    end = start_time + timeout
+    last_action_time = start_time
+    salvage_stage_1_done = False
+    salvage_stage_2_done = False
+
+    while time.time() < end:
+        time.sleep(1)
+        current = str(getattr(driver, "current_url", "") or "")
+        if _is_callback_url(current):
+            return "callback"
+
+        last = _phone_page_state(driver)
+        # 已经离开验证码页面和输入手机号页面，说明验证码已被接受，流转至后续步骤
+        if not _is_phone_code_state(last) and not _is_add_phone_page(driver):
+            return "left_phone_flow"
+
+        # 如果仍在验证码页面，检查是否有明确错误提示（如验证码无效/过期）
+        if _is_phone_code_state(last):
+            inputs = last.get('inputs') or []
+            invalid = any(str(i.get('ariaInvalid') or '').lower() == 'true' for i in inputs)
+            body = str(last.get('bodyText') or '').lower()
+            if invalid or any(k in body for k in (
+                'invalid code', 'incorrect code', 'wrong code', 'expired code',
+                'code is invalid', 'code was invalid', '验证码无效', '验证码错误', '验证码已过期',
+                '認証コードが無効', 'コードが正しく',
+            )):
+                raise RuntimeError(f"invalid_phone_code: {(last.get('bodyText') or '')[:240]}")
+
+            elapsed = time.time() - start_time
+
+            # 救卡阶段 2：已等待超过 28 秒仍停留在验证码页，执行整页刷新救卡
+            if elapsed >= 28 and not salvage_stage_2_done:
+                salvage_stage_2_done = True
+                logger.warning("[Codex][Browser] 手机 OTP 提交后 28 秒页面未跳转，启动第二级救卡：刷新页面重新输入 OTP")
+                try:
+                    driver.refresh()
+                    time.sleep(3)
+                    if _is_phone_code_page(driver) or _is_phone_code_state(_phone_page_state(driver)):
+                        logger.info("[Codex][Browser] 刷新后仍处于验证码页，重新填入 OTP：%s", sms_code)
+                        _type_otp(driver, sms_code)
+                        human_delay("otp_input")
+                        action_res = _trigger_phone_otp_submit_action(driver)
+                        logger.info("[Codex][Browser] 第二级救卡重新提交结果：%s", action_res)
+                        last_action_time = time.time()
+                        continue
+                except Exception as exc:
+                    logger.warning("[Codex][Browser] 第二级刷新救卡执行异常：%s", exc)
+
+            # 救卡阶段 1：已等待超过 12 秒仍停留在验证码页，清空并重新键入 OTP
+            elif elapsed >= 12 and not salvage_stage_1_done:
+                salvage_stage_1_done = True
+                logger.warning("[Codex][Browser] 手机 OTP 提交后 12 秒页面未跳转，启动第一级救卡：清空并重新注入 OTP 提交")
+                try:
+                    driver.execute_script(r"""
+                    const inputs = [...document.querySelectorAll('input')];
+                    inputs.forEach(i => {
+                        i.value = '';
+                        i.dispatchEvent(new Event('input', {bubbles: true}));
+                        i.dispatchEvent(new Event('change', {bubbles: true}));
+                    });
+                    """)
+                    time.sleep(0.5)
+                    _type_otp(driver, sms_code)
+                    human_delay("otp_input")
+                    action_res = _trigger_phone_otp_submit_action(driver)
+                    logger.info("[Codex][Browser] 第一级救卡重新提交结果：%s", action_res)
+                    last_action_time = time.time()
+                    continue
+                except Exception as exc:
+                    logger.warning("[Codex][Browser] 第一级救卡执行异常：%s", exc)
+
+            # 心跳脉冲补点：每隔 4 秒尝试补发一次点击和 ENTER
+            elif time.time() - last_action_time >= 4:
+                last_action_time = time.time()
+                action_res = _trigger_phone_otp_submit_action(driver)
+                logger.info("[Codex][Browser] 手机验证码页面等待中心跳补触发提交：%s", action_res)
+                continue
+
+            continue
+
+        reason = _classify_phone_page_failure(last)
+        if reason:
+            raise RuntimeError(f"{reason}: {(last.get('bodyText') or '')[:240]}")
+
+    # 超时后最终查验
+    current = str(getattr(driver, "current_url", "") or "")
+    if _is_callback_url(current):
+        return "callback"
+    last = _phone_page_state(driver)
+    if not _is_phone_code_state(last) and not _is_add_phone_page(driver):
+        return "left_phone_flow"
+    if _is_phone_code_state(last):
+        return "still_code_page"
+    return "unknown"
+
+
 def _wait_after_phone_otp_submit(driver, timeout: int = 60) -> str:
     """手机验证码提交后等待结果。
 
@@ -1454,24 +1597,8 @@ def _do_phone_verification_if_present(driver) -> None:
                 )
                 sms_code = sms_provider.wait_for_sms_code(activation_id, http)
                 logger.info("[Codex][Browser] 手机 OTP 收到：%s", sms_code)
-                _type_otp(driver, sms_code)
-                logger.info("[Codex][Browser] 已填写手机 OTP")
-                human_delay("otp_input")
-                try:
-                    from selenium.webdriver.common.keys import Keys
-                    active_el = driver.switch_to.active_element
-                    if active_el:
-                        active_el.send_keys(Keys.ENTER)
-                except Exception:
-                    pass
-                if not _click_if_present(driver, ["button[type='submit']", "input[type='submit']", "//button[contains(., 'Continue')]", "//button[contains(., 'Verify')]"], timeout=6):
-                    try:
-                        driver.execute_script("const f = document.querySelector('form'); if(f) (f.requestSubmit ? f.requestSubmit() : f.submit());")
-                    except Exception:
-                        pass
-                logger.info("[Codex][Browser] 已提交手机 OTP，等待验证结果")
-                otp_outcome = _wait_after_phone_otp_submit(driver, timeout=60)
-                logger.info("[Codex][Browser] 手机 OTP 提交后状态：%s", otp_outcome)
+                otp_outcome = _submit_phone_otp_with_salvage(driver, sms_code, timeout=60)
+                logger.info("[Codex][Browser] 手机 OTP 最终提交结果状态：%s", otp_outcome)
                 if otp_outcome == "still_code_page":
                     raise RuntimeError(f"otp_submit_unresponsive: OTP submitted but still stuck on code verification page state={_phone_page_state(driver)}")
                 sms_provider.complete(activation_id, http)
