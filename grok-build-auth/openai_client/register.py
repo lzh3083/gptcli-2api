@@ -610,10 +610,11 @@ def run_openai_registration(
             }
             if cpa_proxy_url:
                 chatgpt_cpa_record["proxy_url"] = cpa_proxy_url
-            chatgpt_file_path = cpa_dir / f"chatgpt-{email}.json"
-            chatgpt_file_path.write_text(json.dumps(chatgpt_cpa_record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            cpa_chatgpt_file = str(chatgpt_file_path)
-            logger.info(f"[CPA] 已生成 ChatGPT CPA 凭证文件: {cpa_chatgpt_file}")
+            if not enable_codex:
+                chatgpt_file_path = cpa_dir / f"chatgpt-{email}.json"
+                chatgpt_file_path.write_text(json.dumps(chatgpt_cpa_record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                cpa_chatgpt_file = str(chatgpt_file_path)
+                logger.info(f"[CPA] 已生成 ChatGPT CPA 凭证文件: {cpa_chatgpt_file}")
         except Exception as e:
             logger.warning(f"[CPA] 保存 ChatGPT 凭证文件异常: {e}")
 
@@ -639,26 +640,28 @@ def run_openai_registration(
                     "ok": False,
                     "message": f"{type(exc).__name__}: {str(exc)[:180]}",
                 }
-                logger.warning(f"Codex OAuth 异常(非阻断): {exc}")
+                logger.warning(f"Codex OAuth 异常: {exc}")
 
+        codex_ok = bool(codex_result.get("ok")) if enable_codex else True
         cpa_primary_file = (
-            (codex_result.get("file_path") if isinstance(codex_result, dict) else None)
-            or cpa_chatgpt_file
+            (codex_result.get("file_path") if isinstance(codex_result, dict) else "")
+            if enable_codex else cpa_chatgpt_file
         )
 
-        _step("success", f"注册成功完成: {email}")
+        if codex_ok:
+            _step("success", f"注册与 Codex 授权成功完成: {email}")
 
         return {
-            "success": True,
+            "success": bool(codex_ok),
             "email": email,
             "password": password,
-            "access_token": access_token,
-            "session_info": session_info,
+            "access_token": access_token if codex_ok else "",
+            "session_info": session_info if codex_ok else {},
             "cookies": cookies_dict,
             "totp_secret": totp_secret,
             "codex": codex_result,
             "cpa_file": cpa_primary_file,
-            "error": None,
+            "error": None if codex_ok else f"Codex 授权未完成: {codex_result.get('message')}",
         }
 
     except Exception as exc:

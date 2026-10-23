@@ -175,34 +175,36 @@ def run_cloak_registration(
         totp_secret = None
 
         cpa_chatgpt_file = ""
-        try:
-            data_root = os.environ.get("GROK2API_DATA_DIR") or (
-                "/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[3] / "data")
-            )
-            cpa_dir = Path(data_root) / "cpa_auth_files"
-            cpa_dir.mkdir(parents=True, exist_ok=True)
-            cpa_proxy_url = os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080").strip()
-            chatgpt_cpa_record = {
-                "access_token": access_token,
-                "email": email,
-                "type": "chatgpt",
-                "account_id": (session_info.get("account") or {}).get("id") or "",
-                "user_id": (session_info.get("user") or {}).get("id") or "",
-                "plan_type": (session_info.get("account") or {}).get("planType") or "free",
-                "expired": session_info.get("expires") or "",
-                "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "password": effective_password,
-                "totp_secret": totp_secret,
-                "cookies": cookies_dict,
-            }
-            if cpa_proxy_url:
-                chatgpt_cpa_record["proxy_url"] = cpa_proxy_url
-            chatgpt_file_path = cpa_dir / f"chatgpt-{email}.json"
-            chatgpt_file_path.write_text(json.dumps(chatgpt_cpa_record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            cpa_chatgpt_file = str(chatgpt_file_path)
-            logger.info("[Cloak注册][CPA] 已生成 ChatGPT CPA 凭证文件: %s", cpa_chatgpt_file)
-        except Exception as e:
-            logger.warning("[Cloak注册][CPA] 保存 ChatGPT 凭证文件异常: %s", e)
+        # 铁律：只要开启了 enable_codex，严禁提前生成无手机号的单独 chatgpt-*.json 孤儿文件！
+        if not enable_codex:
+            try:
+                data_root = os.environ.get("GROK2API_DATA_DIR") or (
+                    "/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[3] / "data")
+                )
+                cpa_dir = Path(data_root) / "cpa_auth_files"
+                cpa_dir.mkdir(parents=True, exist_ok=True)
+                cpa_proxy_url = os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080").strip()
+                chatgpt_cpa_record = {
+                    "access_token": access_token,
+                    "email": email,
+                    "type": "chatgpt",
+                    "account_id": (session_info.get("account") or {}).get("id") or "",
+                    "user_id": (session_info.get("user") or {}).get("id") or "",
+                    "plan_type": (session_info.get("account") or {}).get("planType") or "free",
+                    "expired": session_info.get("expires") or "",
+                    "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "password": effective_password,
+                    "totp_secret": totp_secret,
+                    "cookies": cookies_dict,
+                }
+                if cpa_proxy_url:
+                    chatgpt_cpa_record["proxy_url"] = cpa_proxy_url
+                chatgpt_file_path = cpa_dir / f"chatgpt-{email}.json"
+                chatgpt_file_path.write_text(json.dumps(chatgpt_cpa_record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                cpa_chatgpt_file = str(chatgpt_file_path)
+                logger.info("[Cloak注册][CPA] 已生成 ChatGPT CPA 凭证文件: %s", cpa_chatgpt_file)
+            except Exception as e:
+                logger.warning("[Cloak注册][CPA] 保存 ChatGPT 凭证文件异常: %s", e)
 
         codex_result = {
             "status": "skipped",
@@ -255,26 +257,28 @@ def run_cloak_registration(
                 "network_traffic": network_traffic,
             },
         )
+        codex_ok = bool(codex_result.get("ok")) if enable_codex else True
         cpa_primary_file = (
-            (codex_result.get("file_path") if isinstance(codex_result, dict) else None)
-            or cpa_chatgpt_file
+            (codex_result.get("file_path") if isinstance(codex_result, dict) else "")
+            if enable_codex else cpa_chatgpt_file
         )
-        codex_ok = codex_result.get("ok") or codex_result.get("status") == "skipped"
+        if enable_codex and not codex_ok:
+            cpa_primary_file = ""
         if codex_ok:
             _step("success", f"CloakBrowser 真实浏览器注册与 Codex 授权成功: {email}")
         return {
             "success": bool(codex_ok),
             "email": email,
             "password": effective_password,
-            "account_id": account_id,
-            "access_token": access_token,
-            "session_info": session_info,
+            "account_id": account_id if codex_ok else None,
+            "access_token": access_token if codex_ok else "",
+            "session_info": session_info if codex_ok else {},
             "cookies": cookies_dict,
             "totp_secret": totp_secret,
             "codex": codex_result,
             "cpa_file": cpa_primary_file,
             "network_traffic": network_traffic,
-            "error": None if codex_ok else f"Codex 未完成: {codex_result.get('message')}",
+            "error": None if codex_ok else f"Codex 手机验证或授权未完成: {codex_result.get('message')}",
         }
     except Exception as exc:
         if traffic_tracker is not None:

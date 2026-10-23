@@ -56,7 +56,7 @@ sudo -n docker exec -d gptcli-2api bash -c \
 ## 关键配置
 
 ```bash
-SMS_COUNTRY=16,73,117,25   # 英→巴→葡→老挝
+SMS_COUNTRY=4,6,7,2,16,73   # 菲律宾→印尼→马来西亚→哈萨克→英→巴 (亚太/新加坡高亲和接码)
 SMS_CODE_WAIT=180
 SMS_MAX_RETRIES=10
 EMAIL_SOURCE=outlook,cloudflare
