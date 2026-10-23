@@ -1394,8 +1394,8 @@ def _do_phone_verification(session: BrowserSession, *, proactive: bool = False) 
     http = sms_provider._http()
     max_retries = _cfg.SMS_MAX_RETRIES
     provider = _sms_provider_name()
-    raw_countries = str(getattr(_cfg, "SMS_COUNTRY", "4,6,16,73") or "4,6,16,73").replace(";", ",").split(",")
-    countries = [c.strip() for c in raw_countries if c.strip() and c.strip() not in ("7", "66", "25", "2")] or ["4", "6", "16", "73"]
+    raw_countries = str(getattr(_cfg, "SMS_COUNTRY", "16,73,117") or "16,73,117").replace(";", ",").split(",")
+    countries = [c.strip() for c in raw_countries if c.strip() in ("16", "73", "117")] or ["16", "73", "117"]
     _navigate_add_phone_page(session)
     try:
         last_err = None

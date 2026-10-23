@@ -1415,8 +1415,8 @@ def _do_phone_verification_if_present(driver) -> None:
             return
 
         last_err = None
-        raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip() and c.strip() not in ("7", "66", "25", "2")]
-        # 严格遵循配置指定的优质实体卡国家优先级调度（菲律宾4 -> 印尼6 -> 英国16 -> 巴西73，禁用马来西亚7、虚拟号66/25/2与>0.075国家）
+        raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip() in ("16", "73", "117")]
+        # 严格遵循用户指定的国家调度：英国16 -> 巴西73 -> 葡萄牙117，禁用菲律宾4、印尼6、马来西亚7与虚拟号
         for attempt in range(1, max_retries + 1):
             activation_id = None
             try:
