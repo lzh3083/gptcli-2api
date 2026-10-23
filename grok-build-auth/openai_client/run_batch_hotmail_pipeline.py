@@ -50,6 +50,8 @@ import config.codex
 config.codex.ENABLE_CODEX_AUTO = True
 config.codex.FORCE_PHONE_VERIFICATION = True
 config.codex.SMS_CODE_WAIT = 180
+config.codex.SMS_COUNTRY = "4,6,7,2,16,73"
+os.environ["SMS_COUNTRY"] = "4,6,7,2,16,73"
 
 from register import run_openai_registration
 
