@@ -54,6 +54,81 @@ _USED_NOVPROXY_EXIT_IPS: set[str] = set()
 _USED_NOVPROXY_NODES: set[str] = set()
 
 
+def _resolve_dataimpulse_one_ip(
+    proxy: str | None = None,
+    step_cb: Callable[[str, str], None] | None = None,
+    cfg_data: dict[str, Any] | None = None,
+) -> str | None:
+    """
+    若未传入具体代理 URL 或传入 dataimpulse/residential 哨兵词，自动从 DataImpulse 提取并验证
+    一个未使用过的独立住宅 IP（一号一IP，校验 hosting=False）。
+    """
+    raw = str(proxy or "").strip()
+    if raw.lower() in ("direct", "none", "off", "0"):
+        return None
+    if raw and "://" in raw and not any(k in raw.lower() for k in ("dataimpulse", "novproxy", "residential", "dynamic")):
+        return raw
+
+    if cfg_data is None:
+        cfg_data = {}
+        try:
+            import json
+            for cand_path in ("/app/data/config.json", str(Path(__file__).resolve().parents[2] / "data" / "config.json")):
+                if Path(cand_path).is_file():
+                    cfg_data = json.loads(Path(cand_path).read_text(encoding="utf-8")) or {}
+                    break
+        except Exception:
+            cfg_data = {}
+
+    user = str(
+        cfg_data.get("dataimpulse_user")
+        or os.environ.get("DATAIMPULSE_USER")
+        or ""
+    ).strip()
+    password = str(
+        cfg_data.get("dataimpulse_pass")
+        or os.environ.get("DATAIMPULSE_PASS")
+        or ""
+    ).strip()
+    country = str(
+        cfg_data.get("dataimpulse_country")
+        or os.environ.get("DATAIMPULSE_COUNTRY")
+        or cfg_data.get("novproxy_region")
+        or os.environ.get("NOVPROXY_REGION")
+        or "JP"
+    ).strip().upper()
+
+    if "-" in raw and raw.lower().startswith("dataimpulse-"):
+        country = raw.split("-", 1)[1].strip().upper() or country
+    if country in ("AUTO", "*", "ANY", "ALL", ""):
+        country = "JP"
+
+    ttl = int(cfg_data.get("dataimpulse_ttl") or os.environ.get("DATAIMPULSE_TTL") or 30)
+    api_base = str(
+        cfg_data.get("dataimpulse_api")
+        or os.environ.get("DATAIMPULSE_API")
+        or "https://gw.dataimpulse.com:777/api/list"
+    ).strip()
+
+    repo_root = str(Path(__file__).resolve().parents[2])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    from grok2api.upstream.browser_register import dataimpulse
+
+    data_root = os.environ.get("GROK2API_DATA_DIR") or (
+        "/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[2] / "data")
+    )
+    return dataimpulse.resolve_one_ip(
+        user=user,
+        password=password,
+        country=country,
+        session_ttl=ttl,
+        api_base=api_base,
+        data_dir=data_root,
+        step_cb=step_cb,
+    )
+
+
 def _resolve_novproxy_one_ip(
     proxy: str | None,
     step_cb: Callable[[str, str], None] | None = None,
@@ -79,7 +154,21 @@ def _resolve_novproxy_one_ip(
     except Exception:
         cfg_data = {}
 
-    proxy_mode = str(cfg_data.get("proxy_mode") or os.environ.get("NOVPROXY_MODE") or "novproxy").strip().lower()
+    proxy_mode = str(
+        cfg_data.get("proxy_mode")
+        or os.environ.get("PROXY_MODE")
+        or os.environ.get("NOVPROXY_MODE")
+        or "novproxy"
+    ).strip().lower()
+
+    # 若指定或配置了 DataImpulse，分流至 DataImpulse 动态分配流程
+    if (
+        proxy_mode in ("dataimpulse", "data_impulse")
+        or (raw and "dataimpulse" in raw.lower())
+        or bool(os.environ.get("DATAIMPULSE_USER") or cfg_data.get("dataimpulse_user"))
+    ):
+        return _resolve_dataimpulse_one_ip(proxy, step_cb=step_cb, cfg_data=cfg_data)
+
     if not raw and proxy_mode in ("direct", "none", "off"):
         return None
 

@@ -28,8 +28,9 @@ type AccountList struct {
 	Status     string           `json:"status,omitempty"`
 	HasSSO     *bool            `json:"has_sso,omitempty"`
 	// Pool is the mutually-exclusive DB account_pool summary (same as /status pool).
-	Pool         *PoolSummary `json:"pool,omitempty"`
-	StoreSource  string       `json:"store_source,omitempty"`
+	Pool         *PoolSummary   `json:"pool,omitempty"`
+	PlanSummary  map[string]int `json:"plan_summary,omitempty"`
+	StoreSource  string         `json:"store_source,omitempty"`
 	StoreBackend string       `json:"store_backend,omitempty"`
 	AuthFileRole string       `json:"auth_file_role,omitempty"`
 }
@@ -234,26 +235,39 @@ func (c *Connector) ListAccountSummariesFiltered(ctx context.Context, page, page
 			stringFromMap(payload, "plan_label"),
 		)
 		accounts = append(accounts, map[string]any{
-			"id":                id,
-			"email":             firstNonNilString(email, stringFromMap(payload, "email")),
-			"user_id":           firstNonNilString(userID, firstMapString(payload, "user_id", "principal_id")),
-			"team_id":           firstNonNilString(teamID, stringFromMap(payload, "team_id")),
-			"auth_mode":         payload["auth_mode"],
-			"create_time":       payload["create_time"],
-			"updated_at":        unixOrNil(updatedAt),
-			"expires_at":        unixOrNil(expiresAt),
-			"expired":           expired,
-			"has_refresh_token": strings.TrimSpace(stringFromMap(payload, "refresh_token")) != "",
-			"has_sso":           hasSSO(payload),
-			"token_hint":        tokenHint(token),
-			"first_name":        payload["first_name"],
-			"last_name":         payload["last_name"],
-			"principal_type":    payload["principal_type"],
-			"source":            payload["source"],
-			"account_type":      accountType,
-			"plan":              accountType,
-			"plan_label":        planLabel,
-			"_pool":             pool,
+			"id":                              id,
+			"email":                           firstNonNilString(email, stringFromMap(payload, "email")),
+			"user_id":                         firstNonNilString(userID, firstMapString(payload, "user_id", "principal_id")),
+			"team_id":                         firstNonNilString(teamID, stringFromMap(payload, "team_id")),
+			"auth_mode":                       payload["auth_mode"],
+			"create_time":                     payload["create_time"],
+			"updated_at":                      unixOrNil(updatedAt),
+			"expires_at":                      unixOrNil(expiresAt),
+			"expired":                         expired,
+			"has_refresh_token":               strings.TrimSpace(stringFromMap(payload, "refresh_token")) != "",
+			"has_sso":                         hasSSO(payload),
+			"token_hint":                      tokenHint(token),
+			"first_name":                      payload["first_name"],
+			"last_name":                       payload["last_name"],
+			"principal_type":                  payload["principal_type"],
+			"source":                          payload["source"],
+			"account_type":                    accountType,
+			"plan":                            accountType,
+			"plan_label":                      planLabel,
+			"_pool":                           pool,
+			"password":                        firstNonEmptyString(stringFromMap(payload, "password"), stringFromMap(payload, "register_password")),
+			"codex_cpa_file":                  stringFromMap(payload, "codex_cpa_file"),
+			"codex_status":                    firstNonEmptyString(stringFromMap(payload, "codex_status"), "success"),
+			"plan_check_status":               stringFromMap(payload, "plan_check_status"),
+			"plan_check_error":                stringFromMap(payload, "plan_check_error"),
+			"plan_checked_at":                 stringFromMap(payload, "plan_checked_at"),
+			"current_plan_type":               firstNonEmptyString(stringFromMap(payload, "current_plan_type"), stringFromMap(payload, "plan_type")),
+			"plus_trial_eligible":             boolFromAny(payload["plus_trial_eligible"]),
+			"plus_trial_discount_percentage":  intFromAny(payload["plus_trial_discount_percentage"]),
+			"plus_trial_duration_num_periods": intFromAny(payload["plus_trial_duration_num_periods"]),
+			"plus_trial_duration_period":      stringFromMap(payload, "plus_trial_duration_period"),
+			"plus_trial_title":                stringFromMap(payload, "plus_trial_title"),
+			"eligible_promo_campaigns":        payload["eligible_promo_campaigns"],
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -267,6 +281,9 @@ func (c *Connector) ListAccountSummariesFiltered(ctx context.Context, page, page
 	// Always attach DB pool counters so admin chips/overview stay in sync with list filters.
 	if sum, err := c.PoolSummary(ctx); err == nil {
 		out.Pool = &sum
+	}
+	if ps, err := c.PlanSummary(ctx); err == nil {
+		out.PlanSummary = ps
 	}
 	if filter.IDsOnly {
 		ids := make([]string, 0, len(accounts))
@@ -422,6 +439,18 @@ func buildAccountListWhere(query, status string, hasSSO *bool) (string, []any) {
 			clauses = append(clauses, `(NOT `+expiredExpr+` AND NOT `+quotaExpr+` AND COALESCE(ap.enabled, true) = true AND `+modelBlockExpr+`)`)
 		case "expired":
 			clauses = append(clauses, expiredExpr)
+		case "plus_trial", "trial":
+			clauses = append(clauses, `(COALESCE(a.payload->>'plus_trial_eligible', 'false') = 'true' AND (COALESCE(a.payload->>'plus_trial_discount_percentage', '100') = '100' OR a.payload->>'plus_trial_discount_percentage' IS NULL))`)
+		case "discount_50", "discount":
+			clauses = append(clauses, `(COALESCE(a.payload->>'plus_trial_discount_percentage', '0') = '50')`)
+		case "free":
+			clauses = append(clauses, `(COALESCE(a.payload->>'current_plan_type', COALESCE(a.payload->>'plan_type', 'free')) = 'free' AND COALESCE(a.payload->>'plus_trial_eligible', 'false') != 'true' AND COALESCE(a.payload->>'plus_trial_discount_percentage', '0') != '50')`)
+		case "plan_checking", "checking":
+			clauses = append(clauses, `(COALESCE(a.payload->>'plan_check_status', '') IN ('queued', 'running'))`)
+		case "plan_failed", "failed":
+			clauses = append(clauses, `(COALESCE(a.payload->>'plan_check_status', '') = 'failed')`)
+		case "plan_uncheck", "uncheck":
+			clauses = append(clauses, `(COALESCE(a.payload->>'plan_check_status', '') = '')`)
 		}
 	}
 	if len(clauses) == 0 {
@@ -2908,4 +2937,62 @@ func firstNonEmptyString(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+func boolFromAny(v any) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	if s, ok := v.(string); ok {
+		s = strings.ToLower(strings.TrimSpace(s))
+		return s == "true" || s == "1" || s == "yes"
+	}
+	return false
+}
+
+func intFromAny(v any) any {
+	if v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return n
+	case float64:
+		return int(n)
+	case string:
+		if i, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+			return i
+		}
+	}
+	return nil
+}
+
+func (c *Connector) PlanSummary(ctx context.Context) (map[string]int, error) {
+	sql := `
+		SELECT
+			COUNT(*) as total,
+			COUNT(*) FILTER (WHERE COALESCE(payload->>'plus_trial_eligible', 'false') = 'true' AND (COALESCE(payload->>'plus_trial_discount_percentage', '100') = '100' OR payload->>'plus_trial_discount_percentage' IS NULL)) as plus_trial,
+			COUNT(*) FILTER (WHERE COALESCE(payload->>'plus_trial_discount_percentage', '0') = '50') as discount_50,
+			COUNT(*) FILTER (WHERE COALESCE(payload->>'current_plan_type', COALESCE(payload->>'plan_type', 'free')) = 'free' AND COALESCE(payload->>'plus_trial_eligible', 'false') != 'true' AND COALESCE(payload->>'plus_trial_discount_percentage', '0') != '50') as free,
+			COUNT(*) FILTER (WHERE COALESCE(payload->>'plan_check_status', '') IN ('queued', 'running')) as checking,
+			COUNT(*) FILTER (WHERE COALESCE(payload->>'plan_check_status', '') = 'failed') as failed,
+			COUNT(*) FILTER (WHERE COALESCE(payload->>'plan_check_status', '') = '') as uncheck
+		FROM accounts
+	`
+	var total, plusTrial, discount50, free, checking, failed, uncheck int
+	err := c.Pool.QueryRow(ctx, sql).Scan(&total, &plusTrial, &discount50, &free, &checking, &failed, &uncheck)
+	if err != nil {
+		return map[string]int{"total": 0}, err
+	}
+	return map[string]int{
+		"total":       total,
+		"plus_trial":  plusTrial,
+		"discount_50": discount50,
+		"free":        free,
+		"checking":    checking,
+		"failed":      failed,
+		"uncheck":     uncheck,
+	}, nil
 }

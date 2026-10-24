@@ -113,6 +113,26 @@ func (c *Client) ProxyPoolProbe(ctx context.Context, request map[string]any) (ma
 	return c.do(ctx, http.MethodPost, "/proxy-pool/probe", request, nil)
 }
 
+func (c *Client) SchedulerStatus(ctx context.Context) (map[string]any, error) {
+	return c.do(ctx, http.MethodGet, "/scheduler", nil, nil)
+}
+
+func (c *Client) SchedulerUpdate(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPut, "/scheduler", request, nil)
+}
+
+func (c *Client) SchedulerTrigger(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/scheduler/trigger", request, nil)
+}
+
+func (c *Client) SchedulerReset(ctx context.Context) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/scheduler/reset", map[string]any{}, nil)
+}
+
+func (c *Client) PlanCheck(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/accounts/plan-check", request, nil)
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any, headers http.Header) (map[string]any, error) {
 	return c.doAbsolute(ctx, method, "/internal/registration/"+APIVersion+path, body, headers)
 }

@@ -3223,6 +3223,17 @@ def _run_registration(
             sess["message"] = f"ChatGPT 注册成功: {email}"
             sess["completed_at"] = _now()
             _mirror_reg_sess(sid, sess, force=True)
+
+            try:
+                from grok2api.upstream.codex_plan_checker import trigger_async_plan_check
+                trigger_async_plan_check(
+                    email=email,
+                    access_token=access_token,
+                    proxy=proxy_url,
+                    delay_seconds=6.0,
+                )
+            except Exception as _pe:
+                logger.warning(f"[PlanCheck] 触发注册后静默异步检测异常: {_pe}")
             return
         else:
             ensure_xconsole()

@@ -35,6 +35,7 @@ _ALIAS_ORDER = (
     "proxy_protocols",
     "proxy_protocol_runtime",
     "novproxy",
+    "dataimpulse",
     "traffic_meter",
     "outlook_mail",
     "outlook_mailbox_pool",

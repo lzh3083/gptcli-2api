@@ -164,6 +164,13 @@ def main():
                     print(f'  > 同步 chatgpt2api 成功: {email}')
                 except Exception as _c2e:
                     print(f'  > 同步 chatgpt2api 异常: {_c2e}')
+                try:
+                    sys.path.insert(0, '/app')
+                    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+                    from grok2api.upstream.codex_plan_checker import trigger_async_plan_check
+                    trigger_async_plan_check(email=email, access_token=cred.get('access_token') or cred.get('id_token'), delay_seconds=5.0)
+                except Exception:
+                    pass
             except Exception as e:
                 print(f'✕ PG 写入失败 {email}: {type(e).__name__} {e}')
                 stats['skipped'] += 1

@@ -152,6 +152,13 @@ DEFAULT_CONFIG = {
     "novproxy_region": "AUTO",
     "novproxy_minutes": 120,
     "novproxy_num": 5,
+    # ---- DataImpulse 动态住宅代理 ----
+    "dataimpulse_user": "",
+    "dataimpulse_pass": "",
+    "dataimpulse_country": "JP",
+    "dataimpulse_ttl": 30,
+    "dataimpulse_num": 5,
+    "dataimpulse_api": "https://gw.dataimpulse.com:777/api/list",
     # ---- 降智测试（Quality Probe）----
     # 账号注册后是否自动做一次降智检测并写入记录。默认开启：xAI 会对部分账号
     # 静默降级（接口照常 200 但不再逐步推理），只有真发一次需要推理的请求、
@@ -289,7 +296,7 @@ def validate_config_structure(raw):
         "email_provider": {"duckmail", "yyds", "cloudflare", "cloudmail", "outlook"},
         "cloudflare_auth_mode": {"query-key", "bearer", "x-api-key", "x-admin-auth", "x-user-token", "none"},
         "grok2api_pool_name": {"ssoBasic", "ssoSuper"},
-        "proxy_mode": {"auto", "direct", "single", "pool", "novproxy"},
+        "proxy_mode": {"auto", "direct", "single", "pool", "novproxy", "dataimpulse"},
         "proxy_fallback": {"none", "direct", "single"},
         "proxy_pool_endpoint_mode": {"auto", "fixed", "rotating"},
         "proxy_pool_probe_provider": {"cloudflare", "ipinfo"},

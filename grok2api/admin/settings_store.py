@@ -1868,6 +1868,23 @@ _REG_CONFIG_KEYS = (
     "concurrency",
     "stagger_ms",
     "probe_delay_sec",
+    "proxy_pool_preflight_enabled",
+    "us_consistency_enabled",
+    "us_consistency_timezone",
+    "us_consistency_locale",
+    "enable_nsfw",
+    "sso_risk_gate_enabled",
+    "sso_risk_rejected_file",
+    "auto_register_enabled",
+    "auto_register_mode",
+    "auto_register_min_interval_min",
+    "auto_register_max_interval_min",
+    "auto_register_batch_size",
+    "auto_register_watermark_min",
+    "auto_register_watermark_target",
+    "auto_register_watermark_cooldown_min",
+    "auto_register_max_pool_size",
+    "auto_register_max_consecutive_failures",
 )
 
 _REG_SECRET_KEYS = frozenset(
@@ -2335,6 +2352,27 @@ def _normalize_registration_config(
     except (TypeError, ValueError):
         probe_delay = env_probe
     cfg["probe_delay_sec"] = max(0, min(600, probe_delay))
+    for _ext_k in (
+        "proxy_pool_preflight_enabled",
+        "us_consistency_enabled",
+        "us_consistency_timezone",
+        "us_consistency_locale",
+        "enable_nsfw",
+        "sso_risk_gate_enabled",
+        "sso_risk_rejected_file",
+        "auto_register_enabled",
+        "auto_register_mode",
+        "auto_register_min_interval_min",
+        "auto_register_max_interval_min",
+        "auto_register_batch_size",
+        "auto_register_watermark_min",
+        "auto_register_watermark_target",
+        "auto_register_watermark_cooldown_min",
+        "auto_register_max_pool_size",
+        "auto_register_max_consecutive_failures",
+    ):
+        if _ext_k in src:
+            cfg[_ext_k] = src[_ext_k]
     return cfg
 
 

@@ -3,21 +3,19 @@ window.G2A = window.G2A || {};
 (function (G2A) {
   "use strict";
   const PAGE_META = {
-    overview: { title: "概览", sub: "服务状态、账号池与 Token 健康度一览", path: "/admin" },
-    keys: { title: "API Keys", sub: "创建、复制、停用客户端访问密钥", path: "/admin/keys" },
-    accounts: { title: "账号 / 轮询", sub: "ChatGPT / Codex 账号、OAuth 授权、额度与导入导出", path: "/admin/accounts" },
-    usage: { title: "用量", sub: "Token 消耗与请求使用情况（今日 / 近 N 天 / 累计）", path: "/admin/usage" },
-    logs: { title: "任务日志", sub: "查询后台任务结果（协议注册、SSO 导入、测活、Token 续期等）", path: "/admin/logs" },
-    models: { title: "模型", sub: "上游模型缓存与探测结果", path: "/admin/models" },
-    settings: { title: "系统设置", sub: "修改管理员密码、轮询策略与 sub2api / 维护参数", path: "/admin/settings" },
-    guide: { title: "接入指南", sub: "OpenAI / Anthropic 客户端配置示例", path: "/admin/guide" },
+    accounts: { title: "Codex 注册中心", sub: "ChatGPT / Codex 原生协议流水线 · 一键对接转售与分发 (CPA / Sub2API / OneAPI)", path: "/admin/accounts" },
+    settings: { title: "系统与分发设置", sub: "管理员密码、CPA 自动推送与 Sub2API 参数配置", path: "/admin/settings" },
+    logs: { title: "注册运行日志", sub: "实时监控端到端注册流水线与任务结果", path: "/admin/logs" },
+    guide: { title: "转售与分发指南", sub: "对接 OneAPI / NewAPI / CLIProxyAPI / Sub2API 完整配置指南", path: "/admin/guide" },
   };
 
   function buildMobileNav(active) {
     const host = G2A.$("mobile-nav");
     if (!host) return;
-    host.innerHTML = Object.keys(PAGE_META).map((k) => {
+    const order = ["accounts", "settings", "logs", "guide"];
+    host.innerHTML = order.map((k) => {
       const m = PAGE_META[k];
+      if (!m) return "";
       const cls = k === active ? "nav-btn active" : "nav-btn";
       return `<a class="${cls}" href="${m.path}" data-page="${k}">${m.title}</a>`;
     }).join("");

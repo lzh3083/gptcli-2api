@@ -326,12 +326,12 @@ function renderStoreConn(hostId) {
 const PAGE_META = {
   overview: { title: "概览", sub: "服务状态、账号池与 Token 健康度一览" },
   keys: { title: "API Keys", sub: "创建、复制、停用客户端访问密钥" },
-  accounts: { title: "账号 / 轮询", sub: "ChatGPT / Codex 账号、OAuth 授权、额度与导入导出" },
-  usage: { title: "用量", sub: "Token 消耗与请求使用情况（今日按上海时间日切 / 近 N 天 / 累计）" },
-  logs: { title: "任务日志", sub: "查询后台任务结果（协议注册、SSO 导入、测活、Token 续期等）" },
-  models: { title: "模型", sub: "上游模型目录（入库）与探测结果" },
-  settings: { title: "系统设置", sub: "修改管理员密码、轮询策略与 sub2api / 维护参数" },
-  guide: { title: "接入指南", sub: "OpenAI / Anthropic 客户端配置示例" },
+  accounts: { title: "Codex 注册中心", sub: "ChatGPT / Codex 原生协议流水线 · 一键对接转售与分发 (CPA / Sub2API / OneAPI)" },
+  usage: { title: "用量", sub: "Token 消耗与请求使用情况" },
+  logs: { title: "注册运行日志", sub: "实时监控端到端注册流水线与任务结果" },
+  models: { title: "模型", sub: "上游模型目录" },
+  settings: { title: "系统与分发设置", sub: "管理员密码、CPA 自动推送与 Sub2API 参数配置" },
+  guide: { title: "转售与分发指南", sub: "对接 OneAPI / NewAPI / CLIProxyAPI / Sub2API 完整配置指南" },
 };
 
 function showAuth(setup) {
@@ -366,7 +366,7 @@ function pageFromPath(pathname) {
   if (p.endsWith("/settings")) return "settings";
   if (p.endsWith("/guide")) return "guide";
   if (p.endsWith("/login")) return "login";
-  return "overview";
+  return "accounts";
 }
 
 function setActiveMenu(page) {
@@ -1224,9 +1224,18 @@ function rebindPageControls() {
   if ($("btn-acc-select-all-filtered")) $("btn-acc-select-all-filtered").onclick = () => { selectAllFilteredAccounts(); };
   if ($("btn-acc-select-none")) $("btn-acc-select-none").onclick = () => { selectedAccountIds.clear(); renderAccountsPage(); };
   if ($("btn-acc-delete-selected")) $("btn-acc-delete-selected").onclick = () => deleteSelectedAccounts();
+  if ($("btn-acc-plan-check-selected")) $("btn-acc-plan-check-selected").onclick = () => planCheckSelectedAccounts();
+  if ($("btn-acc-plan-check-all")) $("btn-acc-plan-check-all").onclick = () => planCheckAllAccounts();
   if ($("btn-acc-renew-selected")) $("btn-acc-renew-selected").onclick = () => renewAccounts(Array.from(selectedAccountIds));
   if ($("btn-acc-probe-selected")) $("btn-acc-probe-selected").onclick = () => probeAccounts(Array.from(selectedAccountIds));
   if ($("btn-acc-export-selected")) $("btn-acc-export-selected").onclick = () => exportSelectedAccounts();
+  if ($("btn-modal-acc-close")) $("btn-modal-acc-close").onclick = hideAccountDetailModal;
+  if ($("btn-modal-acc-ok")) $("btn-modal-acc-ok").onclick = hideAccountDetailModal;
+  if ($("modal-account-detail")) {
+    $("modal-account-detail").onclick = (e) => {
+      if (e.target === $("modal-account-detail")) hideAccountDetailModal();
+    };
+  }
   if ($("btn-acc-export-sso-selected")) $("btn-acc-export-sso-selected").onclick = () => exportSelectedAccountsSso();
   if ($("btn-acc-export-sso-all")) $("btn-acc-export-sso-all").onclick = () => exportAllAccountsSso();
   // Table header "select all" checkbox (top-left). Soft-nav recreates this node — rebind every time.
@@ -1375,6 +1384,35 @@ function rebindPageControls() {
       if (!btn) return;
       const id = btn.dataset.id;
       try {
+        if (btn.dataset.act === "check-plan-one") {
+          const email = btn.dataset.email || "";
+          setRowBusy(id, true, "检测中");
+          try {
+            toast(`正在检测 ${email || id} 的 Plus 试用与折扣资格…`);
+            const res = await api("/accounts/plan-check", {
+              method: "POST",
+              body: JSON.stringify({ account_id: id, email: email }),
+            });
+            if (res && res.ok) {
+              const trial = res.plus_trial_eligible
+                ? "🎁 100% 免单 Plus 试用！"
+                : (res.plus_trial_discount_percentage === 50 ? "🏷️ 50% 半价优惠！" : "⚪ 普通 Free 账号");
+              toast(`检测完成: ${trial}`);
+            } else {
+              toast(`检测完成: ${(res && res.error) || "未发现优惠活动"}`, false);
+            }
+            loadAccountsPage({ reset: false });
+          } catch (err) {
+            toast((err && err.message) || "资格检测失败", false);
+          } finally {
+            setRowBusy(id, false);
+          }
+          return;
+        }
+        if (btn.dataset.act === "view-acc-detail") {
+          showAccountDetailModal(id);
+          return;
+        }
         if (btn.dataset.act === "renew-one") { await renewAccounts([id], { confirmMany: false }); return; }
         if (btn.dataset.act === "probe-one") { await runAccountProbe(id); return; }
         if (btn.dataset.act === "quota-one") {
@@ -1493,11 +1531,9 @@ function buildMobileNav() {
   if (!host) return;
   // Must cover every PAGE_META entry (incl. logs / usage). A partial map left
   // href="undefined" (literal) → browser requests /admin/undefined → HTTP 404.
-  const active = document.body.dataset.page || pageFromPath(location.pathname) || "overview";
-  const order = ["overview", "keys", "accounts", "usage", "logs", "models", "settings", "guide"];
-  const keys = order.filter((k) => PAGE_META[k]).concat(
-    Object.keys(PAGE_META).filter((k) => !order.includes(k))
-  );
+  const active = document.body.dataset.page || pageFromPath(location.pathname) || "accounts";
+  const order = ["accounts", "settings", "logs", "guide"];
+  const keys = order;
   host.innerHTML = keys.map((k) => {
     let href = (PAGE_HREF && PAGE_HREF[k]) || "";
     // Never emit empty / "undefined" / relative garbage — that was the mobile 404.
@@ -2411,12 +2447,12 @@ function fmtQuotaCell(p, liveQuota) {
 
 const ACCOUNT_STATUS_FILTERS = [
   { key: "", label: "全部", tone: "" },
-  { key: "live", label: "轮询中", tone: "ok" },
-  { key: "cooldown", label: "冷却中", tone: "warn" },
-  { key: "model_blocked", label: "模型封禁", tone: "warn" },
-  { key: "quota_disabled", label: "额度冷却", tone: "warn" },
-  { key: "disabled", label: "已禁用", tone: "bad" },
-  { key: "expired", label: "过期", tone: "bad" },
+  { key: "plus_trial", label: "🎁 可免单试用", tone: "ok" },
+  { key: "discount_50", label: "🏷️ 50%半价优惠", tone: "warn" },
+  { key: "free", label: "⚪ 普通 Free", tone: "" },
+  { key: "plan_checking", label: "🔄 检测中", tone: "info" },
+  { key: "plan_failed", label: "⚠️ 检测失败", tone: "bad" },
+  { key: "plan_uncheck", label: "⏳ 未检测", tone: "" },
 ];
 
 function accountStatusFilterLabel(key) {
@@ -2497,14 +2533,19 @@ function setAccountStatusFilter(key, { reload = true } = {}) {
 }
 
 function poolCountForStatus(key) {
+  const ps = window.__lastPlanSummary || {};
   const s = statusCache || {};
   const d = dashCache || {};
-  // Prefer /status pool (live DB summary) over dashboard cache.
   const pool = Object.assign({}, d.pool || {}, s.pool || {});
-  if (!key) return pool.total != null ? Number(pool.total) : null;
+  if (!key) return ps.total != null ? Number(ps.total) : (pool.total != null ? Number(pool.total) : null);
   const map = {
+    plus_trial: ps.plus_trial,
+    discount_50: ps.discount_50,
+    free: ps.free,
+    plan_checking: ps.checking,
+    plan_failed: ps.failed,
+    plan_uncheck: ps.uncheck,
     live: pool.live,
-    // Account count only — NOT cooldown_stacks (叠加 depth is per-row tip).
     cooldown: pool.in_cooldown,
     model_blocked: pool.model_blocked,
     quota_disabled: pool.quota_disabled,
@@ -2616,52 +2657,90 @@ function renderAccountsPage() {
   const tbody = $("accounts-tbody");
   if (!tbody) return;
   if (accountsLoading && !pageItems.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="g2a-muted">加载账号中…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="g2a-muted">加载账号中…</td></tr>`;
   } else {
     tbody.innerHTML = pageItems.map((a) => {
-      const p = { ...(a._pool || { id: a.id }) };
-      // Hard refresh: pool.last_quota may be null while localStorage/memory still has snap.
-      const liveQ = quotaCache[accountIdKey(a.id)] || quotaCache[a.id];
-      if ((!p.last_quota || (typeof hasQuotaInfo === "function" && !hasQuotaInfo(p.last_quota)))
-        && liveQ && typeof liveQ === "object" && hasQuotaInfo(liveQ)) {
-        p.last_quota = liveQ;
-      }
-      const enabled = p.enabled !== false;
-      const poolLabel = poolStatusLabel(a, p);
-      const usage = `${p.success_count || 0}√ / ${p.fail_count || 0}× · 共 ${p.request_count || 0}`;
-      const refreshPill = a.has_refresh_token
-        ? '<span class="g2a-tag ok" title="可自动 refresh">可自动续期</span>'
-        : '<span class="g2a-tag warn">无 refresh</span>';
-      const ssoPill = a.has_sso
-        ? '<span class="g2a-tag ok" title="账号库已保存 SSO cookie">有SSO</span>'
-        : '<span class="g2a-tag" title="未保存 SSO cookie">无SSO</span>';
-      const probeCell = fmtProbeCell(p.last_probe, p.last_error, p.blocked_model_ids);
       const checked = selectedAccountIds.has(accountIdKey(a.id)) ? "checked" : "";
-      const expiryCell = fmtExpiry(a.expires_at);
-      const typeCell = fmtAccountTypeCell({ ...p, id: a.id, account_type: a.account_type || p.account_type, plan: a.plan || p.plan, plan_label: a.plan_label || p.plan_label, last_quota: p.last_quota }, liveQ);
+
+      // 1. 邮箱与密码
+      const emailTxt = esc(a.email || "—");
+      const pwdTxt = a.password ? esc(a.password) : "";
+      const emailCell = `
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-weight:600;color:var(--text-color, #e5e7eb)">${emailTxt}</span>
+          <button type="button" class="g2a-btn g2a-btn-default g2a-btn-xs" style="padding:1px 6px;font-size:0.7rem;line-height:1.2" title="复制邮箱" onclick="navigator.clipboard.writeText('${esc(a.email || '')}');toast('邮箱已复制');">复制</button>
+        </div>
+        <div class="muted mono" style="font-size:0.75rem;margin-top:3px;display:flex;align-items:center;gap:6px">
+          <span>密: ${pwdTxt ? '••••••••' : '<span style="color:#888">(无记录)</span>'}</span>
+          ${pwdTxt ? `<button type="button" class="g2a-btn g2a-btn-default g2a-btn-xs" style="padding:1px 6px;font-size:0.7rem;line-height:1.2" title="复制密码" onclick="navigator.clipboard.writeText('${pwdTxt}');toast('密码已复制');">复制</button>` : ''}
+          <span style="color:#666;font-size:0.7rem" title="${esc(a.id)}">[${esc((a.id || '').slice(0, 8))}]</span>
+        </div>
+      `;
+
+      // 2. Codex 凭证状态
+      const cpaFilename = a.codex_cpa_file ? a.codex_cpa_file.split('/').pop() : ('codex-' + (a.email || 'user') + '-free.json');
+      const cpaCell = `
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="g2a-tag ok" style="font-size:0.72rem;padding:1px 5px">Codex OAuth</span>
+          <span class="g2a-tag ok" style="font-size:0.72rem;padding:1px 5px">CPA 就绪</span>
+        </div>
+        <div class="muted mono" style="font-size:0.72rem;margin-top:4px" title="/app/data/cpa_auth_files/${esc(cpaFilename)}">
+          📄 ${esc(cpaFilename)}
+        </div>
+      `;
+
+      // 3. 试用与折扣资格
+      let planBadge = '';
+      if (a.plan_check_status === 'running' || a.plan_check_status === 'queued') {
+        planBadge = '<span class="g2a-tag info" style="font-weight:600">🔄 资格检测中…</span>';
+      } else if (a.plus_trial_eligible && (a.plus_trial_discount_percentage === 100 || !a.plus_trial_discount_percentage)) {
+        planBadge = '<span class="g2a-tag ok" style="font-weight:bold;background:#10b981;color:#fff;padding:2px 8px;font-size:0.78rem">🎁 100% 免单 Plus 试用</span>';
+      } else if (a.plus_trial_discount_percentage === 50) {
+        const months = a.plus_trial_duration_num_periods || 1;
+        planBadge = `<span class="g2a-tag warn" style="font-weight:bold;background:#f59e0b;color:#fff;padding:2px 8px;font-size:0.78rem">🏷️ 50% 半价优惠 (${months}个月)</span>`;
+      } else if (a.plan_check_status === 'failed') {
+        planBadge = `<span class="g2a-tag bad" style="font-size:0.75rem" title="${esc(a.plan_check_error || '检测失败')}">⚠️ 检测失败</span>`;
+      } else if (a.plan_check_status === 'success') {
+        planBadge = '<span class="g2a-tag" style="font-size:0.75rem">⚪ 普通 Free (无优惠)</span>';
+      } else {
+        planBadge = '<span class="g2a-tag" style="opacity:0.65;font-size:0.75rem">⏳ 未检测资格</span>';
+      }
+      const checkTimeTxt = a.plan_checked_at ? `<div class="muted" style="font-size:0.7rem;margin-top:3px">查于: ${fmtTime(a.plan_checked_at)}</div>` : '';
+      const planCell = `<div>${planBadge}</div>${checkTimeTxt}`;
+
+      // 4. Token 状态
+      const tokenValidTag = a.expired ? '<span class="g2a-tag bad" style="font-size:0.72rem">已过期</span>' : '<span class="g2a-tag ok" style="font-size:0.72rem">有效</span>';
+      const refreshTag = a.has_refresh_token ? '<span class="g2a-tag ok" style="font-size:0.7rem" title="包含 refresh_token">Refresh</span>' : '<span class="g2a-tag warn" style="font-size:0.7rem">无Refresh</span>';
+      const ssoTag = a.has_sso ? '<span class="g2a-tag ok" style="font-size:0.7rem" title="包含 ChatGPT Web SSO token">SSO</span>' : '<span class="g2a-tag" style="font-size:0.7rem">无SSO</span>';
+      const tokenCell = `
+        <div>${tokenValidTag}</div>
+        <div style="margin-top:4px;display:flex;gap:4px">${refreshTag} ${ssoTag}</div>
+      `;
+
+      // 5. 注册时间
+      const createTime = a.create_time || a.updated_at;
+      const timeCell = `
+        <div style="font-size:0.78rem">${fmtTime(createTime)}</div>
+      `;
+
+      // 6. 操作按钮
+      const actionsCell = `
+        <button class="g2a-btn g2a-btn-primary g2a-btn-sm" data-act="check-plan-one" data-id="${esc(a.id)}" data-email="${esc(a.email || '')}">检测资格</button>
+        <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="view-acc-detail" data-id="${esc(a.id)}">详情</button>
+        <button class="g2a-btn g2a-btn-danger g2a-btn-sm" data-act="rm-acc" data-id="${esc(a.id)}">移除</button>
+      `;
+
       return `
     <tr data-acc-id="${esc(a.id)}">
       <td><input type="checkbox" class="acc-check-one" data-id="${esc(a.id)}" ${checked} /></td>
-      <td>${esc(a.email || "—")}<div class="muted mono" style="font-size:0.72rem">${esc(a.id)}</div></td>
-      <td>${a.expired ? '<span class="g2a-tag bad">已过期</span>' : '<span class="g2a-tag ok">有效</span>'}</td>
-      <td style="min-width:88px">${typeCell}</td>
-      <td>${poolLabel}</td>
-      <td class="g2a-muted" style="font-size:0.8rem">${usage}</td>
-      <td style="font-size:0.82rem;min-width:150px">${fmtQuotaCell({ ...p, id: a.id }, liveQ)}</td>
-      <td style="font-size:0.78rem;min-width:160px">${probeCell}</td>
-      <td style="font-size:0.8rem;min-width:150px">
-        ${expiryCell}
-        <div style="margin-top:6px">${refreshPill} ${ssoPill}</div>
-      </td>
-      <td class="g2a-actions">
-        <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="renew-one" data-id="${esc(a.id)}" ${a.has_refresh_token ? "" : "disabled title=\"无 refresh_token，无法续期\""}>续期</button>
-        <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="probe-one" data-id="${esc(a.id)}">模型测试</button>
-        <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="quota-one" data-id="${esc(a.id)}">额度</button>
-        <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="toggle-acc" data-id="${esc(a.id)}" data-on="${enabled ? 0 : 1}">${enabled ? "禁用" : "启用"}</button>
-        <button class="g2a-btn g2a-btn-danger g2a-btn-sm" data-act="rm-acc" data-id="${esc(a.id)}">移除</button>
-      </td>
+      <td>${emailCell}</td>
+      <td>${cpaCell}</td>
+      <td>${planCell}</td>
+      <td>${tokenCell}</td>
+      <td>${timeCell}</td>
+      <td class="g2a-actions">${actionsCell}</td>
     </tr>`;
-    }).join("") || `<tr><td colspan="10" class="g2a-muted">${(accountsTotal || 0) ? "无匹配账号" : "无账号"}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" class="g2a-muted">${(accountsTotal || 0) ? "无匹配账号" : "暂无已注册账号"}</td></tr>`;
   }
   if ($("acc-page-info")) {
     const src = (window.__g2aAccountsStore && window.__g2aAccountsStore.source) || "";
@@ -3010,6 +3089,10 @@ async function loadAccountsPage({ reset = false, silent = false } = {}) {
       }
     }
     try { syncAccountSortControl(); } catch (_) {}
+    if (data.plan_summary && typeof data.plan_summary === "object") {
+      window.__lastPlanSummary = data.plan_summary;
+      try { renderAccountStatusChips(); } catch (_) {}
+    }
     if (data.pool && typeof data.pool === "object" && Object.keys(data.pool).length) {
       if (statusCache) statusCache.pool = Object.assign({}, statusCache.pool || {}, data.pool);
       if (dashCache) dashCache.pool = Object.assign({}, dashCache.pool || {}, data.pool);
@@ -3611,6 +3694,140 @@ async function renewAccounts(ids, { confirmMany = true } = {}) {
     list.forEach((id) => setRowBusy(id, false));
     toast(e.message, false);
   }
+}
+
+async function planCheckSelectedAccounts() {
+  const ids = Array.from(selectedAccountIds || []);
+  if (!ids.length) {
+    toast("请先勾选需要检测的账号", false);
+    return;
+  }
+  const btn = $("btn-acc-plan-check-selected");
+  if (btn) btn.disabled = true;
+  try {
+    toast(`正在为选中的 ${ids.length} 个账号启动资格检测…`);
+    const res = await api("/accounts/plan-check", {
+      method: "POST",
+      body: JSON.stringify({ account_ids: ids }),
+    });
+    if (res && res.ok) {
+      toast(res.message || `已将 ${ids.length} 个账号加入检测队列`);
+      setTimeout(() => loadAccountsPage({ reset: false }), 1500);
+    } else {
+      toast((res && res.detail) || (res && res.error) || "启动检测失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "启动检测失败", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function planCheckAllAccounts() {
+  if (!confirm("确定对全库所有账号发起 Plus 试用资格与折扣检测？\n将在后台排队错峰异步执行。")) {
+    return;
+  }
+  const btn = $("btn-acc-plan-check-all");
+  if (btn) btn.disabled = true;
+  try {
+    toast("正在启动全量账号资格检测…");
+    const res = await api("/accounts/plan-check", {
+      method: "POST",
+      body: JSON.stringify({ all: true }),
+    });
+    if (res && res.ok) {
+      toast(res.message || "全量检测任务已启动");
+      setTimeout(() => loadAccountsPage({ reset: false }), 2000);
+    } else {
+      toast((res && res.detail) || (res && res.error) || "启动全量检测失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "启动全量检测失败", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function showAccountDetailModal(id) {
+  const a = (accountsList || []).find((x) => String(x.id) === String(id));
+  if (!a) {
+    toast("未找到账号详情", false);
+    return;
+  }
+  const m = $("modal-account-detail");
+  if (!m) return;
+  m.style.display = "flex";
+  if ($("modal-acc-email")) $("modal-acc-email").textContent = a.email || "Codex 账号详情";
+  if ($("modal-acc-id")) {
+    $("modal-acc-id").textContent = `ID: ${a.id} · 注册于: ${fmtTime(a.create_time || a.updated_at)}`;
+  }
+  
+  const cpaFilename = a.codex_cpa_file ? a.codex_cpa_file.split("/").pop() : `codex-${a.email || "user"}-free.json`;
+  let planStatusDesc = "未检测";
+  if (a.plan_check_status === "running" || a.plan_check_status === "queued") {
+    planStatusDesc = "正在检测中…";
+  } else if (a.plus_trial_eligible && (a.plus_trial_discount_percentage === 100 || !a.plus_trial_discount_percentage)) {
+    planStatusDesc = "🎉 恭喜！获得官方 100% 免单 Plus 试用资格！";
+  } else if (a.plus_trial_discount_percentage === 50) {
+    planStatusDesc = `🏷️ 享受 50% 半价优惠折扣 (${a.plus_trial_duration_num_periods || 1}个月)`;
+  } else if (a.plan_check_status === "failed") {
+    planStatusDesc = `⚠️ 检测失败: ${a.plan_check_error || "网络或 Token 异常"}`;
+  } else if (a.plan_check_status === "success") {
+    planStatusDesc = "⚪ 普通 Free 账号（暂无专属试用优惠）";
+  }
+
+  const promoJsonStr = a.eligible_promo_campaigns ? JSON.stringify(a.eligible_promo_campaigns, null, 2) : "无优惠活动数据";
+
+  const bodyEl = $("modal-acc-body");
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:14px;font-size:0.85rem">
+        <div style="background:var(--card-bg, #1e293b);padding:12px;border-radius:8px;border:1px solid var(--border-color, #334155)">
+          <div style="font-weight:bold;margin-bottom:8px;color:#38bdf8">📌 账号基本与认证凭据</div>
+          <div style="display:grid;grid-template-columns:100px 1fr;gap:6px">
+            <span class="muted">邮箱:</span><span class="mono">${esc(a.email || "—")}</span>
+            <span class="muted">密码:</span><span class="mono">${esc(a.password || "(未记录)")}</span>
+            <span class="muted">CPA 凭证:</span><span class="mono">/app/data/cpa_auth_files/${esc(cpaFilename)}</span>
+            <span class="muted">OAuth Client:</span><span class="mono">app_EMoamEEZ73f0CkXaXp7hrann</span>
+            <span class="muted">Token 状态:</span><span>${a.expired ? '<span class="g2a-tag bad">已过期</span>' : '<span class="g2a-tag ok">有效</span>'} | Refresh: ${a.has_refresh_token ? '✅ 有' : '❌ 无'} | SSO Token: ${a.has_sso ? '✅ 有' : '❌ 无'}</span>
+          </div>
+        </div>
+
+        <div style="background:var(--card-bg, #1e293b);padding:12px;border-radius:8px;border:1px solid var(--border-color, #334155)">
+          <div style="font-weight:bold;margin-bottom:8px;color:#10b981">🎁 官方 Plus 试用与优惠详情</div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:6px">
+            <span class="muted">检测状态:</span><span>${esc(planStatusDesc)}</span>
+            <span class="muted">当前套餐:</span><span class="mono">${esc(a.current_plan_type || a.plan || "free")}</span>
+            <span class="muted">100%免单试用:</span><span>${a.plus_trial_eligible ? '<b style="color:#10b981">是 (可免单开通)</b>' : '否'}</span>
+            <span class="muted">折扣比例:</span><span>${a.plus_trial_discount_percentage ? `<b>${a.plus_trial_discount_percentage}% 折扣</b>` : '无折扣'}</span>
+            <span class="muted">优惠时长:</span><span>${a.plus_trial_duration_num_periods ? `${a.plus_trial_duration_num_periods} ${a.plus_trial_duration_period || 'month'}` : '—'}</span>
+            <span class="muted">活动标题:</span><span>${esc(a.plus_trial_title || '—')}</span>
+            <span class="muted">检测时间:</span><span>${a.plan_checked_at ? fmtTime(a.plan_checked_at) : '未检测'}</span>
+          </div>
+          <div style="margin-top:10px">
+            <div class="muted" style="margin-bottom:4px">官方原始 Promo Campaign 数据:</div>
+            <pre class="mono" style="background:#0f172a;padding:8px;border-radius:6px;max-height:160px;overflow-y:auto;font-size:0.75rem">${esc(promoJsonStr)}</pre>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if ($("btn-modal-acc-copy")) {
+    $("btn-modal-acc-copy").onclick = () => {
+      try {
+        navigator.clipboard.writeText(JSON.stringify(a, null, 2));
+        toast("账号凭据 JSON 已复制到剪贴板");
+      } catch (e) {
+        toast("复制失败", false);
+      }
+    };
+  }
+}
+
+function hideAccountDetailModal() {
+  const m = $("modal-account-detail");
+  if (m) m.style.display = "none";
 }
 
 async function exportSelectedAccounts() {
@@ -6162,6 +6379,7 @@ function bindRegMailFormControls() {
       $("reg-novproxy-mode").onchange = () => { syncNovProxyModeUI(); };
     }
     syncNovProxyModeUI();
+    if ($("btn-dataimpulse-generate")) $("btn-dataimpulse-generate").onclick = () => { generateDataImpulseNodes(); };
     if ($("btn-novproxy-generate")) $("btn-novproxy-generate").onclick = () => { generateNovProxyUserPassNodes(); };
     if ($("btn-novproxy-extract")) $("btn-novproxy-extract").onclick = () => { extractNovProxyNodes().catch(() => {}); };
     if ($("btn-probe-proxy-nodes")) $("btn-probe-proxy-nodes").onclick = () => { probeProxyPoolNodes().catch(() => {}); };
@@ -6175,6 +6393,7 @@ function bindRegMailFormControls() {
       $("reg-proxy").addEventListener("input", () => { renderProxyNodesTable(); });
     }
     renderProxyNodesTable();
+    bindAutoRegControls();
   } catch (e) {
     console.warn("bind proxy table controls", e);
   }
@@ -6268,7 +6487,13 @@ function readRegConfig() {
     proxy_username: $("reg-proxy-username") ? $("reg-proxy-username").value.trim() : "",
     proxy_password: $("reg-proxy-password") ? $("reg-proxy-password").value.trim() : "",
     proxy_strategy: $("reg-proxy-strategy") ? $("reg-proxy-strategy").value.trim() : "round_robin",
-    novproxy_mode: $("reg-novproxy-mode") ? $("reg-novproxy-mode").value.trim() : "userpass",
+    novproxy_mode: $("reg-novproxy-mode") ? $("reg-novproxy-mode").value.trim() : "dataimpulse",
+    dataimpulse_host: $("reg-dataimpulse-host") ? $("reg-dataimpulse-host").value.trim() : "gw.dataimpulse.com:823",
+    dataimpulse_user: $("reg-dataimpulse-user") ? $("reg-dataimpulse-user").value.trim() : "",
+    dataimpulse_pass: $("reg-dataimpulse-pass") ? $("reg-dataimpulse-pass").value.trim() : "",
+    dataimpulse_country: $("reg-dataimpulse-country") ? $("reg-dataimpulse-country").value.trim() : "jp",
+    dataimpulse_ttl: $("reg-dataimpulse-ttl") ? $("reg-dataimpulse-ttl").value.trim() : "30",
+    dataimpulse_num: $("reg-dataimpulse-num") ? $("reg-dataimpulse-num").value.trim() : "1",
     novproxy_up_host: $("reg-novproxy-up-host") ? $("reg-novproxy-up-host").value.trim() : "us.novproxy.io:1000",
     novproxy_up_proto: $("reg-novproxy-up-proto") ? $("reg-novproxy-up-proto").value.trim() : "socks5h",
     novproxy_up_user: $("reg-novproxy-up-user") ? $("reg-novproxy-up-user").value.trim() : "",
@@ -6293,6 +6518,16 @@ function readRegConfig() {
     enable_nsfw: $("reg-enable-nsfw") ? $("reg-enable-nsfw").checked : true,
     sso_risk_gate_enabled: $("reg-sso-risk-enabled") ? $("reg-sso-risk-enabled").checked : true,
     sso_risk_rejected_file: $("reg-sso-risk-rejected-file") ? $("reg-sso-risk-rejected-file").value.trim() : "./sso_risk_rejected.txt",
+    auto_register_enabled: $("auto-reg-enabled") ? $("auto-reg-enabled").checked : false,
+    auto_register_mode: $("auto-reg-mode") ? $("auto-reg-mode").value.trim() : "both",
+    auto_register_min_interval_min: $("auto-reg-min-interval") ? Number($("auto-reg-min-interval").value) || 60 : 60,
+    auto_register_max_interval_min: $("auto-reg-max-interval") ? Number($("auto-reg-max-interval").value) || 180 : 180,
+    auto_register_batch_size: $("auto-reg-batch-size") ? Number($("auto-reg-batch-size").value) || 2 : 2,
+    auto_register_watermark_min: $("auto-reg-watermark-min") ? Number($("auto-reg-watermark-min").value) : 20,
+    auto_register_watermark_target: $("auto-reg-watermark-target") ? Number($("auto-reg-watermark-target").value) || 30 : 30,
+    auto_register_watermark_cooldown_min: $("auto-reg-watermark-cooldown") ? Number($("auto-reg-watermark-cooldown").value) || 15 : 15,
+    auto_register_max_pool_size: $("auto-reg-max-pool-size") ? Number($("auto-reg-max-pool-size").value) : 400,
+    auto_register_max_consecutive_failures: $("auto-reg-max-failures") ? Number($("auto-reg-max-failures").value) || 3 : 3,
   };
 }
 // MoeMail official EXPIRY_OPTIONS only:
@@ -6489,8 +6724,14 @@ function applyRegConfig(cfg) {
     $("reg-sso-risk-rejected-file").value = cfg.sso_risk_rejected_file || "./sso_risk_rejected.txt";
   }
   if ($("reg-novproxy-mode")) {
-    $("reg-novproxy-mode").value = (cfg.novproxy_mode || "api").toLowerCase() === "userpass" ? "userpass" : "api";
+    $("reg-novproxy-mode").value = cfg.novproxy_mode || "dataimpulse";
   }
+  if ($("reg-dataimpulse-host")) $("reg-dataimpulse-host").value = cfg.dataimpulse_host || "gw.dataimpulse.com:823";
+  if ($("reg-dataimpulse-user")) $("reg-dataimpulse-user").value = cfg.dataimpulse_user || "";
+  if ($("reg-dataimpulse-pass")) $("reg-dataimpulse-pass").value = cfg.dataimpulse_pass || "";
+  if ($("reg-dataimpulse-country")) $("reg-dataimpulse-country").value = cfg.dataimpulse_country || "jp";
+  if ($("reg-dataimpulse-ttl")) $("reg-dataimpulse-ttl").value = cfg.dataimpulse_ttl != null ? String(cfg.dataimpulse_ttl) : "30";
+  if ($("reg-dataimpulse-num")) $("reg-dataimpulse-num").value = cfg.dataimpulse_num != null ? String(cfg.dataimpulse_num) : "1";
   if ($("reg-novproxy-up-host")) $("reg-novproxy-up-host").value = cfg.novproxy_up_host || "us.novproxy.io:1000";
   if ($("reg-novproxy-up-proto")) $("reg-novproxy-up-proto").value = cfg.novproxy_up_proto || "socks5h";
   if ($("reg-novproxy-up-user")) $("reg-novproxy-up-user").value = cfg.novproxy_up_user || "";
@@ -6506,6 +6747,7 @@ function applyRegConfig(cfg) {
   renderProxyNodesTable();
   syncRegCaptchaProviderUI();
   syncRegMailProviderUI();
+  applyAutoRegConfig(cfg);
   regConfigCache = Object.assign({}, cfg);
 }
 
@@ -6603,8 +6845,25 @@ function renderProxyNodesTable(nodesData) {
 
 function syncNovProxyModeUI() {
   const sel = $("reg-novproxy-mode");
-  const mode = sel ? sel.value : "userpass";
+  const mode = sel ? sel.value : "dataimpulse";
+  const isDataImpulse = mode === "dataimpulse";
   const isUserPass = mode === "userpass";
+  const isApi = mode === "api";
+
+  document.querySelectorAll(".dataimpulse-panel").forEach((el) => {
+    if (isDataImpulse) {
+      el.style.removeProperty("display");
+      el.removeAttribute("hidden");
+      if (el.id === "dataimpulse-panel-btn") {
+        el.style.display = "flex";
+      } else {
+        el.style.display = "block";
+      }
+    } else {
+      el.style.setProperty("display", "none", "important");
+      el.setAttribute("hidden", "true");
+    }
+  });
 
   document.querySelectorAll(".novproxy-up-panel").forEach((el) => {
     if (isUserPass) {
@@ -6617,7 +6876,7 @@ function syncNovProxyModeUI() {
   });
 
   document.querySelectorAll(".novproxy-api-panel").forEach((el) => {
-    if (!isUserPass) {
+    if (isApi) {
       el.style.removeProperty("display");
       el.removeAttribute("hidden");
       if (el.id === "novproxy-panel-api-btn") {
@@ -6632,6 +6891,40 @@ function syncNovProxyModeUI() {
   });
 }
 window.syncNovProxyModeUI = syncNovProxyModeUI;
+
+function generateDataImpulseNodes() {
+  const host = $("reg-dataimpulse-host") ? $("reg-dataimpulse-host").value.trim() : "gw.dataimpulse.com:823";
+  const user = $("reg-dataimpulse-user") ? $("reg-dataimpulse-user").value.trim() : "";
+  const pass = $("reg-dataimpulse-pass") ? $("reg-dataimpulse-pass").value.trim() : "";
+  const country = $("reg-dataimpulse-country") ? $("reg-dataimpulse-country").value.trim().toLowerCase() : "jp";
+  const ttl = $("reg-dataimpulse-ttl") ? $("reg-dataimpulse-ttl").value.trim() : "30";
+  const num = Math.max(1, Math.min(500, parseInt($("reg-dataimpulse-num") ? $("reg-dataimpulse-num").value.trim() : "1", 10) || 1));
+
+  if (!user) {
+    toast("请输入 DataImpulse 用户名 (Login)", false);
+    if ($("reg-dataimpulse-user")) $("reg-dataimpulse-user").focus();
+    return;
+  }
+  if (!pass) {
+    toast("请输入 DataImpulse 密码 (Password)", false);
+    if ($("reg-dataimpulse-pass")) $("reg-dataimpulse-pass").focus();
+    return;
+  }
+
+  const lines = [];
+  for (let i = 0; i < num; i++) {
+    const sid = Math.random().toString(36).substring(2, 10);
+    const formattedUser = `${user}__cr.${country || "jp"}__ttl.${ttl || "30"}m__sid.${sid}`;
+    const proxyLine = `http://${formattedUser}:${pass}@${host || "gw.dataimpulse.com:823"}`;
+    lines.push(proxyLine);
+  }
+
+  if ($("reg-proxy")) {
+    $("reg-proxy").value = lines.join("\n");
+  }
+  renderProxyNodesTable(lines);
+  toast(`已生成 ${lines.length} 个 DataImpulse 住宅节点（一号一IP，国家=${(country || "jp").toUpperCase()}）`, true);
+}
 
 function generateNovProxyUserPassNodes() {
   const host = $("reg-novproxy-up-host") ? $("reg-novproxy-up-host").value.trim() : "us.novproxy.io:1000";
@@ -6671,6 +6964,405 @@ function generateNovProxyUserPassNodes() {
   }
   renderProxyNodesTable(lines);
   toast(`已生成 ${lines.length} 个 NovProxy 住宅账密节点（一号一IP）`, true);
+}
+
+// ---- 双模定时自动注册调度器 (Auto-Register Scheduler) ----
+let autoRegLastStatus = null;
+let autoRegPollTimer = null;
+let autoRegTickTimer = null;
+
+function readAutoRegConfig() {
+  return {
+    auto_register_enabled: $("auto-reg-enabled") ? $("auto-reg-enabled").checked : false,
+    auto_register_mode: $("auto-reg-mode") ? $("auto-reg-mode").value.trim() : "both",
+    auto_register_min_interval_min: Math.max(1, Number($("auto-reg-min-interval") ? $("auto-reg-min-interval").value : 60) || 60),
+    auto_register_max_interval_min: Math.max(1, Number($("auto-reg-max-interval") ? $("auto-reg-max-interval").value : 180) || 180),
+    auto_register_batch_size: Math.max(1, Math.min(50, Number($("auto-reg-batch-size") ? $("auto-reg-batch-size").value : 2) || 2)),
+    auto_register_watermark_min: Math.max(0, Number($("auto-reg-watermark-min") ? $("auto-reg-watermark-min").value : 20)),
+    auto_register_watermark_target: Math.max(1, Number($("auto-reg-watermark-target") ? $("auto-reg-watermark-target").value : 30) || 30),
+    auto_register_watermark_cooldown_min: Math.max(1, Number($("auto-reg-watermark-cooldown") ? $("auto-reg-watermark-cooldown").value : 15) || 15),
+    auto_register_max_pool_size: Math.max(0, Number($("auto-reg-max-pool-size") ? $("auto-reg-max-pool-size").value : 400)),
+    auto_register_max_consecutive_failures: Math.max(1, Math.min(20, Number($("auto-reg-max-failures") ? $("auto-reg-max-failures").value : 3) || 3)),
+  };
+}
+
+function applyAutoRegConfig(cfg) {
+  if (!cfg || typeof cfg !== "object") return;
+  if ($("auto-reg-enabled") && cfg.auto_register_enabled !== undefined) {
+    $("auto-reg-enabled").checked = Boolean(cfg.auto_register_enabled);
+  }
+  if ($("auto-reg-mode") && cfg.auto_register_mode) {
+    const m = String(cfg.auto_register_mode).toLowerCase();
+    $("auto-reg-mode").value = (m === "interval" || m === "watermark") ? m : "both";
+  }
+  if ($("auto-reg-min-interval") && cfg.auto_register_min_interval_min != null) {
+    $("auto-reg-min-interval").value = String(cfg.auto_register_min_interval_min);
+  }
+  if ($("auto-reg-max-interval") && cfg.auto_register_max_interval_min != null) {
+    $("auto-reg-max-interval").value = String(cfg.auto_register_max_interval_min);
+  }
+  if ($("auto-reg-batch-size") && cfg.auto_register_batch_size != null) {
+    $("auto-reg-batch-size").value = String(cfg.auto_register_batch_size);
+  }
+  if ($("auto-reg-watermark-min") && cfg.auto_register_watermark_min != null) {
+    $("auto-reg-watermark-min").value = String(cfg.auto_register_watermark_min);
+  }
+  if ($("auto-reg-watermark-target") && cfg.auto_register_watermark_target != null) {
+    $("auto-reg-watermark-target").value = String(cfg.auto_register_watermark_target);
+  }
+  if ($("auto-reg-watermark-cooldown") && cfg.auto_register_watermark_cooldown_min != null) {
+    $("auto-reg-watermark-cooldown").value = String(cfg.auto_register_watermark_cooldown_min);
+  }
+  if ($("auto-reg-max-pool-size") && cfg.auto_register_max_pool_size != null) {
+    $("auto-reg-max-pool-size").value = String(cfg.auto_register_max_pool_size);
+  }
+  if ($("auto-reg-max-failures") && cfg.auto_register_max_consecutive_failures != null) {
+    $("auto-reg-max-failures").value = String(cfg.auto_register_max_consecutive_failures);
+  }
+}
+
+async function callAutoRegSchedulerApi(action, payload) {
+  const body = Object.assign({}, payload || {});
+  try {
+    if (action === "status") {
+      return await api("/accounts/register-email/scheduler");
+    }
+    if (action === "update") {
+      return await api("/accounts/register-email/scheduler", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+    }
+    if (action === "trigger") {
+      return await api("/accounts/register-email/scheduler/trigger", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    }
+    if (action === "reset") {
+      return await api("/accounts/register-email/scheduler/reset", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+    }
+  } catch (err) {
+    if (err && (err.status === 404 || err.status === 405)) {
+      body.__scheduler_action = action;
+      return await api("/accounts/register-email/proxy-probe", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    }
+    throw err;
+  }
+}
+
+function formatAutoRegDuration(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  if (s < 60) return `${s}秒`;
+  const m = Math.floor(s / 60);
+  const remS = s % 60;
+  if (m < 60) return `${m}分${remS > 0 ? remS + "秒" : ""}`;
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  return `${h}小时${remM > 0 ? remM + "分" : ""}`;
+}
+
+function formatAutoRegTimestamp(ts) {
+  if (!ts) return "—";
+  try {
+    const d = new Date(Number(ts) * 1000);
+    if (isNaN(d.getTime())) return "—";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } catch (_) {
+    return "—";
+  }
+}
+
+function renderAutoRegCountdown() {
+  const nextEl = $("auto-reg-next-time");
+  if (!nextEl || !autoRegLastStatus) return;
+  const st = autoRegLastStatus;
+  const cfg = st.config || {};
+  if (!cfg.auto_register_enabled) {
+    nextEl.textContent = "已关闭";
+    return;
+  }
+  if (st.circuit_broken) {
+    nextEl.textContent = "已熔断暂停";
+    return;
+  }
+  if (st.phase === "running_job") {
+    nextEl.textContent = "正在执行注册任务中...";
+    return;
+  }
+  if (st.phase === "max_pool_reached") {
+    nextEl.textContent = `已达容量上限 (${cfg.auto_register_max_pool_size}个)，自动待命`;
+    return;
+  }
+  if (cfg.auto_register_mode === "watermark") {
+    nextEl.textContent = `实时监控中 (低于 ${cfg.auto_register_watermark_min} 个立即触发)`;
+    return;
+  }
+  if (st.next_run_at || st.next_run_in_sec != null) {
+    const nowSec = Date.now() / 1000;
+    let rem = 0;
+    if (st._client_fetched_at && st.next_run_in_sec != null) {
+      const elapsed = Math.max(0, nowSec - st._client_fetched_at);
+      rem = Math.max(0, Math.floor(Number(st.next_run_in_sec) - elapsed));
+    } else if (st.next_run_at && st.server_time) {
+      rem = Math.max(0, Math.floor(st.next_run_at - st.server_time));
+    } else if (st.next_run_at) {
+      rem = Math.max(0, Math.floor(st.next_run_at - nowSec));
+    }
+    const chosenMin = st.next_interval_sec ? Math.round(st.next_interval_sec / 60) : null;
+    const isPostponed = st.phase === "postponed";
+    const suffix = isPostponed
+      ? " (外部注册进行中，自动顺延避让)"
+      : chosenMin
+        ? ` (本轮随机抽中 ${chosenMin} 分钟)`
+        : "";
+    nextEl.textContent = rem > 0 ? `${formatAutoRegDuration(rem)}后${suffix}` : "即将触发...";
+  } else {
+    nextEl.textContent = "计算中...";
+  }
+}
+
+function renderAutoRegStatus(st, syncForm) {
+  if (!st || typeof st !== "object") return;
+  st._client_fetched_at = Date.now() / 1000;
+  autoRegLastStatus = st;
+  const cfg = st.config || {};
+  if (syncForm) {
+    applyAutoRegConfig(cfg);
+  }
+
+  const badge = $("auto-reg-status-badge");
+  if (badge) {
+    const phase = st.phase || (cfg.auto_register_enabled ? "waiting" : "disabled");
+    const modeMap = { both: "双模联动", interval: "随机间隔", watermark: "水位补齐" };
+    const modeLabel = modeMap[cfg.auto_register_mode] || "双模联动";
+    if (st.circuit_broken || phase === "circuit_broken") {
+      badge.textContent = "🔴 熔断保护中";
+      badge.style.background = "rgba(255,77,79,0.2)";
+      badge.style.color = "#ff7875";
+    } else if (phase === "running_job") {
+      badge.textContent = `🟢 正在注册 (${(st.active_session_ids || []).length || 1} 会话)`;
+      badge.style.background = "rgba(82,196,26,0.2)";
+      badge.style.color = "#95de64";
+    } else if (cfg.auto_register_enabled) {
+      if (phase === "max_pool_reached") {
+        badge.textContent = `🔵 容量已满 · 待命中 (${modeLabel})`;
+        badge.style.background = "rgba(24,144,255,0.2)";
+        badge.style.color = "#69c0ff";
+      } else {
+        badge.textContent = `🟢 运行中 · ${modeLabel}`;
+        badge.style.background = "rgba(82,196,26,0.2)";
+        badge.style.color = "#95de64";
+      }
+    } else {
+      badge.textContent = "⏸️ 未启用";
+      badge.style.background = "";
+      badge.style.color = "";
+    }
+  }
+
+  renderAutoRegCountdown();
+
+  const poolEl = $("auto-reg-pool-live");
+  if (poolEl && st.pool) {
+    const live = st.pool.live ?? 0;
+    const total = st.pool.total ?? 0;
+    const wmMin = cfg.auto_register_watermark_min ?? 20;
+    const wmTarget = cfg.auto_register_watermark_target ?? 30;
+    const isLow = live < wmMin;
+    poolEl.innerHTML = `<strong style="color:${isLow ? "#ff7875" : "#95de64"}">${live} 可用</strong> / 共 ${total} 个 <span class="g2a-muted" style="font-size:12px">(警戒 ${wmMin} · 目标 ${wmTarget})</span>`;
+  }
+
+  const statsEl = $("auto-reg-stats-summary");
+  if (statsEl) {
+    const runs = st.total_runs ?? 0;
+    const imp = st.total_imported ?? 0;
+    const fails = st.consecutive_failures ?? 0;
+    statsEl.textContent = `已入库 ${imp} 个 · 调度 ${runs} 次${fails > 0 ? ` (连败 ${fails})` : ""}`;
+  }
+
+  const banner = $("auto-reg-circuit-banner");
+  const resetBtn = $("btn-reset-circuit-auto-reg");
+  if (banner) {
+    if (st.circuit_broken) {
+      banner.classList.remove("hidden");
+      banner.style.display = "block";
+      if ($("auto-reg-circuit-msg")) {
+        $("auto-reg-circuit-msg").textContent = st.circuit_broken_reason || "连续注册失败已触发熔断暂停";
+      }
+    } else {
+      banner.classList.add("hidden");
+      banner.style.display = "none";
+    }
+  }
+  if (resetBtn) {
+    if (st.circuit_broken) {
+      resetBtn.classList.remove("hidden");
+      resetBtn.style.display = "inline-flex";
+    } else {
+      resetBtn.classList.add("hidden");
+      resetBtn.style.display = "none";
+    }
+  }
+
+  const hist = Array.isArray(st.history) ? st.history : [];
+  if ($("auto-reg-history-count")) {
+    $("auto-reg-history-count").textContent = `${hist.length} 条记录`;
+  }
+  const tbody = $("auto-reg-history-body");
+  if (tbody) {
+    if (!hist.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:14px;color:var(--ant-color-text-secondary, #888)">暂无调度记录</td></tr>`;
+    } else {
+      tbody.innerHTML = hist.map((item) => {
+        const dotColor = item.ok ? "#52c41a" : "#ff4d4f";
+        const dot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dotColor};margin-right:6px"></span>`;
+        const ratio = `${item.imported ?? 0} / ${item.requested ?? 0}`;
+        const dur = item.duration_sec ? `${item.duration_sec}s` : "—";
+        return `<tr style="border-bottom:1px solid var(--ant-color-border-secondary, #303030)">
+          <td style="padding:6px 10px;font-family:monospace;font-size:12px">${dot}${g2aEscapeHtml(formatAutoRegTimestamp(item.finished_at))}</td>
+          <td style="padding:6px 10px;font-size:12px">${g2aEscapeHtml(item.reason || "定时调度")}</td>
+          <td style="padding:6px 10px;font-family:monospace;font-weight:600;color:${item.ok ? "#95de64" : "#ff7875"}">${g2aEscapeHtml(ratio)}</td>
+          <td style="padding:6px 10px;font-family:monospace;font-size:12px">${g2aEscapeHtml(dur)}</td>
+          <td style="padding:6px 10px;font-size:12px">${g2aEscapeHtml(item.message || "—")}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+}
+
+async function fetchAutoRegSchedulerStatus(syncForm = false) {
+  try {
+    const st = await callAutoRegSchedulerApi("status");
+    if (st && st.ok) {
+      renderAutoRegStatus(st, syncForm);
+    }
+    return st;
+  } catch (e) {
+    console.debug("fetchAutoRegSchedulerStatus", e);
+    return null;
+  }
+}
+
+async function saveAutoRegSchedulerConfig() {
+  const btn = $("btn-save-auto-reg");
+  const orig = btn ? btn.textContent : "";
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "保存中...";
+    }
+    const autoCfg = readAutoRegConfig();
+    if (autoCfg.auto_register_max_interval_min < autoCfg.auto_register_min_interval_min) {
+      autoCfg.auto_register_max_interval_min = autoCfg.auto_register_min_interval_min;
+      if ($("auto-reg-max-interval")) {
+        $("auto-reg-max-interval").value = String(autoCfg.auto_register_max_interval_min);
+      }
+    }
+    await saveRegConfig();
+    const st = await callAutoRegSchedulerApi("update", autoCfg);
+    if (st && st.ok) {
+      renderAutoRegStatus(st, true);
+    }
+    toast(
+      autoCfg.auto_register_enabled
+        ? `定时注册已启用（随机间隔 ${autoCfg.auto_register_min_interval_min}~${autoCfg.auto_register_max_interval_min} 分钟 · 水位 ${autoCfg.auto_register_watermark_min}/${autoCfg.auto_register_watermark_target}）`
+        : "定时注册配置已保存（当前为关闭状态）",
+      true
+    );
+  } catch (e) {
+    toast(`保存定时配置失败: ${e.message}`, false);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = orig || "保存定时配置";
+    }
+  }
+}
+
+async function triggerAutoRegNow() {
+  const btn = $("btn-trigger-auto-reg");
+  const orig = btn ? btn.textContent : "";
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "启动中...";
+    }
+    const autoCfg = readAutoRegConfig();
+    const st = await callAutoRegSchedulerApi("trigger", {
+      count: autoCfg.auto_register_batch_size || 1,
+    });
+    if (st && st.ok) {
+      renderAutoRegStatus(st, false);
+    }
+    toast(`已触发立即执行一轮注册（数量: ${autoCfg.auto_register_batch_size}）`, true);
+    setTimeout(() => {
+      fetchAutoRegSchedulerStatus(false).catch(() => {});
+      if (typeof refreshRegistrationProgress === "function") {
+        refreshRegistrationProgress({ toastIfEmpty: false }).catch(() => {});
+      }
+      if (typeof startRegPolling === "function") {
+        startRegPolling({ immediate: true, intervalMs: 600 });
+      }
+    }, 800);
+  } catch (e) {
+    toast(`立即触发失败: ${e.message}`, false);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = orig || "立即执行一轮";
+    }
+  }
+}
+
+async function resetAutoRegCircuit() {
+  try {
+    const st = await callAutoRegSchedulerApi("reset", {});
+    if (st && st.ok) {
+      renderAutoRegStatus(st, false);
+    }
+    toast("已重置安全熔断状态，恢复自动调度", true);
+  } catch (e) {
+    toast(`重置熔断失败: ${e.message}`, false);
+  }
+}
+
+function bindAutoRegControls() {
+  if ($("btn-save-auto-reg")) {
+    $("btn-save-auto-reg").onclick = () => { saveAutoRegSchedulerConfig().catch(() => {}); };
+  }
+  if ($("btn-trigger-auto-reg")) {
+    $("btn-trigger-auto-reg").onclick = () => { triggerAutoRegNow().catch(() => {}); };
+  }
+  if ($("btn-reset-circuit-auto-reg")) {
+    $("btn-reset-circuit-auto-reg").onclick = () => { resetAutoRegCircuit().catch(() => {}); };
+  }
+  if ($("btn-refresh-auto-reg")) {
+    $("btn-refresh-auto-reg").onclick = () => {
+      fetchAutoRegSchedulerStatus(false).then(() => toast("已刷新定时调度状态", true)).catch(() => {});
+    };
+  }
+  fetchAutoRegSchedulerStatus(true).catch(() => {});
+  if (!autoRegTickTimer) {
+    autoRegTickTimer = setInterval(() => {
+      if ($("sec-auto-reg")) renderAutoRegCountdown();
+    }, 1000);
+  }
+  if (!autoRegPollTimer) {
+    autoRegPollTimer = setInterval(() => {
+      const panel = $("panel-register");
+      if (panel && !panel.hidden) {
+        fetchAutoRegSchedulerStatus(false).catch(() => {});
+      }
+    }, 8000);
+  }
 }
 
 function onNovProxyApiUrlInput() {
@@ -9939,6 +10631,48 @@ async function exportSub2apiFormat() {
   }
 }
 
+async function exportOneapiFormat() {
+  const ids = Array.from(selectedAccountIds || []);
+  const body = ids.length ? { account_ids: ids } : { all: true };
+  if (!ids.length && !confirm("未选择账号，将导出全部账号为 OneAPI / NewAPI 渠道密钥格式（每行一个 Token）。继续？")) {
+    return;
+  }
+  try {
+    const r = await api("/accounts/export-cliproxyapi-format", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    const accs = (r && r.accounts) || [];
+    if (!accs.length) {
+      toast("没有可导出的账号数据", false);
+      return;
+    }
+    const lines = [];
+    lines.push("# ================================================================");
+    lines.push("# Codex 账号导出 (适用于 OneAPI / NewAPI 渠道密钥批量添加)");
+    lines.push(`# 导出时间: ${new Date().toLocaleString()} | 账号总数: ${accs.length}`);
+    lines.push("# 使用说明: 在 OneAPI 渠道设置中将以下密钥粘贴到 Key 字段（多密钥支持轮换）");
+    lines.push("# ================================================================");
+    lines.push("");
+    for (const a of accs) {
+      const tok = a.access_token || a.token || a.refresh_token || "";
+      if (tok) {
+        lines.push(tok);
+      }
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `oneapi-codex-tokens-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast(`已导出 ${accs.length} 个账号的 Token 为 OneAPI 渠道格式`, true);
+  } catch (e) {
+    toast("导出失败: " + (e && e.message || e), false);
+  }
+}
+
 async function exportCliproxyapiFormat() {
   const ids = Array.from(selectedAccountIds || []);
   const body = ids.length ? { account_ids: ids } : { all: true };
@@ -10027,6 +10761,7 @@ function bindSub2apiUi() {
   on("btn-acc-push-sub2api-all", "onclick", () => { pushAccountsToSub2api({ all: true }).catch(() => {}); });
   on("btn-acc-export-sub2api-format", "onclick", () => { exportSub2apiFormat().catch(() => {}); });
   on("btn-acc-export-cliproxyapi-format", "onclick", () => { exportCliproxyapiFormat().catch(() => {}); });
+  on("btn-acc-export-oneapi", "onclick", () => { exportOneapiFormat().catch(() => {}); });
   on("btn-acc-push-cliproxyapi-selected", "onclick", () => { pushAccountsToCliproxyapi({ all: false }).catch(() => {}); });
   on("btn-acc-push-cliproxyapi-all", "onclick", () => { pushAccountsToCliproxyapi({ all: true }).catch(() => {}); });
   on("btn-cliproxyapi-test", "onclick", () => { testCliproxyapiConnection().catch(() => {}); });
@@ -10860,6 +11595,9 @@ if ($("btn-close-reg-inline") && !$("btn-close-reg-inline").onclick) {
 }
 if ($("reg-novproxy-mode")) {
   $("reg-novproxy-mode").onchange = () => { syncNovProxyModeUI(); };
+}
+if ($("btn-dataimpulse-generate") && !$("btn-dataimpulse-generate").onclick) {
+  on("btn-dataimpulse-generate", "onclick", () => { generateDataImpulseNodes(); });
 }
 if ($("btn-novproxy-generate") && !$("btn-novproxy-generate").onclick) {
   on("btn-novproxy-generate", "onclick", () => { generateNovProxyUserPassNodes(); });

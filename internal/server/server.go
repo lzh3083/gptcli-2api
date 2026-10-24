@@ -273,12 +273,20 @@ func NewMux(options Options) http.Handler {
 	// Exact root only. A bare "GET /" is a subtree pattern in Go 1.22+ and would
 	// incorrectly serve index.html for every unmatched path (e.g. /unknown).
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		if options.Config.Mode == "register-only" {
+			http.Redirect(w, r, "/admin/accounts", http.StatusFound)
+			return
+		}
 		serveFile(w, r, filepath.Join(staticDir, "index.html"), false)
 	})
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		serveFile(w, r, filepath.Join(staticDir, "favicon.ico"), false)
 	})
 	mux.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
+		if options.Config.Mode == "register-only" {
+			serveAdminPage(w, r, staticDir, "accounts")
+			return
+		}
 		serveAdminPage(w, r, staticDir, "index")
 	})
 	mux.HandleFunc("GET /admin/{page}", func(w http.ResponseWriter, r *http.Request) {
@@ -440,6 +448,24 @@ func NewMux(options Options) http.Handler {
 	})
 	mux.HandleFunc("POST /admin/api/accounts/register-email/proxy-probe", func(w http.ResponseWriter, r *http.Request) {
 		serveProxyPoolProbe(w, r, options)
+	})
+	mux.HandleFunc("GET /admin/api/accounts/register-email/scheduler", func(w http.ResponseWriter, r *http.Request) {
+		serveRegistrationSchedulerGet(w, r, options)
+	})
+	mux.HandleFunc("PUT /admin/api/accounts/register-email/scheduler", func(w http.ResponseWriter, r *http.Request) {
+		serveRegistrationSchedulerPut(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/accounts/register-email/scheduler", func(w http.ResponseWriter, r *http.Request) {
+		serveRegistrationSchedulerPut(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/accounts/register-email/scheduler/trigger", func(w http.ResponseWriter, r *http.Request) {
+		serveRegistrationSchedulerTrigger(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/accounts/register-email/scheduler/reset", func(w http.ResponseWriter, r *http.Request) {
+		serveRegistrationSchedulerReset(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/accounts/plan-check", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminAccountsPlanCheck(w, r, options)
 	})
 	mux.HandleFunc("POST /admin/api/register-email/test-proxy", func(w http.ResponseWriter, r *http.Request) {
 		serveRegistrationProxyTest(w, r, options)
@@ -4602,7 +4628,31 @@ func serveAdminAccounts(w http.ResponseWriter, r *http.Request, options Options)
 			"source":          poolSum.Source,
 		}
 	}
+	if result.PlanSummary != nil {
+		payload["plan_summary"] = result.PlanSummary
+	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func serveAdminAccountsPlanCheck(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.PlanCheck(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // Shared registration HTTP client: admin UI polls batch/session every ~150–400ms.
@@ -6397,6 +6447,84 @@ func serveRegistrationStopAll(w http.ResponseWriter, r *http.Request, options Op
 		return
 	}
 	payload, err := client.StopAll(r.Context())
+	if err != nil {
+		writeRegistrationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func serveRegistrationSchedulerGet(w http.ResponseWriter, r *http.Request, options Options) {
+	if !requireAdminReadWrite(w, r, options, false) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration service URL is not configured"})
+		return
+	}
+	payload, err := client.SchedulerStatus(r.Context())
+	if err != nil {
+		writeRegistrationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func serveRegistrationSchedulerPut(w http.ResponseWriter, r *http.Request, options Options) {
+	if !requireAdminReadWrite(w, r, options, true) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration service URL is not configured"})
+		return
+	}
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	payload, err := client.SchedulerUpdate(r.Context(), body)
+	if err != nil {
+		writeRegistrationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func serveRegistrationSchedulerTrigger(w http.ResponseWriter, r *http.Request, options Options) {
+	if !requireAdminReadWrite(w, r, options, true) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration service URL is not configured"})
+		return
+	}
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	payload, err := client.SchedulerTrigger(r.Context(), body)
+	if err != nil {
+		writeRegistrationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func serveRegistrationSchedulerReset(w http.ResponseWriter, r *http.Request, options Options) {
+	if !requireAdminReadWrite(w, r, options, true) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration service URL is not configured"})
+		return
+	}
+	payload, err := client.SchedulerReset(r.Context())
 	if err != nil {
 		writeRegistrationError(w, err)
 		return

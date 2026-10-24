@@ -108,18 +108,14 @@
         <div class="g2a-logo">G</div>
         <div>
           <div class="g2a-brand-title">gptcli-2api</div>
-          <div class="g2a-brand-sub"><span id="app-version">…</span> · Admin</div>
+          <div class="g2a-brand-sub"><span id="app-version">…</span> · 注册分发机</div>
         </div>
       </div>
       <nav class="g2a-menu">
-        <a class="g2a-menu-item " href="/admin" data-page="overview"><span class="g2a-menu-ico">◫</span><span>概览</span></a>
-        <a class="g2a-menu-item " href="/admin/keys" data-page="keys"><span class="g2a-menu-ico">🔑</span><span>API Keys</span></a>
-        <a class="g2a-menu-item " href="/admin/accounts" data-page="accounts"><span class="g2a-menu-ico">👥</span><span>账号 / 轮询</span></a>
-        <a class="g2a-menu-item " href="/admin/usage" data-page="usage"><span class="g2a-menu-ico">Σ</span><span>用量</span></a>
-        <a class="g2a-menu-item " href="/admin/logs" data-page="logs"><span class="g2a-menu-ico">📜</span><span>任务日志</span></a>
-        <a class="g2a-menu-item " href="/admin/models" data-page="models"><span class="g2a-menu-ico">▣</span><span>模型</span></a>
-        <a class="g2a-menu-item " href="/admin/settings" data-page="settings"><span class="g2a-menu-ico">⚙</span><span>系统设置</span></a>
-        <a class="g2a-menu-item is-active" href="/admin/guide" data-page="guide"><span class="g2a-menu-ico">📘</span><span>接入指南</span></a>
+        <a class="g2a-menu-item " href="/admin/accounts" data-page="accounts"><span class="g2a-menu-ico">🚀</span><span>Codex 注册中心</span></a>
+        <a class="g2a-menu-item " href="/admin/settings" data-page="settings"><span class="g2a-menu-ico">⚙</span><span>系统与分发设置</span></a>
+        <a class="g2a-menu-item " href="/admin/logs" data-page="logs"><span class="g2a-menu-ico">📜</span><span>注册运行日志</span></a>
+        <a class="g2a-menu-item is-active" href="/admin/guide" data-page="guide"><span class="g2a-menu-ico">📘</span><span>转售与分发指南</span></a>
       </nav>
       <div class="g2a-sider-foot">
         <a href="/docs" target="_blank" rel="noopener">Swagger</a>
@@ -131,8 +127,8 @@
     <div class="g2a-main">
       <header class="g2a-header">
         <div>
-          <h1 id="page-title">接入指南</h1>
-          <p id="page-sub">OpenAI / Anthropic 客户端配置示例</p>
+          <h1 id="page-title">转售与分发指南</h1>
+          <p id="page-sub">Codex 自动化注册成果对接 CLIProxyAPI (CPA) / Sub2API / OneAPI / NewAPI 实战流程</p>
         </div>
         <div class="g2a-header-actions">
           <span id="status-pill" class="g2a-tag">—</span>
@@ -146,29 +142,45 @@
 <section class="g2a-card">
   <div class="g2a-card-head">
     <div>
-      <h3>接入信息</h3>
-      <p>Base URL 与默认模型（优先使用当前浏览器 origin）。</p>
+      <h3>分发模式 1：对接 CLIProxyAPI (CPA) —— 推荐首选</h3>
+      <p>CPA 天然支持 Codex PKCE 凭证与 OAuth 自动刷新，聚合为标准 OpenAI 接口供下游转售。</p>
     </div>
   </div>
-  <div class="g2a-kv"><span>OpenAI Base</span><code id="guide-base" class="g2a-code-inline">—</code></div>
-  <div class="g2a-kv"><span>默认模型</span><code id="guide-model" class="g2a-code-inline">—</code></div>
+  <div style="font-size:13px;line-height:1.7;color:var(--text, #abb2bf)">
+    <p><strong>方案 A（本地/内网目录挂载 · 秒级热加载）：</strong></p>
+    <p>流水线成功注册的账号凭据会自动保存在本机的 <code>/app/data/cpa_auth_files/codex-&lt;email&gt;-free.json</code>。若 CPA 部署在同一服务器或同内网，只需将该目录挂载至 CPA 容器的 <code>/cliproxyapi/auths</code> 目录，CPA 就会自动扫描并秒级加载所有新号。</p>
+    <p><strong>方案 B（远程 API 自动推送）：</strong></p>
+    <p>进入「系统与分发设置」->「CLIProxyAPI」，填入远程 CPA 的 <code>Base URL</code> 与 <code>Management Key</code>，并勾选<strong>自动推送</strong>。新注册的 Codex 账号将在诞生后秒级直传至目标 CPA。</p>
+  </div>
 </section>
 
 <section class="g2a-card">
-  <div class="g2a-card-head"><div><h3>cURL</h3><p>快速测通。</p></div></div>
-  <pre id="guide-curl" class="g2a-code">—</pre>
+  <div class="g2a-card-head">
+    <div>
+      <h3>分发模式 2：对接 Sub2API</h3>
+      <p>自动按分组将 Codex 凭据录入 Sub2API，实现商业化限流与并发控制。</p>
+    </div>
+  </div>
+  <div style="font-size:13px;line-height:1.7;color:var(--text, #abb2bf)">
+    <p>1. 在「系统与分发设置」->「sub2api 对接」中填入 Sub2API 地址、管理员邮箱与密码；</p>
+    <p>2. 点击「拉取分组列表」选择或创建目标分组（例如 <code>Codex-Pool</code>）；</p>
+    <p>3. 开启「自动推送」或在「账号管理」中勾选账号点击「推送到 Sub2API」，账号即刻完成导入与配额生效。</p>
+  </div>
 </section>
+
 <section class="g2a-card">
-  <div class="g2a-card-head"><div><h3>OpenAI Python</h3></div></div>
-  <pre id="guide-py" class="g2a-code">—</pre>
-</section>
-<section class="g2a-card">
-  <div class="g2a-card-head"><div><h3>Anthropic Python</h3></div></div>
-  <pre id="guide-anthropic" class="g2a-code">—</pre>
-</section>
-<section class="g2a-card">
-  <div class="g2a-card-head"><div><h3>Linux 部署提示</h3></div></div>
-  <pre id="guide-linux" class="g2a-code">—</pre>
+  <div class="g2a-card-head">
+    <div>
+      <h3>分发模式 3：对接 OneAPI / NewAPI 转售计费</h3>
+      <p>标准商业化中转计费平台接入推荐架构。</p>
+    </div>
+  </div>
+  <div style="font-size:13px;line-height:1.7;color:var(--text, #abb2bf)">
+    <p><strong>推荐架构链路：</strong><code>gptcli-2api (生产)</code> ➔ <code>CLIProxyAPI (聚合与按需刷新)</code> ➔ <code>OneAPI / NewAPI (用户计费与售卖)</code></p>
+    <p>1. <strong>为什么必须经过 CPA 聚合？</strong> OneAPI 仅支持标准的静态 API Key 轮询，不支持原生的 PKCE OAuth refresh_token 换票。CPA 会自动接管账号生命周期并伪装为标准 OpenAI 服务；</p>
+    <p>2. <strong>OneAPI 渠道配置：</strong>类型选择 <code>OpenAI</code>，代理地址填入 CPA 的对外服务地址（如 <code>http://&lt;CPA_IP&gt;:8000</code>），密钥填入 CPA 分配的通用转发 Key；</p>
+    <p>3. <strong>直接导出密钥：</strong>若需要单 Token 导入其他平台，可在「账号管理」中点击<strong>「导出 OneAPI 渠道」</strong>一键导出全量密钥文本。</p>
+  </div>
 </section>
 
       </div>
@@ -178,6 +190,6 @@
   <script src="/static/dist/api.9ddb30423c.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/auth.3ec19fa51e.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/core.68c5c2f913.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.36461a7bd4.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
 </body>
 </html>

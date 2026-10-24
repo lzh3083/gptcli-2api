@@ -148,7 +148,14 @@ def _jsonable(value: Any, *, depth: int = 0) -> Any:
 def availability(request: Request) -> dict[str, Any]:
     _require_auth(request)
     adapter = _adapter()
-    return adapter.registration_available()
+    res = dict(adapter.registration_available() or {})
+    try:
+        sched = _get_scheduler()
+        if sched is not None:
+            res["scheduler"] = _jsonable(sched.get_status())
+    except Exception:
+        pass
+    return res
 
 
 @app.post(f"{API_PREFIX}/mail/domains")
@@ -228,22 +235,9 @@ async def list_mail_domains(request: Request) -> dict[str, Any]:
     }
 
 
-@app.post(f"{API_PREFIX}/jobs")
-async def start_job(
-    request: Request,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-) -> dict[str, Any]:
-    _require_auth(request)
+def _start_registration_from_body(body: dict[str, Any]) -> dict[str, Any]:
+    """Execute registration start with full provider credential resolution."""
     adapter = _adapter()
-    try:
-        body = await request.json()
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"invalid JSON: {exc}") from exc
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="body must be object")
-    # Idempotency key is accepted for contract compatibility; adapter currently
-    # relies on its own session/batch ids.
-    _ = idempotency_key
     # Accept full body keys then resolve active mail credentials into the
     # historical moemail_api_key / moemail_base_url fields the adapter reads.
     kwargs = {
@@ -494,6 +488,24 @@ async def start_job(
     if result.get("ok") is False:
         raise HTTPException(status_code=400, detail=str(result.get("error") or "registration failed"))
     return _jsonable(result)
+
+
+@app.post(f"{API_PREFIX}/jobs")
+async def start_job(
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    _require_auth(request)
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"invalid JSON: {exc}") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be object")
+    # Idempotency key is accepted for contract compatibility; adapter currently
+    # relies on its own session/batch ids.
+    _ = idempotency_key
+    return _start_registration_from_body(body)
 
 
 # --- Bounded /sessions response.
@@ -1150,6 +1162,146 @@ async def probe_proxy_pool(request: Request) -> dict[str, Any]:
 @app.exception_handler(HTTPException)
 async def http_error_handler(_: Request, exc: HTTPException) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+_SCHEDULER: Any = None
+_SCHEDULER_LOCK = threading.Lock()
+
+
+def _get_scheduler() -> Any:
+    global _SCHEDULER
+    if _SCHEDULER is not None:
+        return _SCHEDULER
+    with _SCHEDULER_LOCK:
+        if _SCHEDULER is not None:
+            return _SCHEDULER
+        try:
+            from grok2api.upstream.auto_register_scheduler import AutoRegisterScheduler
+
+            sched = AutoRegisterScheduler(
+                start_job_fn=_start_registration_from_body,
+                get_adapter_fn=lambda: reg,
+            )
+            sched.start()
+            _SCHEDULER = sched
+        except Exception as exc:
+            print(f"[registration_service] Failed to start AutoRegisterScheduler: {exc}", flush=True)
+            return None
+        return _SCHEDULER
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _get_scheduler()
+
+
+@app.get(f"{API_PREFIX}/scheduler")
+async def scheduler_status(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+
+    sched = await asyncio.to_thread(_get_scheduler)
+    if sched is None:
+        raise HTTPException(status_code=503, detail="scheduler unavailable")
+    res = await asyncio.to_thread(sched.get_status)
+    return _jsonable(res)
+
+
+@app.put(f"{API_PREFIX}/scheduler")
+@app.post(f"{API_PREFIX}/scheduler")
+async def scheduler_update(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+
+    sched = await asyncio.to_thread(_get_scheduler)
+    if sched is None:
+        raise HTTPException(status_code=503, detail="scheduler unavailable")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    action = str(body.get("action") or "").strip().lower()
+    if action == "trigger":
+        res = await asyncio.to_thread(sched.trigger_now, body.get("count"))
+        return _jsonable(res)
+    if action in ("reset", "reset_circuit"):
+        res = await asyncio.to_thread(sched.reset_circuit_breaker)
+        return _jsonable(res)
+    res = await asyncio.to_thread(sched.update_config, body)
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/scheduler/trigger")
+async def scheduler_trigger(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+
+    sched = await asyncio.to_thread(_get_scheduler)
+    if sched is None:
+        raise HTTPException(status_code=503, detail="scheduler unavailable")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    res = await asyncio.to_thread(sched.trigger_now, body.get("count"))
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/scheduler/reset")
+async def scheduler_reset(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+
+    sched = await asyncio.to_thread(_get_scheduler)
+    if sched is None:
+        raise HTTPException(status_code=503, detail="scheduler unavailable")
+    res = await asyncio.to_thread(sched.reset_circuit_breaker)
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/accounts/plan-check")
+async def trigger_plan_check(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_plan_checker import batch_plan_check, check_single_account
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    account_id = str(body.get("account_id") or "").strip()
+    email = str(body.get("email") or "").strip()
+    account_ids = body.get("account_ids")
+    all_accounts = bool(body.get("all"))
+    proxy = body.get("proxy")
+
+    if account_id or (email and not account_ids):
+        res = await asyncio.to_thread(
+            check_single_account,
+            email=email,
+            account_id=account_id,
+            proxy=proxy,
+        )
+        return _jsonable(res)
+
+    if isinstance(account_ids, list) or all_accounts:
+        res = await asyncio.to_thread(
+            batch_plan_check,
+            account_ids=account_ids if isinstance(account_ids, list) else None,
+            all_accounts=all_accounts,
+            proxy=proxy,
+        )
+        return _jsonable(res)
+
+    raise HTTPException(status_code=400, detail="missing account_id or account_ids")
+
 
 
 def main() -> None:

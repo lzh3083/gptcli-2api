@@ -108,18 +108,14 @@
         <div class="g2a-logo">G</div>
         <div>
           <div class="g2a-brand-title">gptcli-2api</div>
-          <div class="g2a-brand-sub"><span id="app-version">…</span> · Admin</div>
+          <div class="g2a-brand-sub"><span id="app-version">…</span> · 注册分发机</div>
         </div>
       </div>
       <nav class="g2a-menu">
-        <a class="g2a-menu-item " href="/admin" data-page="overview"><span class="g2a-menu-ico">◫</span><span>概览</span></a>
-        <a class="g2a-menu-item " href="/admin/keys" data-page="keys"><span class="g2a-menu-ico">🔑</span><span>API Keys</span></a>
-        <a class="g2a-menu-item is-active" href="/admin/accounts" data-page="accounts"><span class="g2a-menu-ico">👥</span><span>账号 / 轮询</span></a>
-        <a class="g2a-menu-item " href="/admin/usage" data-page="usage"><span class="g2a-menu-ico">Σ</span><span>用量</span></a>
-        <a class="g2a-menu-item " href="/admin/logs" data-page="logs"><span class="g2a-menu-ico">📜</span><span>任务日志</span></a>
-        <a class="g2a-menu-item " href="/admin/models" data-page="models"><span class="g2a-menu-ico">▣</span><span>模型</span></a>
-        <a class="g2a-menu-item " href="/admin/settings" data-page="settings"><span class="g2a-menu-ico">⚙</span><span>系统设置</span></a>
-        <a class="g2a-menu-item " href="/admin/guide" data-page="guide"><span class="g2a-menu-ico">📘</span><span>接入指南</span></a>
+        <a class="g2a-menu-item is-active" href="/admin/accounts" data-page="accounts"><span class="g2a-menu-ico">🚀</span><span>Codex 注册中心</span></a>
+        <a class="g2a-menu-item " href="/admin/settings" data-page="settings"><span class="g2a-menu-ico">⚙</span><span>系统与分发设置</span></a>
+        <a class="g2a-menu-item " href="/admin/logs" data-page="logs"><span class="g2a-menu-ico">📜</span><span>注册运行日志</span></a>
+        <a class="g2a-menu-item " href="/admin/guide" data-page="guide"><span class="g2a-menu-ico">📘</span><span>转售与分发指南</span></a>
       </nav>
       <div class="g2a-sider-foot">
         <a href="/docs" target="_blank" rel="noopener">Swagger</a>
@@ -131,8 +127,8 @@
     <div class="g2a-main">
       <header class="g2a-header">
         <div>
-          <h1 id="page-title">账号 / 轮询</h1>
-          <p id="page-sub">ChatGPT / Codex 账号、OAuth 授权、额度与导入导出</p>
+          <h1 id="page-title">Codex 自动化注册中心</h1>
+          <p id="page-sub">ChatGPT / Codex 原生协议流水线 · 一键对接转售与分发 (CPA / Sub2API / OneAPI)</p>
         </div>
         <div class="g2a-header-actions">
           <span id="status-pill" class="g2a-tag">—</span>
@@ -142,42 +138,35 @@
       </header>
       <div class="g2a-mobile-nav" id="mobile-nav"></div>
       <div class="g2a-content">
-<div class="g2a-sublayout" data-page-subnav="accounts" data-default-section="accounts">
+<div class="g2a-sublayout" data-page-subnav="accounts" data-default-section="register">
   <aside class="g2a-subnav" aria-label="页面分区">
     <div class="g2a-subnav-label">分区</div>
-      <button type="button" class="g2a-subnav-item" data-section="mode" aria-controls="panel-mode">
-        <span class="g2a-subnav-ico">⟳</span>
-        <span class="g2a-subnav-text">
-          <span class="g2a-subnav-title">轮询策略</span>
-          <span class="g2a-subnav-desc">round_robin / least_used</span>
-        </span>
-      </button>
-      <button type="button" class="g2a-subnav-item is-active" data-section="accounts" aria-controls="panel-accounts">
-        <span class="g2a-subnav-ico">👤</span>
-        <span class="g2a-subnav-text">
-          <span class="g2a-subnav-title">ChatGPT 账号</span>
-          <span class="g2a-subnav-desc">列表、额度与设备码登录</span>
-        </span>
-      </button>
-      <button type="button" class="g2a-subnav-item" data-section="register" aria-controls="panel-register">
-        <span class="g2a-subnav-ico">✉</span>
+      <button type="button" class="g2a-subnav-item is-active" data-section="register" aria-controls="panel-register">
+        <span class="g2a-subnav-ico">🚀</span>
         <span class="g2a-subnav-text">
           <span class="g2a-subnav-title">协议注册</span>
-          <span class="g2a-subnav-desc">邮箱协议批量注册</span>
+          <span class="g2a-subnav-desc">代理/邮箱/接码/批量注册</span>
         </span>
       </button>
-      <button type="button" class="g2a-subnav-item" data-section="sso" aria-controls="panel-sso">
-        <span class="g2a-subnav-ico">🍪</span>
+      <button type="button" class="g2a-subnav-item" data-section="accounts" aria-controls="panel-accounts">
+        <span class="g2a-subnav-ico">👥</span>
         <span class="g2a-subnav-text">
-          <span class="g2a-subnav-title">SSO Cookie 导入</span>
-          <span class="g2a-subnav-desc">批量导入 SSO</span>
+          <span class="g2a-subnav-title">账号与凭据分发</span>
+          <span class="g2a-subnav-desc">列表、一键推送与导出</span>
         </span>
       </button>
       <button type="button" class="g2a-subnav-item" data-section="io" aria-controls="panel-io">
         <span class="g2a-subnav-ico">⇌</span>
         <span class="g2a-subnav-text">
-          <span class="g2a-subnav-title">JSON 导入 / 导出</span>
+          <span class="g2a-subnav-title">备份恢复 (JSON)</span>
           <span class="g2a-subnav-desc">备份与恢复号池</span>
+        </span>
+      </button>
+      <button type="button" class="g2a-subnav-item" data-section="sso" aria-controls="panel-sso">
+        <span class="g2a-subnav-ico">🍪</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">SSO 导入通道</span>
+          <span class="g2a-subnav-desc">备用 SSO 导入</span>
         </span>
       </button>
   </aside>
@@ -207,107 +196,57 @@
 </section>
     </div>
 
-    <div class="g2a-subpanel is-active" data-section="accounts" id="panel-accounts">
+    <div class="g2a-subpanel" data-section="accounts" id="panel-accounts" hidden>
 <section id="sec-accounts" class="g2a-card">
   <div class="g2a-card-head">
     <div>
-      <h3>ChatGPT 账号</h3>
-      <p>设备码登录、额度、模型探测、批量运维。</p>
+      <h3>已注册 Codex 账号池</h3>
+      <p>凭证已自动落盘至 <code>/app/data/cpa_auth_files/</code>，支持一键检测官方 Plus 试用资格与 50% 折扣，导出 CPA 凭据包。</p>
     </div>
     <div class="g2a-actions">
-      <button class="g2a-btn g2a-btn-default" id="btn-refresh-acc">刷新</button>
-      <button class="g2a-btn g2a-btn-default" id="btn-refresh-quota-2">查全部额度</button>
-      <label class="g2a-check" title="本页缺失额度优先补齐；已有缓存的约 15 分钟才重查。每 3 分钟一轮、每批最多 2 个，避免上游连接过多。额度与类型已落库，刷新页面会先读库。" style="margin-left:6px">
-        <input type="checkbox" id="chk-quota-live" checked /> 额度自动刷新
-      </label>
-      <button class="g2a-btn g2a-btn-default" id="btn-probe-all-2">全部模型探测</button>
-      <button class="g2a-btn g2a-btn-default" id="btn-logout-cli">登出全部会话</button>
+      <button class="g2a-btn g2a-btn-default" id="btn-refresh-acc">刷新列表</button>
     </div>
   </div>
 
-  <div class="g2a-subcard" id="device-session" data-device-idle="1">
-    <div class="g2a-card-head">
-      <div>
-        <h3>设备码登录</h3>
-        <p>点击“开始设备码登录”后显示设备码与验证链接，完成后自动入库。</p>
-      </div>
-      <span id="device-status" class="g2a-tag">未开始</span>
-    </div>
-    <div class="g2a-actions" style="margin-bottom:10px">
-      <button type="button" class="g2a-btn g2a-btn-primary" id="btn-login-device">开始设备码登录</button>
-      <button type="button" class="g2a-btn g2a-btn-default" id="btn-poll-device" disabled title="请先开始设备码登录">刷新状态</button>
-      <button type="button" class="g2a-btn g2a-btn-default" id="btn-copy-device" disabled title="请先开始设备码登录">复制设备码</button>
-    </div>
-    <div id="device-result" class="device-result hidden" hidden>
-      <div class="g2a-kv"><span>设备码</span><code id="device-code" class="g2a-code-inline">—</code></div>
-      <div class="g2a-kv"><span>验证链接</span><a id="device-url" href="#" target="_blank" rel="noopener">—</a></div>
-      <pre id="device-log" class="g2a-log is-empty hidden" hidden>—</pre>
-    </div>
-    <div id="device-idle-hint" class="g2a-muted" style="margin-top:4px">尚未开始。点击上方按钮获取设备码。</div>
-  </div>
-
-  <div class="g2a-toolbar">
-    <input id="acc-search" placeholder="搜索邮箱 / 账号 ID / 状态" />
+  <div class="g2a-toolbar" style="flex-wrap:wrap;gap:8px">
+    <input id="acc-search" placeholder="搜索邮箱 / 账号 ID" style="min-width:200px" />
     <button class="g2a-btn g2a-btn-default" id="btn-acc-search">搜索</button>
     <button class="g2a-btn g2a-btn-default" id="btn-acc-search-clear">清除</button>
     <span class="g2a-spacer"></span>
     <button class="g2a-btn g2a-btn-default" id="btn-acc-select-page">本页全选</button>
     <button class="g2a-btn g2a-btn-default" id="btn-acc-select-all-filtered">筛选全选</button>
     <button class="g2a-btn g2a-btn-default" id="btn-acc-select-none">取消选择</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-renew-selected">批量续期</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-probe-selected">批量模型测试</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-export-selected">导出选中</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-export-sso-selected" title="仅导出选中账号的 SSO cookie">导出选中 SSO</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-export-sso-all" title="导出所有带 SSO 的账号">导出全部 SSO</button>
-    <button class="g2a-btn g2a-btn-primary" id="btn-acc-push-sub2api-selected" title="将选中账号导入到已配置的 sub2api">导入 sub2api（选中）</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-push-sub2api-all" title="将全部账号导入到已配置的 sub2api">导入 sub2api（全部）</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-export-sub2api-format" title="下载 sub2api 官方数据备份（type=sub2api-data，可在 sub2api「导入数据」使用）">导出 sub2api 数据</button>
-    <button class="g2a-btn g2a-btn-primary" id="btn-acc-push-cliproxyapi-selected" title="将选中账号同步到已配置的 CLIProxyAPI auth 目录">导入 CLIProxyAPI（选中）</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-push-cliproxyapi-all" title="将全部账号同步到已配置的 CLIProxyAPI">导入 CLIProxyAPI（全部）</button>
-    <button class="g2a-btn g2a-btn-default" id="btn-acc-export-cliproxyapi-format" title="下载 CLIProxyAPI auth 包（type=cliproxyapi-auth-bundle）">导出 CLIProxyAPI</button>
+    <button class="g2a-btn g2a-btn-primary" id="btn-acc-plan-check-selected" title="对当前选中的账号批量发起静默资格检测">检测资格（选中）</button>
+    <button class="g2a-btn g2a-btn-default" id="btn-acc-plan-check-all" title="对全部账号异步发起资格检测">检测资格（全部）</button>
+    <button class="g2a-btn g2a-btn-success" id="btn-acc-export-cliproxyapi-format" title="打包下载 CLIProxyAPI (CPA) 凭据包 (codex-*.json)">导出 CPA 凭据包</button>
+    <button class="g2a-btn g2a-btn-default" id="btn-acc-export-selected" title="导出选中账号的完整凭据 JSON">导出选中</button>
     <button class="g2a-btn g2a-btn-danger" id="btn-acc-delete-selected">删除选中</button>
-    <label class="g2a-sort-wrap" for="acc-filter-sso" title="按是否保存 SSO 筛选">
-      <span class="g2a-sort-label">SSO</span>
-      <select id="acc-filter-sso" class="g2a-sort-select" aria-label="SSO 筛选">
-        <option value="" selected>全部</option>
-        <option value="1">有 SSO</option>
-        <option value="0">无 SSO</option>
-      </select>
-    </label>
-    <label class="g2a-sort-wrap" id="acc-sort-wrap" for="acc-sort" title="仅在「全部」列表可用；状态筛选时固定按新加入排序">
+    <label class="g2a-sort-wrap" id="acc-sort-wrap" for="acc-sort" title="账号列表排序">
       <span class="g2a-sort-label">排序</span>
       <select id="acc-sort" class="g2a-sort-select" aria-label="账号排序">
         <option value="newest" selected>最新加入</option>
         <option value="oldest">最早加入</option>
-        <option value="expires_desc">过期↓</option>
-        <option value="expires_asc">过期↑</option>
-        <option value="last_used_desc">最近用</option>
-        <option value="last_used_asc">最久未用</option>
-        <option value="requests_desc">请求↓</option>
         <option value="email_asc">邮箱A-Z</option>
         <option value="email_desc">邮箱Z-A</option>
       </select>
     </label>
   </div>
-  <div class="g2a-muted" style="margin:6px 0 2px">状态筛选</div>
+  <div class="g2a-muted" style="margin:8px 0 4px">资格与状态筛选</div>
   <div id="acc-status-chips" class="g2a-toolbar" style="gap:6px;margin:0 0 0;flex-wrap:wrap"></div>
   <div id="acc-selection-info" class="g2a-muted" style="margin:8px 0 10px">—</div>
-  <div id="accounts-empty" class="g2a-empty hidden" style="display:none">暂无账号，请设备码登录或导入 Token。</div>
+  <div id="accounts-empty" class="g2a-empty hidden" style="display:none">暂无已注册账号。可在上方使用全自动调度器注册或手动触发注册流水线。</div>
   <div id="quota-summary" class="g2a-muted" style="margin-bottom:8px"></div>
   <div class="g2a-table-wrap">
     <table class="g2a-table">
       <thead>
         <tr>
-          <th><input type="checkbox" id="acc-check-page" /></th>
-          <th>邮箱 / ID</th>
-          <th>Token</th>
-          <th>类型</th>
-          <th>轮询状态</th>
-          <th>用量</th>
-          <th>额度使用</th>
-          <th>探测</th>
-          <th>过期</th>
-          <th>操作</th>
+          <th style="width:36px"><input type="checkbox" id="acc-check-page" /></th>
+          <th style="min-width:200px">邮箱 / 密码</th>
+          <th style="min-width:170px">Codex 凭证状态</th>
+          <th style="min-width:180px">试用与折扣资格</th>
+          <th style="min-width:140px">Token 状态</th>
+          <th style="min-width:140px">注册时间</th>
+          <th style="min-width:180px">操作</th>
         </tr>
       </thead>
       <tbody id="accounts-tbody"></tbody>
@@ -330,7 +269,7 @@
 </section>
     </div>
 
-    <div class="g2a-subpanel" data-section="register" id="panel-register" hidden>
+    <div class="g2a-subpanel is-active" data-section="register" id="panel-register">
 <section id="sec-register" class="g2a-card">
   <div class="g2a-card-head">
     <div>
@@ -501,24 +440,45 @@
       </select>
     </div>
     <div class="g2a-field g2a-field-span2" style="margin:12px 0 4px;padding-top:12px;border-top:1px solid var(--ant-color-border-secondary, #303030)">
-      <div style="font-weight:600;font-size:14px;margin-bottom:6px">NovProxy 住宅代理配置 (一号一IP)</div>
+      <div style="font-weight:600;font-size:14px;margin-bottom:6px">住宅代理配置 (一号一IP)</div>
     </div>
     <div class="g2a-field g2a-field-span2">
-      <label for="reg-novproxy-mode">认证 / 提取模式</label>
+      <label for="reg-novproxy-mode">代理服务商 / 提取模式</label>
       <select id="reg-novproxy-mode" onchange="window.syncNovProxyModeUI ? window.syncNovProxyModeUI() : null">
-        <option value="api" selected>API 提取模式 (白名单模式 · 从官方接口拉取)</option>
-        <option value="userpass">账密模式 (动态流量 · 推荐，免白名单，自动生成随机 session-id)</option>
+        <option value="dataimpulse" selected>DataImpulse 动态住宅代理 (推荐 · 日本/全球家宽 · 动态sid)</option>
+        <option value="userpass">NovProxy 账密模式 (动态流量 · 自动生成随机 session-id)</option>
+        <option value="api">NovProxy API 提取模式 (白名单模式 · 从官方接口拉取)</option>
       </select>
-      <div class="g2a-muted" style="margin-top:2px;font-size:12px">支持自动生成独占住宅 IP 会话，或通过官方 API 白名单批量拉取。</div>
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">支持 DataImpulse 日本家宽网关直连，或通过 NovProxy 自动生成独占会话 / API 拉取。</div>
     </div>
     <script>
       (function() {
         function doSync() {
           var sel = document.getElementById("reg-novproxy-mode");
-          var mode = sel ? sel.value : "api";
+          var mode = sel ? sel.value : "dataimpulse";
+          var isDataImpulse = mode === "dataimpulse";
           var isUserPass = mode === "userpass";
+          var isApi = mode === "api";
+
+          var diPanels = document.querySelectorAll(".dataimpulse-panel");
           var upPanels = document.querySelectorAll(".novproxy-up-panel");
           var apiPanels = document.querySelectorAll(".novproxy-api-panel");
+
+          for (var k = 0; k < diPanels.length; k++) {
+            if (isDataImpulse) {
+              diPanels[k].style.removeProperty("display");
+              diPanels[k].removeAttribute("hidden");
+              if (diPanels[k].id === "dataimpulse-panel-btn") {
+                diPanels[k].style.setProperty("display", "flex", "important");
+              } else {
+                diPanels[k].style.setProperty("display", "block", "important");
+              }
+            } else {
+              diPanels[k].style.setProperty("display", "none", "important");
+              diPanels[k].setAttribute("hidden", "true");
+            }
+          }
+
           for (var i = 0; i < upPanels.length; i++) {
             if (isUserPass) {
               upPanels[i].style.removeProperty("display");
@@ -529,7 +489,7 @@
             }
           }
           for (var j = 0; j < apiPanels.length; j++) {
-            if (!isUserPass) {
+            if (isApi) {
               apiPanels[j].style.removeProperty("display");
               apiPanels[j].removeAttribute("hidden");
               if (apiPanels[j].id === "novproxy-panel-api-btn") {
@@ -551,6 +511,41 @@
         }
       })();
     </script>
+
+    <!-- DataImpulse 动态住宅面板 -->
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-host">
+      <label for="reg-dataimpulse-host">代理主机与端口</label>
+      <input id="reg-dataimpulse-host" value="gw.dataimpulse.com:823" placeholder="gw.dataimpulse.com:823" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">默认网关为 gw.dataimpulse.com:823，系统已自动预设。</div>
+    </div>
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-user">
+      <label for="reg-dataimpulse-user">DataImpulse 用户名 (Login)</label>
+      <input id="reg-dataimpulse-user" placeholder="如 your_login_name" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">填写 DataImpulse 控制台分配的主账号。</div>
+    </div>
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-pass">
+      <label for="reg-dataimpulse-pass">DataImpulse 密码 (Password)</label>
+      <input id="reg-dataimpulse-pass" type="password" placeholder="填写 DataImpulse 密码" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">DataImpulse 控制台密码。</div>
+    </div>
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-country">
+      <label for="reg-dataimpulse-country">目标国家代码</label>
+      <input id="reg-dataimpulse-country" value="jp" placeholder="如 jp, us, sg 等" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">日本免费试用推荐 jp；也支持 us, sg 等。</div>
+    </div>
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-ttl">
+      <label for="reg-dataimpulse-ttl">粘性时长 (分钟)</label>
+      <input id="reg-dataimpulse-ttl" type="number" min="1" max="1440" value="30" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">单会话粘性保持时间，默认 30 分钟。</div>
+    </div>
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-num">
+      <label for="reg-dataimpulse-num">生成数量 (N 个一号一IP)</label>
+      <input id="reg-dataimpulse-num" type="number" min="1" max="500" value="1" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">每个账号独占一个随机 sid 会话与独立出口 IP。</div>
+    </div>
+    <div class="g2a-field dataimpulse-panel" id="dataimpulse-panel-btn" style="display:flex;align-items:flex-end">
+      <button class="g2a-btn g2a-btn-primary" id="btn-dataimpulse-generate" type="button" style="width:100%">生成 DataImpulse 住宅节点 (一号一IP)</button>
+    </div>
 
     <!-- 账密模式面板 -->
     <div class="g2a-field novproxy-up-panel" id="novproxy-panel-up-host">
@@ -675,6 +670,139 @@
     <pre id="reg-log" class="g2a-log is-empty hidden" hidden>—</pre>
   </div>
 </section>
+
+<section id="sec-auto-reg" class="g2a-card" style="margin-top:16px">
+  <div class="g2a-card-head">
+    <div>
+      <h3>定时与自动补齐注册（双模）</h3>
+      <p>无人值守常驻调度：支持<strong>随机时间间隔慢速保鲜</strong>与<strong>账号池低水位自动补齐</strong>，内置防重叠并发锁与连续失败安全熔断机制。</p>
+    </div>
+    <div class="g2a-actions">
+      <button class="g2a-btn g2a-btn-primary" id="btn-save-auto-reg" type="button">保存定时配置</button>
+      <button class="g2a-btn g2a-btn-default" id="btn-trigger-auto-reg" type="button" title="忽略等待时间，立即执行一轮注册">立即执行一轮</button>
+      <button class="g2a-btn g2a-btn-warning hidden" id="btn-reset-circuit-auto-reg" type="button" style="display:none" title="重置连续失败熔断，恢复自动调度">重置熔断</button>
+      <button class="g2a-btn g2a-btn-default" id="btn-refresh-auto-reg" type="button">刷新状态</button>
+    </div>
+  </div>
+
+  <!-- 实时运行状态与监控看板 -->
+  <div class="g2a-subcard" style="margin-bottom:14px;background:var(--ant-color-fill-quaternary, rgba(255,255,255,0.03))">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;font-size:13px">
+      <div class="g2a-kv">
+        <span class="g2a-muted">调度器状态</span>
+        <span id="auto-reg-status-badge" class="g2a-tag">未启动</span>
+      </div>
+      <div class="g2a-kv">
+        <span class="g2a-muted">下次计划执行</span>
+        <strong id="auto-reg-next-time">—</strong>
+      </div>
+      <div class="g2a-kv">
+        <span class="g2a-muted">账号池实时可用</span>
+        <span id="auto-reg-pool-live">—</span>
+      </div>
+      <div class="g2a-kv">
+        <span class="g2a-muted">累计自动产出</span>
+        <span id="auto-reg-stats-summary">—</span>
+      </div>
+    </div>
+    <div id="auto-reg-circuit-banner" class="g2a-alert hidden" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(255,77,79,0.15);border:1px solid #ff4d4f;border-radius:4px;color:#ff7875">
+      <strong>⚠️ 安全熔断已触发：</strong><span id="auto-reg-circuit-msg">已暂停自动注册</span>
+    </div>
+  </div>
+
+  <div class="g2a-form-grid">
+    <div class="g2a-field g2a-field-span2">
+      <label class="g2a-check">
+        <input type="checkbox" id="auto-reg-enabled" />
+        <strong>启用自动注册调度器</strong>
+      </label>
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">开启后后台守护线程将按设定规则常驻执行，继承上方【协议注册】所配置的邮箱与代理。</div>
+    </div>
+
+    <div class="g2a-field g2a-field-span2">
+      <label for="auto-reg-mode">调度模式</label>
+      <select id="auto-reg-mode">
+        <option value="both" selected>双模联动（随机间隔温和保鲜 + 低水位自动补齐 · 推荐）</option>
+        <option value="interval">仅随机时间间隔（固定在设定区间内随机波动）</option>
+        <option value="watermark">仅低水位自动补齐（低于警戒线才补充）</option>
+      </select>
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">双模联动：平时按随机时间间隔缓慢补充新号维持活跃；一旦可用号跌破下限，立即优先拉升水位。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-min-interval">随机最小间隔（分钟）</label>
+      <input id="auto-reg-min-interval" type="number" min="1" max="10080" value="60" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">随机周期下限，例如 60 分钟。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-max-interval">随机最大间隔（分钟）</label>
+      <input id="auto-reg-max-interval" type="number" min="1" max="10080" value="180" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">随机周期上限，每轮在区间内随机抽取下次等待时间。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-batch-size">每次注册数量</label>
+      <input id="auto-reg-batch-size" type="number" min="1" max="50" value="2" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">单次触发启动的账号数（建议 1~3 个，分散 IP 频次）。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-max-pool-size">账号池容量上限（个）</label>
+      <input id="auto-reg-max-pool-size" type="number" min="0" max="50000" value="400" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">可用账号达到此数量时，定时模式自动跳过（0 为不限制）。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-watermark-min">最低警戒水位（个）</label>
+      <input id="auto-reg-watermark-min" type="number" min="0" max="50000" value="20" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">当正常可用账号数量低于此数值时，立即触发低水位补齐。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-watermark-target">目标恢复水位（个）</label>
+      <input id="auto-reg-watermark-target" type="number" min="1" max="50000" value="30" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">低水位补齐的目标可用账号数（分批次补齐至目标）。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-watermark-cooldown">补齐波次冷却（分钟）</label>
+      <input id="auto-reg-watermark-cooldown" type="number" min="1" max="1440" value="15" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">连续多波次低水位补齐之间的保护冷却时间。</div>
+    </div>
+
+    <div class="g2a-field">
+      <label for="auto-reg-max-failures">连续失败熔断阈值（次）</label>
+      <input id="auto-reg-max-failures" type="number" min="1" max="20" value="3" />
+      <div class="g2a-muted" style="margin-top:2px;font-size:12px">连续 N 轮注册未产出可用账号时自动暂停，防止死循环耗损代理。</div>
+    </div>
+
+    <div class="g2a-field g2a-field-span2" style="margin-top:10px;padding-top:12px;border-top:1px solid var(--ant-color-border-secondary, #303030)">
+      <div style="font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:space-between">
+        <span>最近调度记录</span>
+        <span id="auto-reg-history-count" class="g2a-muted" style="font-size:12px">0 条</span>
+      </div>
+      <div style="margin-top:8px;overflow-x:auto;max-height:220px;border:1px solid var(--ant-color-border-secondary, #303030);border-radius:6px">
+        <table class="g2a-table" style="width:100%;font-size:12.5px;text-align:left">
+          <thead>
+            <tr style="background:var(--ant-color-fill-quaternary, rgba(255,255,255,0.04))">
+              <th style="padding:6px 10px;width:150px">完成时间</th>
+              <th style="padding:6px 10px;width:120px">触发原因</th>
+              <th style="padding:6px 10px;width:90px">产出/请求</th>
+              <th style="padding:6px 10px;width:70px">耗时</th>
+              <th style="padding:6px 10px">执行摘要</th>
+            </tr>
+          </thead>
+          <tbody id="auto-reg-history-body">
+            <tr>
+              <td colspan="5" style="text-align:center;padding:14px;color:var(--ant-color-text-secondary, #888)">暂无调度记录</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
     </div>
 
     <div class="g2a-subpanel" data-section="sso" id="panel-sso" hidden>
@@ -787,6 +915,26 @@
 </section>
     </div>
 
+    <!-- Codex 账号详情与优惠凭证弹窗 -->
+    <div class="g2a-modal-mask" id="modal-account-detail" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+      <div class="g2a-card" style="max-width:720px;width:90%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 12px 32px rgba(0,0,0,0.5);margin:auto;">
+        <div class="g2a-card-head" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border-color, #333);">
+          <div>
+            <h3 id="modal-acc-email" style="margin:0">Codex 账号详情</h3>
+            <span id="modal-acc-id" class="g2a-muted mono" style="font-size:0.75rem">—</span>
+          </div>
+          <button class="g2a-btn g2a-btn-default g2a-btn-sm" id="btn-modal-acc-close">✕</button>
+        </div>
+        <div style="overflow-y:auto;flex:1;padding-right:4px;" id="modal-acc-body">
+          <!-- 动态渲染详细信息 -->
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border-color, #333);">
+          <button class="g2a-btn g2a-btn-default" id="btn-modal-acc-copy">复制凭据 JSON</button>
+          <button class="g2a-btn g2a-btn-primary" id="btn-modal-acc-ok">关闭</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -798,6 +946,6 @@
   <script src="/static/dist/api.9ddb30423c.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/auth.3ec19fa51e.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/core.68c5c2f913.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.36461a7bd4.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
 </body>
 </html>

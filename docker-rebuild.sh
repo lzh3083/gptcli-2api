@@ -9,19 +9,19 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_SERVICE="${GROKCLI_APP_SERVICE:-grokcli-2api}"
+APP_SERVICE="${GROKCLI_APP_SERVICE:-gptcli-2api}"
 # Default health port matches docker-compose.yml (override via env / compose override)
-# Prefer compose override / .env port when present; fall back to 40081 (current deploy default).
+# Prefer compose override / .env port when present; fall back to 8081 (current deploy default).
 if [[ -z "${GROKCLI_HEALTH_PORT:-}" ]]; then
   if [[ -f .env ]] && grep -qE '^GROK2API_PORT=' .env; then
     HEALTH_PORT="$(grep -E '^GROK2API_PORT=' .env | head -1 | cut -d= -f2- | tr -d "\"'")"
   else
-    HEALTH_PORT=40081
+    HEALTH_PORT=8081
   fi
 else
   HEALTH_PORT="${GROKCLI_HEALTH_PORT}"
 fi
-HEALTH_PORT="${HEALTH_PORT:-40081}"
+HEALTH_PORT="${HEALTH_PORT:-8081}"
 HEALTH_URL="${GROKCLI_HEALTH_URL:-http://127.0.0.1:${HEALTH_PORT}/health}"
 
 echo "== git =="

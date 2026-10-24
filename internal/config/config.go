@@ -133,7 +133,7 @@ func Load() (Config, error) {
 	// GO_MAINTAINER 全 0），仅保留管理台（注册任务/账号导出）与注册侧车。
 	// 显式设置的 GROK2API_GO_* 单项开关无法重新打开被模式关闭的面——
 	// 模式是安全兜底，单项开关只能在模式允许的范围内进一步收紧。
-	mode := strings.ToLower(strings.TrimSpace(envString("GROK2API_MODE", "gateway")))
+	mode := strings.ToLower(strings.TrimSpace(envString("GROK2API_MODE", "register-only")))
 	if mode != "gateway" && mode != "register-only" {
 		return Config{}, fmt.Errorf("GROK2API_MODE must be gateway or register-only, got %q", mode)
 	}
