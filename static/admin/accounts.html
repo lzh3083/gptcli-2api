@@ -155,6 +155,13 @@
           <span class="g2a-subnav-desc">列表、一键推送与导出</span>
         </span>
       </button>
+      <button type="button" class="g2a-subnav-item" data-section="emailpool" aria-controls="panel-emailpool">
+        <span class="g2a-subnav-ico">📬</span>
+        <span class="g2a-subnav-text">
+          <span class="g2a-subnav-title">微软邮箱池</span>
+          <span class="g2a-subnav-desc">导入/状态追踪/手动接码</span>
+        </span>
+      </button>
       <button type="button" class="g2a-subnav-item" data-section="io" aria-controls="panel-io">
         <span class="g2a-subnav-ico">⇌</span>
         <span class="g2a-subnav-text">
@@ -218,6 +225,8 @@
     <button class="g2a-btn g2a-btn-default" id="btn-acc-select-none">取消选择</button>
     <button class="g2a-btn g2a-btn-primary" id="btn-acc-plan-check-selected" title="对当前选中的账号批量发起静默资格检测">检测资格（选中）</button>
     <button class="g2a-btn g2a-btn-default" id="btn-acc-plan-check-all" title="对全部账号异步发起资格检测">检测资格（全部）</button>
+    <button class="g2a-btn g2a-btn-info" id="btn-acc-reauth-selected" title="优先使用已有 Refresh Token 快速刷新 access_token 并落盘">重新授权（选中）</button>
+    <button class="g2a-btn g2a-btn-warning" id="btn-acc-relogin-selected" title="跳过刷新令牌和旧检查点，强制使用密码+邮箱接码重新登录并授权">重新登录并授权（选中）</button>
     <button class="g2a-btn g2a-btn-success" id="btn-acc-export-cliproxyapi-format" title="打包下载 CLIProxyAPI (CPA) 凭据包 (codex-*.json)">导出 CPA 凭据包</button>
     <button class="g2a-btn g2a-btn-default" id="btn-acc-export-selected" title="导出选中账号的完整凭据 JSON">导出选中</button>
     <button class="g2a-btn g2a-btn-danger" id="btn-acc-delete-selected">删除选中</button>
@@ -261,6 +270,113 @@
     <select id="acc-page-size" class="g2a-input g2a-page-size-select" title="每页显示数量">
       <option value="10">10</option>
       <option value="25" selected>25</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+    </select>
+    <span class="g2a-muted g2a-page-size-suffix">/ 页</span>
+  </div>
+</section>
+    </div>
+
+    <div class="g2a-subpanel" data-section="emailpool" id="panel-emailpool" hidden>
+<section id="sec-emailpool" class="g2a-card">
+  <div class="g2a-card-head">
+    <div>
+      <h3>微软邮箱池管理与手动接码</h3>
+      <p>集中追踪批量采购的 Hotmail / Outlook 邮箱使用状态，精准识别已被第三方注册过的邮箱；支持实时在线抓取最新 OTP 验证码与收件箱邮件，方便手动登录接码。</p>
+    </div>
+    <div class="g2a-actions">
+      <button class="g2a-btn g2a-btn-primary" id="btn-open-email-import">批量导入邮箱</button>
+      <button class="g2a-btn g2a-btn-default" id="btn-refresh-email-pool">刷新列表</button>
+    </div>
+  </div>
+
+  <!-- 指标统计卡片 -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:12px;margin-bottom:16px;">
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border-color,#333);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:0.75rem;color:var(--text-muted,#888);">总邮箱数</div>
+      <div id="stat-email-total" style="font-size:1.5rem;font-weight:700;margin-top:4px;">0</div>
+    </div>
+    <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:0.75rem;color:#10b981;font-weight:600;">可用 (Available)</div>
+      <div id="stat-email-available" style="font-size:1.5rem;font-weight:700;color:#10b981;margin-top:4px;">0</div>
+    </div>
+    <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:0.75rem;color:#6366f1;font-weight:600;">已用/已注册</div>
+      <div id="stat-email-used" style="font-size:1.5rem;font-weight:700;color:#6366f1;margin-top:4px;">0</div>
+    </div>
+    <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:0.75rem;color:#f59e0b;font-weight:600;">采购前已注册 (隔离)</div>
+      <div id="stat-email-already-reg" style="font-size:1.5rem;font-weight:700;color:#f59e0b;margin-top:4px;">0</div>
+    </div>
+    <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:0.75rem;color:#ef4444;font-weight:600;">凭证失效/失败</div>
+      <div id="stat-email-failed" style="font-size:1.5rem;font-weight:700;color:#ef4444;margin-top:4px;">0</div>
+    </div>
+  </div>
+
+  <!-- 工具栏与筛选器 -->
+  <div class="g2a-toolbar" style="flex-wrap:wrap;gap:8px">
+    <input id="email-pool-search" placeholder="搜索邮箱地址 / 备注" style="min-width:220px" />
+    <button class="g2a-btn g2a-btn-default" id="btn-email-pool-search">搜索</button>
+    <button class="g2a-btn g2a-btn-default" id="btn-email-pool-search-clear">清除</button>
+    <span class="g2a-spacer"></span>
+    <button class="g2a-btn g2a-btn-default" id="btn-email-select-page">本页全选</button>
+    <button class="g2a-btn g2a-btn-default" id="btn-email-select-none">取消选择</button>
+    <button class="g2a-btn g2a-btn-primary" id="btn-email-check-selected" title="批量对选中的邮箱进行存活与历史注册检测">测活与检测注册（选中）</button>
+    <div class="g2a-dropdown" style="display:inline-block;position:relative;">
+      <button class="g2a-btn g2a-btn-default" id="btn-email-status-change-dropdown">修改状态 ▾</button>
+      <div id="email-status-menu" class="g2a-card" style="display:none;position:absolute;top:100%;left:0;z-index:99;padding:6px;min-width:140px;box-shadow:0 8px 16px rgba(0,0,0,0.5);">
+        <button class="g2a-btn g2a-btn-default g2a-btn-sm" style="width:100%;margin-bottom:4px;text-align:left;" data-set-status="available">设为 可用</button>
+        <button class="g2a-btn g2a-btn-default g2a-btn-sm" style="width:100%;margin-bottom:4px;text-align:left;" data-set-status="already_registered">设为 采购已注册</button>
+        <button class="g2a-btn g2a-btn-default g2a-btn-sm" style="width:100%;margin-bottom:4px;text-align:left;" data-set-status="used">设为 已使用</button>
+        <button class="g2a-btn g2a-btn-default g2a-btn-sm" style="width:100%;text-align:left;" data-set-status="failed">设为 失效</button>
+      </div>
+    </div>
+    <button class="g2a-btn g2a-btn-danger" id="btn-email-delete-selected">删除选中</button>
+    <label class="g2a-sort-wrap" for="email-pool-status-filter" title="状态筛选">
+      <span class="g2a-sort-label">状态</span>
+      <select id="email-pool-status-filter" class="g2a-sort-select">
+        <option value="all" selected>全部状态</option>
+        <option value="available">可用 (Available)</option>
+        <option value="already_registered">采购前已注册 (Already Registered)</option>
+        <option value="used">已使用 (Used)</option>
+        <option value="failed">失效/报错 (Failed)</option>
+        <option value="cooling">冷却中 (Cooling)</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="email-pool-selection-info" class="g2a-muted" style="margin:8px 0 10px">—</div>
+  <div id="email-pool-empty" class="g2a-empty hidden" style="display:none">邮箱池暂无数据，请点击右上角「批量导入邮箱」添加采购的微软邮箱。</div>
+
+  <!-- 邮箱表格 -->
+  <div class="g2a-table-wrap">
+    <table class="g2a-table">
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" id="email-pool-check-page" /></th>
+          <th style="min-width:220px">邮箱地址</th>
+          <th style="min-width:140px">使用状态</th>
+          <th style="min-width:200px">备注 / 检测详情</th>
+          <th style="min-width:140px">Client ID</th>
+          <th style="min-width:130px">更新时间</th>
+          <th style="min-width:200px">操作</th>
+        </tr>
+      </thead>
+      <tbody id="email-pool-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- 分页器 -->
+  <div class="g2a-pager" id="email-pool-pager">
+    <button class="g2a-btn g2a-btn-default" id="email-page-prev">上一页</button>
+    <button class="g2a-btn g2a-btn-default" id="email-page-next">下一页</button>
+    <span id="email-page-info" class="g2a-muted">—</span>
+    <label for="email-page-size" class="g2a-muted g2a-page-size-label">每页</label>
+    <select id="email-page-size" class="g2a-input g2a-page-size-select">
+      <option value="15">15</option>
+      <option value="30" selected>30</option>
       <option value="50">50</option>
       <option value="100">100</option>
     </select>
@@ -935,6 +1051,81 @@
       </div>
     </div>
 
+    <!-- 批量导入微软邮箱弹窗 -->
+    <div class="g2a-modal-mask" id="modal-email-import" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+      <div class="g2a-card" style="max-width:680px;width:92%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 12px 32px rgba(0,0,0,0.5);margin:auto;">
+        <div class="g2a-card-head" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border-color, #333);">
+          <div>
+            <h3 style="margin:0">批量导入微软邮箱</h3>
+            <span class="g2a-muted" style="font-size:0.75rem">支持 4段或 6段格式：<code>email----password----client_id----refresh_token</code></span>
+          </div>
+          <button class="g2a-btn g2a-btn-default g2a-btn-sm" id="btn-modal-email-import-close">✕</button>
+        </div>
+        <div style="overflow-y:auto;flex:1;">
+          <textarea id="email-import-text" class="g2a-input" style="width:100%;height:220px;font-family:monospace;font-size:0.8rem;resize:vertical;" placeholder="example1@hotmail.com----pwd123----client_id----refresh_token&#10;example2@outlook.com----pwd456----client_id----refresh_token----recovery@mail.com----recCode"></textarea>
+          <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
+            <label class="g2a-check" style="font-size:0.85rem;cursor:pointer;">
+              <input type="checkbox" id="email-import-auto-check" checked /> 导入后自动测活并检测是否已在 OpenAI 注册
+            </label>
+            <span id="email-import-count-hint" class="g2a-muted" style="font-size:0.8rem">已检测 0 行</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border-color, #333);">
+          <button class="g2a-btn g2a-btn-default" id="btn-modal-email-import-cancel">取消</button>
+          <button class="g2a-btn g2a-btn-primary" id="btn-modal-email-import-submit">开始导入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手动收信与接码模态框 -->
+    <div class="g2a-modal-mask" id="modal-email-otp" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
+      <div class="g2a-card" style="max-width:760px;width:94%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 36px rgba(0,0,0,0.6);margin:auto;">
+        <div class="g2a-card-head" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border-color, #333);">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <h3 id="modal-otp-email" style="margin:0;font-size:1.15rem;">邮箱收信接码</h3>
+              <span id="modal-otp-status" class="g2a-tag ok" style="font-size:0.72rem;">就绪</span>
+            </div>
+            <span class="g2a-muted" style="font-size:0.75rem;">通过 Microsoft Graph API / 直连 IMAP 秒级拉取收件箱邮件与验证码</span>
+          </div>
+          <button class="g2a-btn g2a-btn-default g2a-btn-sm" id="btn-modal-otp-close">✕</button>
+        </div>
+
+        <div style="overflow-y:auto;flex:1;padding-right:4px;">
+          <!-- 核心高亮：最新验证码大卡片 -->
+          <div style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.08));border:1px solid rgba(16,185,129,0.35);border-radius:10px;padding:16px;text-align:center;margin-bottom:16px;">
+            <div style="font-size:0.8rem;color:var(--text-muted,#aaa);letter-spacing:1px;">最新提取的 6 位数字验证码 (OTP)</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:10px 0;">
+              <span id="modal-otp-code" style="font-size:2.4rem;font-weight:800;letter-spacing:6px;font-family:monospace;color:#10b981;user-select:all;">------</span>
+              <button class="g2a-btn g2a-btn-success" id="btn-modal-otp-copy-code" style="padding:6px 14px;font-weight:600;">复制验证码</button>
+            </div>
+            <div id="modal-otp-meta" class="g2a-muted" style="font-size:0.75rem;">点击「刷新邮件」或开启自动轮询收取最新邮件</div>
+          </div>
+
+          <!-- 工具控制条 -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <button class="g2a-btn g2a-btn-default g2a-btn-sm" id="btn-modal-otp-refresh">🔄 立即拉取新邮件</button>
+              <label class="g2a-check" style="font-size:0.8rem;cursor:pointer;">
+                <input type="checkbox" id="modal-otp-auto-poll" checked /> 每 5 秒自动轮询
+              </label>
+            </div>
+            <span id="modal-otp-fetch-hint" class="g2a-muted" style="font-size:0.75rem;">—</span>
+          </div>
+
+          <!-- 收件箱邮件列表 -->
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:6px;">收件箱最近邮件 (<span id="modal-otp-msg-count">0</span>)</div>
+          <div id="modal-otp-msg-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="g2a-muted" style="text-align:center;padding:24px 0;">正在拉取收件箱邮件…</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border-color, #333);">
+          <button class="g2a-btn g2a-btn-primary" id="btn-modal-otp-ok">完成并关闭</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -946,6 +1137,6 @@
   <script src="/static/dist/api.9ddb30423c.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/auth.3ec19fa51e.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/core.36461a7bd4.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.5c13d0e600.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
 </body>
 </html>

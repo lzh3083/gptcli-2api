@@ -133,6 +133,46 @@ func (c *Client) PlanCheck(ctx context.Context, request map[string]any) (map[str
 	return c.do(ctx, http.MethodPost, "/accounts/plan-check", request, nil)
 }
 
+func (c *Client) EmailPoolSummary(ctx context.Context) (map[string]any, error) {
+	return c.do(ctx, http.MethodGet, "/email-pool/summary", nil, nil)
+}
+
+func (c *Client) EmailPoolList(ctx context.Context, query url.Values) (map[string]any, error) {
+	path := "/email-pool/list"
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
+	return c.do(ctx, http.MethodGet, path, nil, nil)
+}
+
+func (c *Client) EmailPoolImport(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/email-pool/import", request, nil)
+}
+
+func (c *Client) EmailPoolCheck(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/email-pool/check", request, nil)
+}
+
+func (c *Client) EmailPoolFetchOTP(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/email-pool/fetch-otp", request, nil)
+}
+
+func (c *Client) EmailPoolStatus(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/email-pool/status", request, nil)
+}
+
+func (c *Client) EmailPoolDelete(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/email-pool/delete", request, nil)
+}
+
+func (c *Client) AccountsReauth(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/accounts/reauth", request, nil)
+}
+
+func (c *Client) AccountsRelogin(ctx context.Context, request map[string]any) (map[string]any, error) {
+	return c.do(ctx, http.MethodPost, "/accounts/relogin", request, nil)
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any, headers http.Header) (map[string]any, error) {
 	return c.doAbsolute(ctx, method, "/internal/registration/"+APIVersion+path, body, headers)
 }

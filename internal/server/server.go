@@ -467,6 +467,33 @@ func NewMux(options Options) http.Handler {
 	mux.HandleFunc("POST /admin/api/accounts/plan-check", func(w http.ResponseWriter, r *http.Request) {
 		serveAdminAccountsPlanCheck(w, r, options)
 	})
+	mux.HandleFunc("GET /admin/api/email-pool/summary", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolSummary(w, r, options)
+	})
+	mux.HandleFunc("GET /admin/api/email-pool/list", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolList(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/email-pool/import", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolImport(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/email-pool/check", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolCheck(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/email-pool/fetch-otp", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolFetchOTP(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/email-pool/status", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolStatus(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/email-pool/delete", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminEmailPoolDelete(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/accounts/reauth", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminAccountsReauth(w, r, options)
+	})
+	mux.HandleFunc("POST /admin/api/accounts/relogin", func(w http.ResponseWriter, r *http.Request) {
+		serveAdminAccountsRelogin(w, r, options)
+	})
 	mux.HandleFunc("POST /admin/api/register-email/test-proxy", func(w http.ResponseWriter, r *http.Request) {
 		serveRegistrationProxyTest(w, r, options)
 	})
@@ -4648,6 +4675,187 @@ func serveAdminAccountsPlanCheck(w http.ResponseWriter, r *http.Request, options
 		req = map[string]any{}
 	}
 	res, err := client.PlanCheck(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolSummary(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	res, err := client.EmailPoolSummary(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolList(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	res, err := client.EmailPoolList(r.Context(), r.URL.Query())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolImport(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.EmailPoolImport(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolCheck(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.EmailPoolCheck(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolFetchOTP(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.EmailPoolFetchOTP(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolStatus(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.EmailPoolStatus(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminEmailPoolDelete(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.EmailPoolDelete(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminAccountsReauth(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.AccountsReauth(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func serveAdminAccountsRelogin(w http.ResponseWriter, r *http.Request, options Options) {
+	if !adminRouteAllowed(w, r, options) {
+		return
+	}
+	client := registrationClient(options)
+	if client == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "registration client unavailable"})
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = map[string]any{}
+	}
+	res, err := client.AccountsRelogin(r.Context(), req)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return

@@ -168,14 +168,17 @@ def _should_disable_failed_registration_email(error: object) -> bool:
 
 
 def _disable_job_email(email: str | None, reason: str) -> bool:
-    """把本次任务邮箱停用，避免后续再次领取。"""
+    """把本次任务邮箱停用或标为已注册，避免后续再次领取。"""
     if not email:
         return False
     try:
         from core.email_provider import release_email
 
-        source = release_email(email, status="disabled", note=f"自动停用: {reason[:180]}")
-        logger.warning("[Service] 已自动停用邮箱: source=%s email=%s reason=%s", source, email, reason[:220])
+        is_already_registered = any(k in reason for k in ("登录密码页", "/log-in/password", "already_registered"))
+        target_status = "already_registered" if is_already_registered else "disabled"
+        note_prefix = "采购前已注册OpenAI" if is_already_registered else "自动停用"
+        source = release_email(email, status=target_status, note=f"{note_prefix}: {reason[:180]}")
+        logger.warning("[Service] 已处理异常邮箱: status=%s source=%s email=%s reason=%s", target_status, source, email, reason[:220])
         return True
     except Exception:
         logger.exception("[Service] 自动停用邮箱失败: %s", email)

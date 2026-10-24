@@ -333,11 +333,18 @@ def pick_account() -> OutlookAccount:
         )
         ok, detail = _verify_outlook_token_alive(account)
         if not ok:
-            logger.warning(
-                f"[Outlook] 挑号预检发现不可用账号 {account.email} (DB id={row['id']})，自动标记为 failed 并跳过: {detail[:200]}"
-            )
-            note_prefix = "" if detail.startswith("recycled_dirty_mailbox") else "invalid_refresh_token: "
-            release_outlook(account.email, status="failed", note=f"{note_prefix}{detail[:180]}")
+            is_pre_registered = any(k in detail for k in ("historical_openai", "chatgpt_locked", "deactivated", "already_registered"))
+            if is_pre_registered:
+                logger.warning(
+                    f"[Outlook] 挑号预检发现采购前已注册过OpenAI的邮箱 {account.email} (DB id={row['id']})，标记为 already_registered 并跳过: {detail[:200]}"
+                )
+                release_outlook(account.email, status="already_registered", note=f"采购前收件箱含历史OpenAI记录: {detail[:160]}")
+            else:
+                logger.warning(
+                    f"[Outlook] 挑号预检发现不可用账号 {account.email} (DB id={row['id']})，自动标记为 failed 并跳过: {detail[:200]}"
+                )
+                note_prefix = "" if detail.startswith("recycled_dirty_mailbox") else "invalid_refresh_token: "
+                release_outlook(account.email, status="failed", note=f"{note_prefix}{detail[:180]}")
             continue
 
         _CONTEXT_CACHE[_cache_key(account.email)] = account

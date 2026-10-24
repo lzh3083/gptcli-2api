@@ -886,6 +886,9 @@ function setPageSection(section, opts) {
     } catch (_) {}
   }
   root.dataset.activeSection = key;
+  if (key === "emailpool") {
+    try { loadEmailPoolPage({ reset: false }); } catch (_) {}
+  }
   return key;
 }
 
@@ -914,6 +917,7 @@ function rebindPageControls() {
   try { bindUpstreamMonitorControls(); } catch (_) {}
   try { bindLogsControls(); } catch (_) {}
   try { bindUsageControls(); } catch (_) {}
+  try { bindEmailPoolControls(); } catch (_) {}
   try { initTableTopScroll(); } catch (_) {}
   try { hideEmptyLogPanels(); } catch (_) {}
   // Soft-nav replaces .g2a-content; sub2api buttons must be rebound every time.
@@ -1226,6 +1230,8 @@ function rebindPageControls() {
   if ($("btn-acc-delete-selected")) $("btn-acc-delete-selected").onclick = () => deleteSelectedAccounts();
   if ($("btn-acc-plan-check-selected")) $("btn-acc-plan-check-selected").onclick = () => planCheckSelectedAccounts();
   if ($("btn-acc-plan-check-all")) $("btn-acc-plan-check-all").onclick = () => planCheckAllAccounts();
+  if ($("btn-acc-reauth-selected")) $("btn-acc-reauth-selected").onclick = () => reauthSelectedAccounts();
+  if ($("btn-acc-relogin-selected")) $("btn-acc-relogin-selected").onclick = () => reloginSelectedAccounts();
   if ($("btn-acc-renew-selected")) $("btn-acc-renew-selected").onclick = () => renewAccounts(Array.from(selectedAccountIds));
   if ($("btn-acc-probe-selected")) $("btn-acc-probe-selected").onclick = () => probeAccounts(Array.from(selectedAccountIds));
   if ($("btn-acc-export-selected")) $("btn-acc-export-selected").onclick = () => exportSelectedAccounts();
@@ -1407,6 +1413,39 @@ function rebindPageControls() {
           } finally {
             setRowBusy(id, false);
           }
+          return;
+        }
+        if (btn.dataset.act === "reauth-one") {
+          const email = btn.dataset.email || "";
+          setRowBusy(id, true, "重新授权中");
+          try {
+            toast(`正在通过 Refresh Token 重新授权 ${email || id}…`);
+            const res = await api("/accounts/reauth", {
+              method: "POST",
+              body: JSON.stringify({ account_id: id, email: email }),
+            });
+            if (res && res.ok) {
+              toast(`✅ 重新授权成功！凭证已落盘至 CPA 目录`);
+            } else {
+              const errMsg = (res && res.error) || "重新授权失败";
+              toast(`⚠️ ${errMsg}`, false);
+              if (res && res.needs_relogin) {
+                if (confirm(`该账号刷新令牌已失效，是否立即使用「重新登录并授权」强制重新登录？`)) {
+                  reloginSingleAccount(email, id);
+                }
+              }
+            }
+            loadAccountsPage({ reset: false });
+          } catch (err) {
+            toast((err && err.message) || "重新授权请求异常", false);
+          } finally {
+            setRowBusy(id, false);
+          }
+          return;
+        }
+        if (btn.dataset.act === "relogin-one") {
+          const email = btn.dataset.email || "";
+          reloginSingleAccount(email, id);
           return;
         }
         if (btn.dataset.act === "view-acc-detail") {
@@ -2726,6 +2765,8 @@ function renderAccountsPage() {
       // 6. 操作按钮
       const actionsCell = `
         <button class="g2a-btn g2a-btn-primary g2a-btn-sm" data-act="check-plan-one" data-id="${esc(a.id)}" data-email="${esc(a.email || '')}">检测资格</button>
+        <button class="g2a-btn g2a-btn-info g2a-btn-sm" data-act="reauth-one" data-id="${esc(a.id)}" data-email="${esc(a.email || '')}" title="使用已有刷新令牌快速重新授权并落盘">重新授权</button>
+        <button class="g2a-btn g2a-btn-warning g2a-btn-sm" data-act="relogin-one" data-id="${esc(a.id)}" data-email="${esc(a.email || '')}" title="跳过刷新令牌，强制密码+邮箱接码重新登录并授权">重新登录并授权</button>
         <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="view-acc-detail" data-id="${esc(a.id)}">详情</button>
         <button class="g2a-btn g2a-btn-danger g2a-btn-sm" data-act="rm-acc" data-id="${esc(a.id)}">移除</button>
       `;
@@ -3743,6 +3784,102 @@ async function planCheckAllAccounts() {
     }
   } catch (err) {
     toast((err && err.message) || "启动全量检测失败", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function reloginSingleAccount(email, id) {
+  const displayEmail = email || id;
+  if (!confirm(`确定对账号 ${displayEmail} 强制重新登录并授权吗？\n将跳过已有刷新令牌和旧检查点，强制使用账号密码+微软邮箱实时OTP验证码完成完整授权。`)) {
+    return;
+  }
+  setRowBusy(id, true, "重登授权中");
+  try {
+    toast(`正在启动重新登录与授权 (${displayEmail})，请稍候…`);
+    const res = await api("/accounts/relogin", {
+      method: "POST",
+      body: JSON.stringify({ email: email }),
+    });
+    if (res && res.ok) {
+      toast(`✅ 重新登录并授权成功！CPA 凭证已更新`);
+    } else {
+      toast(`❌ 重新登录授权失败: ${(res && (res.message || res.error)) || "未知错误"}`, false);
+    }
+    loadAccountsPage({ reset: false });
+  } catch (err) {
+    toast((err && err.message) || "重新登录授权异常", false);
+  } finally {
+    setRowBusy(id, false);
+  }
+}
+
+async function reauthSelectedAccounts() {
+  const ids = Array.from(selectedAccountIds || []);
+  if (!ids.length) {
+    toast("请先勾选需要重新授权的账号", false);
+    return;
+  }
+  if (!confirm(`确定使用已有 Refresh Token 对选中的 ${ids.length} 个账号重新授权吗？`)) {
+    return;
+  }
+  const btn = $("btn-acc-reauth-selected");
+  if (btn) btn.disabled = true;
+  toast(`正在批量重新授权 ${ids.length} 个账号…`);
+  try {
+    const res = await api("/accounts/reauth", {
+      method: "POST",
+      body: JSON.stringify({ account_ids: ids }),
+    });
+    if (res && res.ok) {
+      toast(res.message || `批量重新授权完成：成功 ${res.success} 个，失败 ${res.failed} 个`);
+    } else {
+      toast((res && res.error) || "批量重新授权失败", false);
+    }
+    loadAccountsPage({ reset: false });
+  } catch (err) {
+    toast((err && err.message) || "批量重新授权请求失败", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function reloginSelectedAccounts() {
+  const ids = Array.from(selectedAccountIds || []);
+  if (!ids.length) {
+    toast("请先勾选需要重新登录并授权的账号", false);
+    return;
+  }
+  const emails = [];
+  const list = typeof accountsList !== "undefined" ? accountsList : [];
+  for (const a of list) {
+    if (ids.includes(accountIdKey(a.id)) && a.email) {
+      emails.push(a.email);
+    }
+  }
+  if (!emails.length) {
+    toast("未找到选中账号的邮箱地址", false);
+    return;
+  }
+  if (!confirm(`确定强制对选中的 ${emails.length} 个账号执行「重新登录并授权」吗？\n注意：这会启动无头浏览器并从微软邮箱接码，将在后台排队执行。`)) {
+    return;
+  }
+  const btn = $("btn-acc-relogin-selected");
+  if (btn) btn.disabled = true;
+  toast(`正在批量启动重新登录授权 (${emails.length} 个账号)…`);
+  try {
+    const res = await api("/accounts/relogin", {
+      method: "POST",
+      body: JSON.stringify({ emails: emails }),
+    });
+    if (res && res.ok) {
+      toast(res.message || `批量重新登录完成：成功 ${res.success} 个，失败 ${res.failed} 个`);
+    } else {
+      toast((res && res.error) || "批量重新登录请求失败", false);
+    }
+    loadAccountsPage({ reset: false });
+  } catch (err) {
+    toast((err && err.message) || "批量重新登录请求异常", false);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -12724,6 +12861,681 @@ function bindVersionSettingsUI() {
   // Load once when settings page is present
   if ($("sec-version")) {
     checkVersionUpdate({ soft: true }).catch(() => {});
+  }
+}
+
+// ============================================================
+// 微软邮箱池与手动接码管理 (Email Pool & Manual OTP Viewer)
+// ============================================================
+
+let emailPoolList = [];
+let emailPoolTotal = 0;
+let emailPoolPage = 1;
+let emailPoolPageSize = 30;
+let emailPoolTotalPages = 1;
+let emailPoolStatusFilter = "all";
+let emailPoolSearchQuery = "";
+let selectedEmailPoolEmails = new Set();
+let emailOtpPollTimer = null;
+let currentOtpEmail = "";
+
+function updateEmailPoolSummaryUI(s) {
+  if (!s) return;
+  if ($("stat-email-total")) $("stat-email-total").textContent = s.total || 0;
+  if ($("stat-email-available")) $("stat-email-available").textContent = s.available || 0;
+  if ($("stat-email-used")) $("stat-email-used").textContent = (s.used || 0) + (s.disabled || 0);
+  if ($("stat-email-already-reg")) $("stat-email-already-reg").textContent = s.already_registered || 0;
+  if ($("stat-email-failed")) $("stat-email-failed").textContent = s.failed || 0;
+}
+
+function updateEmailPoolSelectionInfo() {
+  const infoEl = $("email-pool-selection-info");
+  if (!infoEl) return;
+  const count = selectedEmailPoolEmails.size;
+  if (count === 0) {
+    infoEl.textContent = `共 ${emailPoolTotal} 个邮箱，当前未勾选任何邮箱`;
+  } else {
+    infoEl.textContent = `共 ${emailPoolTotal} 个邮箱，已选中 ${count} 个`;
+  }
+  const checkAll = $("email-pool-check-page");
+  if (checkAll) {
+    const pageBoxes = document.querySelectorAll(".email-check-one");
+    if (pageBoxes.length > 0) {
+      checkAll.checked = Array.from(pageBoxes).every((b) => b.checked);
+    } else {
+      checkAll.checked = false;
+    }
+  }
+}
+
+function renderEmailPoolTable() {
+  const tbody = $("email-pool-tbody");
+  if (!tbody) return;
+  const emptyEl = $("email-pool-empty");
+  if (emptyEl) {
+    const hasItems = emailPoolList.length > 0;
+    emptyEl.style.display = hasItems ? "none" : "block";
+    emptyEl.classList.toggle("hidden", hasItems);
+  }
+
+  if (!emailPoolList.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="g2a-muted" style="text-align:center;padding:24px 0;">邮箱池暂无匹配数据</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = emailPoolList.map((item) => {
+    const email = esc(item.email || "");
+    const isChecked = selectedEmailPoolEmails.has(item.email) ? "checked" : "";
+    
+    // 状态标签
+    let statusBadge = "";
+    const st = String(item.status || "").toLowerCase();
+    if (st === "available") {
+      statusBadge = '<span class="g2a-tag ok" style="background:#10b981;color:#fff;font-weight:600;">可用 (Available)</span>';
+    } else if (st === "already_registered") {
+      statusBadge = '<span class="g2a-tag warn" style="background:#f59e0b;color:#fff;font-weight:bold;">已注册 (隔离)</span>';
+    } else if (st === "used") {
+      statusBadge = '<span class="g2a-tag info" style="background:#6366f1;color:#fff;">已使用</span>';
+    } else if (st === "failed") {
+      statusBadge = '<span class="g2a-tag bad" style="background:#ef4444;color:#fff;">凭证失效</span>';
+    } else if (st === "cooling") {
+      statusBadge = '<span class="g2a-tag" style="background:#8b5cf6;color:#fff;">冷却中</span>';
+    } else {
+      statusBadge = `<span class="g2a-tag">${esc(st || "未知")}</span>`;
+    }
+
+    // 邮箱与复制
+    const emailCell = `
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-weight:600;font-family:monospace;color:var(--text-color,#e5e7eb);">${email}</span>
+        <button type="button" class="g2a-btn g2a-btn-default g2a-btn-xs" style="padding:1px 6px;font-size:0.7rem;line-height:1.2" onclick="navigator.clipboard.writeText('${email}');toast('邮箱已复制');">复制</button>
+      </div>
+    `;
+
+    // 备注与详情
+    const note = esc(item.note || "—");
+    const noteCell = `<div class="muted" style="font-size:0.78rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${note}">${note}</div>`;
+
+    // Client ID
+    const cid = esc(item.client_id || "—");
+    const cidCell = `<span class="mono muted" style="font-size:0.75rem;">${cid}</span>`;
+
+    // 时间
+    const timeTxt = fmtTime(item.imported_at || item.created_at || "—");
+    const timeCell = `<span style="font-size:0.78rem;">${timeTxt}</span>`;
+
+    // 操作
+    const actionsCell = `
+      <button class="g2a-btn g2a-btn-primary g2a-btn-sm" data-act="email-otp" data-email="${email}" title="在线读取收件箱邮件并提取最新 6 位数字验证码">收信接码</button>
+      <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="email-check-one" data-email="${email}" title="单独对该邮箱测活并检测是否已在 OpenAI 注册">测活</button>
+      <button class="g2a-btn g2a-btn-danger g2a-btn-sm" data-act="email-delete-one" data-email="${email}">删除</button>
+    `;
+
+    return `
+      <tr data-email="${email}">
+        <td><input type="checkbox" class="email-check-one" data-email="${email}" ${isChecked} /></td>
+        <td>${emailCell}</td>
+        <td>${statusBadge}</td>
+        <td>${noteCell}</td>
+        <td>${cidCell}</td>
+        <td>${timeCell}</td>
+        <td class="g2a-actions">${actionsCell}</td>
+      </tr>
+    `;
+  }).join("");
+
+  // 更新分页信息
+  if ($("email-page-info")) {
+    $("email-page-info").textContent = `${emailPoolPage} / ${Math.max(1, emailPoolTotalPages)} (本页 ${emailPoolList.length} / 共 ${emailPoolTotal} 个)`;
+  }
+  updateEmailPoolSelectionInfo();
+}
+
+async function loadEmailPoolPage(opts) {
+  opts = opts || {};
+  if (opts.reset) emailPoolPage = 1;
+  const tbody = $("email-pool-tbody");
+  if (tbody && !emailPoolList.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="g2a-muted" style="text-align:center;padding:24px 0;">正在加载邮箱池…</td></tr>`;
+  }
+
+  const params = new URLSearchParams();
+  params.set("page", String(emailPoolPage));
+  params.set("limit", String(emailPoolPageSize));
+  if (emailPoolStatusFilter && emailPoolStatusFilter !== "all") {
+    params.set("status", emailPoolStatusFilter);
+  }
+  if (emailPoolSearchQuery) {
+    params.set("search", emailPoolSearchQuery);
+  }
+
+  try {
+    const res = await api(`/email-pool/list?${params.toString()}`);
+    if (res && res.ok) {
+      emailPoolList = res.items || [];
+      emailPoolTotal = res.total || 0;
+      emailPoolTotalPages = res.total_pages || 1;
+      emailPoolPage = res.page || 1;
+      updateEmailPoolSummaryUI(res.summary);
+      renderEmailPoolTable();
+    } else {
+      toast((res && res.error) || "获取邮箱池列表失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "请求邮箱池接口异常", false);
+  }
+}
+
+// 批量导入微软邮箱
+function openEmailImportModal() {
+  const m = $("modal-email-import");
+  if (!m) return;
+  m.style.display = "flex";
+  const ta = $("email-import-text");
+  if (ta) {
+    ta.value = "";
+    ta.focus();
+  }
+  if ($("email-import-count-hint")) $("email-import-count-hint").textContent = "已检测 0 行";
+}
+
+function hideEmailImportModal() {
+  const m = $("modal-email-import");
+  if (m) m.style.display = "none";
+}
+
+async function submitEmailImport() {
+  const ta = $("email-import-text");
+  const text = ta ? ta.value.trim() : "";
+  if (!text) {
+    toast("请输入待导入的邮箱素材", false);
+    return;
+  }
+  const autoCheck = $("email-import-auto-check") ? $("email-import-auto-check").checked : true;
+  const btn = $("btn-modal-email-import-submit");
+  if (btn) btn.disabled = true;
+  toast("正在批量导入邮箱素材并入库…");
+  try {
+    const res = await api("/email-pool/import", {
+      method: "POST",
+      body: JSON.stringify({ text: text, auto_check: autoCheck }),
+    });
+    if (res && res.ok) {
+      toast(res.message || `成功导入 ${res.inserted} 个邮箱`);
+      hideEmailImportModal();
+      loadEmailPoolPage({ reset: true });
+    } else {
+      toast((res && res.error) || "导入邮箱失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "导入请求异常", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// 单邮箱测活
+async function checkSingleEmail(email) {
+  if (!email) return;
+  toast(`正在对 ${email} 发起存活与历史注册检测…`);
+  try {
+    const res = await api("/email-pool/check", {
+      method: "POST",
+      body: JSON.stringify({ email: email }),
+    });
+    if (res && res.ok) {
+      toast(`✅ 测活通过！状态已更新为 可用 (Available)`);
+    } else {
+      const isPreReg = res && res.is_already_registered;
+      if (isPreReg) {
+        toast(`⚠️ 检测到收件箱含历史 OpenAI 记录，已标记为【采购前已注册】并隔离！`, false);
+      } else {
+        toast(`❌ 测活失败: ${(res && (res.detail || res.error)) || "凭证失效"}`, false);
+      }
+    }
+    loadEmailPoolPage({ reset: false });
+  } catch (err) {
+    toast((err && err.message) || "测活请求异常", false);
+  }
+}
+
+// 批量测活选中的邮箱
+async function checkSelectedEmails() {
+  const emails = Array.from(selectedEmailPoolEmails);
+  if (!emails.length) {
+    toast("请先勾选需要测活的邮箱", false);
+    return;
+  }
+  const btn = $("btn-email-check-selected");
+  if (btn) btn.disabled = true;
+  toast(`正在批量测活选中的 ${emails.length} 个邮箱…`);
+  try {
+    const res = await api("/email-pool/check", {
+      method: "POST",
+      body: JSON.stringify({ emails: emails }),
+    });
+    if (res && res.ok) {
+      toast(`测活完成：通过 ${res.passed} 个，采购前已注册 ${res.already_registered} 个，失效 ${res.failed} 个`);
+    } else {
+      toast((res && res.error) || "批量测活失败", false);
+    }
+    loadEmailPoolPage({ reset: false });
+  } catch (err) {
+    toast((err && err.message) || "批量测活请求异常", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// 批量修改状态
+async function batchUpdateEmailStatus(newStatus) {
+  const emails = Array.from(selectedEmailPoolEmails);
+  if (!emails.length) {
+    toast("请先勾选需要修改状态的邮箱", false);
+    return;
+  }
+  toast(`正在将选中的 ${emails.length} 个邮箱状态修改为「${newStatus}」…`);
+  try {
+    const res = await api("/email-pool/status", {
+      method: "POST",
+      body: JSON.stringify({ emails: emails, status: newStatus }),
+    });
+    if (res && res.ok) {
+      toast(res.message || "状态更新成功");
+      selectedEmailPoolEmails.clear();
+      loadEmailPoolPage({ reset: false });
+    } else {
+      toast((res && res.error) || "修改状态失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "修改状态请求异常", false);
+  }
+}
+
+// 删除选中邮箱
+async function deleteSelectedEmails() {
+  const emails = Array.from(selectedEmailPoolEmails);
+  if (!emails.length) {
+    toast("请先勾选需要删除的邮箱", false);
+    return;
+  }
+  if (!confirm(`确定从邮箱池中物理删除选中的 ${emails.length} 个邮箱吗？此操作不可逆！`)) {
+    return;
+  }
+  const btn = $("btn-email-delete-selected");
+  if (btn) btn.disabled = true;
+  toast(`正在删除选中的 ${emails.length} 个邮箱…`);
+  try {
+    const res = await api("/email-pool/delete", {
+      method: "POST",
+      body: JSON.stringify({ emails: emails }),
+    });
+    if (res && res.ok) {
+      toast(res.message || `已成功删除 ${res.deleted} 个邮箱`);
+      selectedEmailPoolEmails.clear();
+      loadEmailPoolPage({ reset: false });
+    } else {
+      toast((res && res.error) || "删除邮箱失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "删除邮箱请求异常", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// 单邮箱物理删除
+async function deleteSingleEmail(email) {
+  if (!email) return;
+  if (!confirm(`确定从邮箱池删除邮箱 ${email} 吗？`)) return;
+  try {
+    const res = await api("/email-pool/delete", {
+      method: "POST",
+      body: JSON.stringify({ email: email }),
+    });
+    if (res && res.ok) {
+      toast(`已从邮箱池删除 ${email}`);
+      selectedEmailPoolEmails.delete(email);
+      loadEmailPoolPage({ reset: false });
+    } else {
+      toast((res && res.error) || "删除失败", false);
+    }
+  } catch (err) {
+    toast((err && err.message) || "删除请求异常", false);
+  }
+}
+
+// 手动接码模态框
+function openEmailOtpModal(email) {
+  currentOtpEmail = email;
+  const m = $("modal-email-otp");
+  if (!m) return;
+  m.style.display = "flex";
+  if ($("modal-otp-email")) $("modal-otp-email").textContent = email;
+  if ($("modal-otp-code")) $("modal-otp-code").textContent = "------";
+  if ($("modal-otp-meta")) $("modal-otp-meta").textContent = "正在通过 Microsoft Graph/IMAP 协议读取收件箱…";
+  if ($("modal-otp-fetch-hint")) $("modal-otp-fetch-hint").textContent = "拉取中…";
+  if ($("modal-otp-msg-list")) $("modal-otp-msg-list").innerHTML = `<div class="g2a-muted" style="text-align:center;padding:24px 0;">正在拉取收件箱邮件…</div>`;
+  if ($("modal-otp-msg-count")) $("modal-otp-msg-count").textContent = "0";
+
+  fetchMailboxOtp(email);
+
+  // 启动轮询
+  if (emailOtpPollTimer) clearInterval(emailOtpPollTimer);
+  const autoPollBox = $("modal-otp-auto-poll");
+  if (autoPollBox && autoPollBox.checked) {
+    emailOtpPollTimer = setInterval(() => {
+      if (currentOtpEmail) fetchMailboxOtp(currentOtpEmail, true);
+    }, 5000);
+  }
+}
+
+function hideEmailOtpModal() {
+  const m = $("modal-email-otp");
+  if (m) m.style.display = "none";
+  if (emailOtpPollTimer) {
+    clearInterval(emailOtpPollTimer);
+    emailOtpPollTimer = null;
+  }
+  currentOtpEmail = "";
+}
+
+async function fetchMailboxOtp(email, isSilent = false) {
+  if (!email) return;
+  if (!isSilent && $("modal-otp-fetch-hint")) $("modal-otp-fetch-hint").textContent = "拉取中…";
+  try {
+    const res = await api("/email-pool/fetch-otp", {
+      method: "POST",
+      body: JSON.stringify({ email: email }),
+    });
+
+    if ($("modal-otp-fetch-hint")) {
+      const nowStr = new Date().toLocaleTimeString();
+      $("modal-otp-fetch-hint").textContent = `最近拉取于: ${nowStr} (${(res && res.fetch_source) || "http"})`;
+    }
+
+    if (res && res.ok) {
+      // 提取到的最新 OTP
+      const code = res.latest_otp || "------";
+      if ($("modal-otp-code")) {
+        $("modal-otp-code").textContent = code;
+        $("modal-otp-code").style.color = code !== "------" ? "#10b981" : "#888";
+      }
+      if ($("modal-otp-meta")) {
+        if (code !== "------") {
+          $("modal-otp-meta").textContent = `收到验证码：${code} (来自: ${res.latest_otp_subject || "邮件"}，时间: ${res.latest_otp_time || "刚刚"})`;
+        } else {
+          $("modal-otp-meta").textContent = "收件箱中暂未解析到 6 位纯数字验证码，若刚发送请稍候 3-5 秒后自动刷新。";
+        }
+      }
+
+      // 渲染邮件列表
+      const msgs = res.messages || [];
+      if ($("modal-otp-msg-count")) $("modal-otp-msg-count").textContent = String(msgs.length);
+      const listEl = $("modal-otp-msg-list");
+      if (listEl) {
+        if (!msgs.length) {
+          listEl.innerHTML = `<div class="g2a-muted" style="text-align:center;padding:20px 0;">收件箱为空</div>`;
+        } else {
+          listEl.innerHTML = msgs.map((m) => {
+            const isOai = m.is_openai;
+            const bg = isOai ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.02)";
+            const border = isOai ? "1px solid rgba(16,185,129,0.3)" : "1px solid var(--border-color,#333)";
+            const oaiBadge = isOai ? '<span class="g2a-tag ok" style="font-size:0.7rem;margin-right:6px;">OpenAI / ChatGPT</span>' : '';
+            const otpBadge = m.otp ? `<span class="g2a-tag ok" style="background:#10b981;color:#fff;font-weight:bold;margin-right:6px;">验证码: ${esc(m.otp)}</span>` : '';
+
+            return `
+              <div style="background:${bg};border:${border};border-radius:6px;padding:10px 12px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                  <div style="font-weight:600;font-size:0.85rem;color:var(--text-color,#eee);display:flex;align-items:center;">
+                    ${oaiBadge}${otpBadge}<span>${esc(m.subject || "(无主题)")}</span>
+                  </div>
+                  <span class="muted" style="font-size:0.75rem;">${esc(m.date || "")}</span>
+                </div>
+                <div class="muted" style="font-size:0.75rem;margin-bottom:4px;">发件人: ${esc(m.from || "未知")}</div>
+                <div class="muted mono" style="font-size:0.75rem;background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:4px;word-break:break-all;">
+                  ${esc(m.preview || "(无预览内容)")}
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+      }
+    } else {
+      if (!isSilent) toast((res && res.error) || "获取收件箱邮件失败", false);
+      if ($("modal-otp-meta")) $("modal-otp-meta").textContent = `收取失败: ${(res && res.error) || "网络或凭据异常"}`;
+    }
+  } catch (err) {
+    if (!isSilent) toast((err && err.message) || "拉取邮件请求异常", false);
+  }
+}
+
+function bindEmailPoolControls() {
+  // 刷新列表
+  if ($("btn-refresh-email-pool") && !$("btn-refresh-email-pool")._bound) {
+    $("btn-refresh-email-pool")._bound = true;
+    $("btn-refresh-email-pool").onclick = () => loadEmailPoolPage({ reset: false });
+  }
+
+  // 搜索
+  if ($("btn-email-pool-search") && !$("btn-email-pool-search")._bound) {
+    $("btn-email-pool-search")._bound = true;
+    $("btn-email-pool-search").onclick = () => {
+      emailPoolSearchQuery = $("email-pool-search") ? $("email-pool-search").value.trim() : "";
+      loadEmailPoolPage({ reset: true });
+    };
+  }
+  if ($("btn-email-pool-search-clear") && !$("btn-email-pool-search-clear")._bound) {
+    $("btn-email-pool-search-clear")._bound = true;
+    $("btn-email-pool-search-clear").onclick = () => {
+      if ($("email-pool-search")) $("email-pool-search").value = "";
+      emailPoolSearchQuery = "";
+      loadEmailPoolPage({ reset: true });
+    };
+  }
+  if ($("email-pool-search") && !$("email-pool-search")._bound) {
+    $("email-pool-search")._bound = true;
+    $("email-pool-search").onkeydown = (e) => {
+      if (e.key === "Enter") {
+        emailPoolSearchQuery = $("email-pool-search").value.trim();
+        loadEmailPoolPage({ reset: true });
+      }
+    };
+  }
+
+  // 状态筛选
+  if ($("email-pool-status-filter") && !$("email-pool-status-filter")._bound) {
+    $("email-pool-status-filter")._bound = true;
+    $("email-pool-status-filter").onchange = (e) => {
+      emailPoolStatusFilter = e.target.value;
+      loadEmailPoolPage({ reset: true });
+    };
+  }
+
+  // 全选 / 取消全选
+  if ($("btn-email-select-page") && !$("btn-email-select-page")._bound) {
+    $("btn-email-select-page")._bound = true;
+    $("btn-email-select-page").onclick = () => {
+      emailPoolList.forEach((item) => selectedEmailPoolEmails.add(item.email));
+      renderEmailPoolTable();
+    };
+  }
+  if ($("btn-email-select-none") && !$("btn-email-select-none")._bound) {
+    $("btn-email-select-none")._bound = true;
+    $("btn-email-select-none").onclick = () => {
+      selectedEmailPoolEmails.clear();
+      renderEmailPoolTable();
+    };
+  }
+  if ($("email-pool-check-page") && !$("email-pool-check-page")._bound) {
+    $("email-pool-check-page")._bound = true;
+    $("email-pool-check-page").onchange = (e) => {
+      const isChecked = !!e.target.checked;
+      emailPoolList.forEach((item) => {
+        if (isChecked) selectedEmailPoolEmails.add(item.email);
+        else selectedEmailPoolEmails.delete(item.email);
+      });
+      renderEmailPoolTable();
+    };
+  }
+
+  // 表格内部事件代理（复选框、操作按钮）
+  if ($("email-pool-tbody") && !$("email-pool-tbody")._bound) {
+    $("email-pool-tbody")._bound = true;
+    $("email-pool-tbody").addEventListener("click", (e) => {
+      const chk = e.target.closest(".email-check-one");
+      if (chk) {
+        const em = chk.dataset.email;
+        if (!em) return;
+        if (chk.checked) selectedEmailPoolEmails.add(em);
+        else selectedEmailPoolEmails.delete(em);
+        updateEmailPoolSelectionInfo();
+        return;
+      }
+
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const act = btn.dataset.act;
+      const em = btn.dataset.email;
+      if (act === "email-otp") {
+        openEmailOtpModal(em);
+      } else if (act === "email-check-one") {
+        checkSingleEmail(em);
+      } else if (act === "email-delete-one") {
+        deleteSingleEmail(em);
+      }
+    });
+  }
+
+  // 批量操作按钮
+  if ($("btn-email-check-selected") && !$("btn-email-check-selected")._bound) {
+    $("btn-email-check-selected")._bound = true;
+    $("btn-email-check-selected").onclick = checkSelectedEmails;
+  }
+  if ($("btn-email-delete-selected") && !$("btn-email-delete-selected")._bound) {
+    $("btn-email-delete-selected")._bound = true;
+    $("btn-email-delete-selected").onclick = deleteSelectedEmails;
+  }
+
+  // 修改状态下拉菜单
+  if ($("btn-email-status-change-dropdown") && !$("btn-email-status-change-dropdown")._bound) {
+    $("btn-email-status-change-dropdown")._bound = true;
+    $("btn-email-status-change-dropdown").onclick = (e) => {
+      e.stopPropagation();
+      const menu = $("email-status-menu");
+      if (menu) menu.style.display = menu.style.display === "none" ? "block" : "none";
+    };
+    document.addEventListener("click", () => {
+      const menu = $("email-status-menu");
+      if (menu) menu.style.display = "none";
+    });
+  }
+  if ($("email-status-menu") && !$("email-status-menu")._bound) {
+    $("email-status-menu")._bound = true;
+    $("email-status-menu").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-set-status]");
+      if (btn) {
+        const st = btn.dataset.setStatus;
+        $("email-status-menu").style.display = "none";
+        batchUpdateEmailStatus(st);
+      }
+    });
+  }
+
+  // 分页按钮
+  if ($("email-page-prev") && !$("email-page-prev")._bound) {
+    $("email-page-prev")._bound = true;
+    $("email-page-prev").onclick = () => {
+      if (emailPoolPage > 1) {
+        emailPoolPage--;
+        loadEmailPoolPage({ reset: false });
+      }
+    };
+  }
+  if ($("email-page-next") && !$("email-page-next")._bound) {
+    $("email-page-next")._bound = true;
+    $("email-page-next").onclick = () => {
+      if (emailPoolPage < emailPoolTotalPages) {
+        emailPoolPage++;
+        loadEmailPoolPage({ reset: false });
+      }
+    };
+  }
+  if ($("email-page-size") && !$("email-page-size")._bound) {
+    $("email-page-size")._bound = true;
+    $("email-page-size").onchange = (e) => {
+      emailPoolPageSize = parseInt(e.target.value, 10) || 30;
+      loadEmailPoolPage({ reset: true });
+    };
+  }
+
+  // 批量导入模态框绑定
+  if ($("btn-open-email-import") && !$("btn-open-email-import")._bound) {
+    $("btn-open-email-import")._bound = true;
+    $("btn-open-email-import").onclick = openEmailImportModal;
+  }
+  if ($("btn-modal-email-import-close") && !$("btn-modal-email-import-close")._bound) {
+    $("btn-modal-email-import-close")._bound = true;
+    $("btn-modal-email-import-close").onclick = hideEmailImportModal;
+  }
+  if ($("btn-modal-email-import-cancel") && !$("btn-modal-email-import-cancel")._bound) {
+    $("btn-modal-email-import-cancel")._bound = true;
+    $("btn-modal-email-import-cancel").onclick = hideEmailImportModal;
+  }
+  if ($("btn-modal-email-import-submit") && !$("btn-modal-email-import-submit")._bound) {
+    $("btn-modal-email-import-submit")._bound = true;
+    $("btn-modal-email-import-submit").onclick = submitEmailImport;
+  }
+  if ($("email-import-text") && !$("email-import-text")._bound) {
+    $("email-import-text")._bound = true;
+    $("email-import-text").addEventListener("input", (e) => {
+      const lines = e.target.value.split("\n").filter((l) => l.trim().length > 0);
+      if ($("email-import-count-hint")) $("email-import-count-hint").textContent = `已检测 ${lines.length} 行`;
+    });
+  }
+
+  // 手动接码模态框绑定
+  if ($("btn-modal-otp-close") && !$("btn-modal-otp-close")._bound) {
+    $("btn-modal-otp-close")._bound = true;
+    $("btn-modal-otp-close").onclick = hideEmailOtpModal;
+  }
+  if ($("btn-modal-otp-ok") && !$("btn-modal-otp-ok")._bound) {
+    $("btn-modal-otp-ok")._bound = true;
+    $("btn-modal-otp-ok").onclick = hideEmailOtpModal;
+  }
+  if ($("btn-modal-otp-refresh") && !$("btn-modal-otp-refresh")._bound) {
+    $("btn-modal-otp-refresh")._bound = true;
+    $("btn-modal-otp-refresh").onclick = () => {
+      if (currentOtpEmail) fetchMailboxOtp(currentOtpEmail, false);
+    };
+  }
+  if ($("btn-modal-otp-copy-code") && !$("modal-otp-code")._bound) {
+    $("modal-otp-code")._bound = true;
+    $("btn-modal-otp-copy-code").onclick = () => {
+      const code = $("modal-otp-code") ? $("modal-otp-code").textContent.trim() : "";
+      if (code && code !== "------") {
+        navigator.clipboard.writeText(code);
+        toast(`验证码 ${code} 已复制到剪贴板！`);
+      } else {
+        toast("暂未获取到有效验证码", false);
+      }
+    };
+  }
+  if ($("modal-otp-auto-poll") && !$("modal-otp-auto-poll")._bound) {
+    $("modal-otp-auto-poll")._bound = true;
+    $("modal-otp-auto-poll").onchange = (e) => {
+      if (e.target.checked) {
+        if (emailOtpPollTimer) clearInterval(emailOtpPollTimer);
+        emailOtpPollTimer = setInterval(() => {
+          if (currentOtpEmail) fetchMailboxOtp(currentOtpEmail, true);
+        }, 5000);
+      } else {
+        if (emailOtpPollTimer) {
+          clearInterval(emailOtpPollTimer);
+          emailOtpPollTimer = null;
+        }
+      }
+    };
   }
 }
 

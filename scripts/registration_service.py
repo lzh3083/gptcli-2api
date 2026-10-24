@@ -1303,6 +1303,234 @@ async def trigger_plan_check(request: Request) -> dict[str, Any]:
     raise HTTPException(status_code=400, detail="missing account_id or account_ids")
 
 
+# ============================================================
+# 邮箱池管理与手动接码路由 (Email Pool & OTP Viewer)
+# ============================================================
+
+@app.get(f"{API_PREFIX}/email-pool/summary")
+async def email_pool_summary(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import get_email_pool_summary
+
+    res = await asyncio.to_thread(get_email_pool_summary)
+    return _jsonable(res)
+
+
+@app.get(f"{API_PREFIX}/email-pool/list")
+async def email_pool_list(
+    request: Request,
+    page: int = 1,
+    limit: int = 50,
+    status: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import list_email_pool
+
+    res = await asyncio.to_thread(
+        list_email_pool,
+        page=page,
+        limit=limit,
+        status=status,
+        search=search,
+    )
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/email-pool/import")
+async def email_pool_import(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import import_outlook_batch
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    text = str(body.get("text") or "").strip()
+    auto_check = bool(body.get("auto_check"))
+
+    res = await asyncio.to_thread(
+        import_outlook_batch,
+        text=text,
+        auto_check=auto_check,
+    )
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/email-pool/check")
+async def email_pool_check(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import check_emails, check_single_mailbox
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    email = str(body.get("email") or "").strip()
+    emails = body.get("emails")
+
+    if email and not emails:
+        res = await asyncio.to_thread(check_single_mailbox, email)
+        return _jsonable(res)
+
+    if isinstance(emails, list):
+        res = await asyncio.to_thread(check_emails, emails)
+        return _jsonable(res)
+
+    raise HTTPException(status_code=400, detail="missing email or emails")
+
+
+@app.post(f"{API_PREFIX}/email-pool/fetch-otp")
+async def email_pool_fetch_otp(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import fetch_mailbox_otp_and_messages
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    email = str(body.get("email") or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required")
+
+    res = await asyncio.to_thread(fetch_mailbox_otp_and_messages, email)
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/email-pool/status")
+async def email_pool_update_status(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import update_email_status
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    email = str(body.get("email") or "").strip()
+    emails = body.get("emails")
+    status = str(body.get("status") or "").strip()
+    note = body.get("note")
+
+    target_list = [email] if email else (emails if isinstance(emails, list) else [])
+    if not target_list:
+        raise HTTPException(status_code=400, detail="missing email or emails")
+
+    res = await asyncio.to_thread(update_email_status, emails=target_list, status=status, note=note)
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/email-pool/delete")
+async def email_pool_delete(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_email_pool import delete_emails
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    email = str(body.get("email") or "").strip()
+    emails = body.get("emails")
+
+    target_list = [email] if email else (emails if isinstance(emails, list) else [])
+    if not target_list:
+        raise HTTPException(status_code=400, detail="missing email or emails")
+
+    res = await asyncio.to_thread(delete_emails, target_list)
+    return _jsonable(res)
+
+
+# ============================================================
+# Codex 重新授权与强制重新登录并授权路由 (Re-Auth & Re-Login)
+# ============================================================
+
+@app.post(f"{API_PREFIX}/accounts/reauth")
+async def accounts_reauth(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_reauth import batch_reauth, reauth_single_account
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    email = str(body.get("email") or "").strip()
+    account_id = str(body.get("account_id") or "").strip()
+    emails = body.get("emails")
+    account_ids = body.get("account_ids")
+    all_expired = bool(body.get("all_expired") or body.get("all"))
+    proxy = body.get("proxy")
+
+    if (email or account_id) and not emails and not account_ids and not all_expired:
+        res = await asyncio.to_thread(
+            reauth_single_account,
+            email=email,
+            account_id=account_id,
+            proxy=proxy,
+        )
+        return _jsonable(res)
+
+    res = await asyncio.to_thread(
+        batch_reauth,
+        emails=emails if isinstance(emails, list) else None,
+        account_ids=account_ids if isinstance(account_ids, list) else None,
+        all_expired=all_expired,
+        proxy=proxy,
+    )
+    return _jsonable(res)
+
+
+@app.post(f"{API_PREFIX}/accounts/relogin")
+async def accounts_relogin(request: Request) -> dict[str, Any]:
+    _require_auth(request)
+    import asyncio
+    from grok2api.upstream.codex_reauth import batch_relogin, relogin_single_account
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    email = str(body.get("email") or "").strip()
+    emails = body.get("emails")
+
+    if email and not emails:
+        res = await asyncio.to_thread(relogin_single_account, email=email, force=True)
+        return _jsonable(res)
+
+    if isinstance(emails, list):
+        res = await asyncio.to_thread(batch_relogin, emails=emails)
+        return _jsonable(res)
+
+    raise HTTPException(status_code=400, detail="missing email or emails")
+
+
 
 def main() -> None:
     import sys

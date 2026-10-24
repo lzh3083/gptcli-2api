@@ -758,7 +758,17 @@ def run_openai_registration(
         logger.error(f"[注册失败] {email}: {err_msg}", exc_info=True)
         try:
             from core.email_provider import release_email, release_unconsumed_email
-            if not create_acknowledged:
+            is_already_registered = any(k in err_msg for k in (
+                "登录密码页",
+                "/log-in/password",
+                "auth.openai.com/log-in/password",
+                "user_already_exists",
+                "already_registered",
+            ))
+            if is_already_registered:
+                logger.warning(f"[注册拦截] 邮箱已被第三方注册过 OpenAI ({email})，标记为 already_registered，防止重新进入可用池")
+                release_email(email, status="already_registered", note=f"采购前已被注册OpenAI: {err_msg[:140]}")
+            elif not create_acknowledged:
                 release_unconsumed_email(email, note=f"pre_register_fail: {err_msg[:120]}")
             else:
                 release_email(email, status="failed", note=f"post_register_fail: {err_msg[:120]}")
