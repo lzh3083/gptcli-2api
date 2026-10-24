@@ -30,11 +30,11 @@ python3 -u run_batch_hotmail_pipeline.py 10    # 目标 10 个账号，注册最
 
 | 项 | 说明 |
 | :--- | :--- |
-| 实现 | `register.py` → `_resolve_novproxy_one_ip()` |
-| 上游 | NovProxy 动态住宅 API `https://white.novproxy.com/white/api`，region=SG |
+| 实现 | `register.py` → `_resolve_proxy_one_ip()`（或 `_resolve_novproxy_one_ip` 兼容接口） |
+| 上游 | 动态住宅代理网络（自适应支持各主流动态家宽：DataImpulse、NovProxy 或自有民用代理池，支持配置国家代码如 SG / US / JP） |
 | 校验 | 逐个 probe，`hosting=False` 确认民用宽带；剔除已用过的 exit_ip |
 | 生命周期 | 该 IP 绑定当前账号全流程（注册 → 接码 → 授权）复用同 IP |
-| 落盘 | `/app/data/used_novproxy_ips.json`、`novproxy_nodes.txt` |
+| 落盘 | `/app/data/used_novproxy_ips.json`、`novproxy_nodes.txt` / 节点历史（记录已用 IP，杜绝同 IP 关联） |
 
 ---
 

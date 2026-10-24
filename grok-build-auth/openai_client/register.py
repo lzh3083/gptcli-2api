@@ -798,3 +798,7 @@ def run_openai_registration(
             "error": err_msg,
             "create_acknowledged": create_acknowledged,
         }
+
+
+# 通用住宅代理调度接口别名（不绑定特定服务商）
+_resolve_proxy_one_ip = _resolve_novproxy_one_ip
