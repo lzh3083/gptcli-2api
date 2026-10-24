@@ -103,10 +103,21 @@ def fetch_nodes(api_base, region="US", num=10, minutes=120, timeout=45.0, attemp
 
 
 def _curl(url, timeout, proxy=""):
-    """用 curl 发请求。proxy 非空时走 SOCKS5（远端解析域名）。"""
+    """用 curl 发请求。自适应 HTTP / SOCKS5 / 账密格式代理。"""
     cmd = ["curl", "-s", "-m", str(int(timeout))]
     if proxy:
-        cmd += ["--socks5-hostname", proxy]
+        p = str(proxy).strip()
+        if p.startswith("http://") or p.startswith("https://"):
+            cmd += ["-x", p]
+        elif p.startswith("socks5h://"):
+            cmd += ["--socks5-hostname", p[len("socks5h://"):]]
+        elif p.startswith("socks5://"):
+            cmd += ["--socks5", p[len("socks5://"):]]
+        else:
+            if "@" in p and not p.startswith("socks"):
+                cmd += ["-x", f"http://{p}"]
+            else:
+                cmd += ["--socks5-hostname", p]
     cmd.append(url)
     import subprocess
     out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10)

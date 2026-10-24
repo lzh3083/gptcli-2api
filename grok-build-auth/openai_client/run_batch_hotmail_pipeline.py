@@ -43,17 +43,24 @@ TARGET_COUNT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() e
 MAX_REG_ATTEMPTS = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else (TARGET_COUNT * 3 + 10)
 
 SINGLE_REG_SCRIPT = r"""
-import sys, json, os
+import sys, json, os, logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 sys.path.insert(0, '/app/grok-build-auth/openai_client')
 
 import config.codex
 config.codex.ENABLE_CODEX_AUTO = True
 config.codex.FORCE_PHONE_VERIFICATION = True
 config.codex.SMS_CODE_WAIT = 180
-config.codex.SMS_COUNTRY = "16,73,117"
+config.codex.SMS_COUNTRY = "73,117,16"
 config.codex.SMS_MAX_PRICE = "0.075"
-os.environ["SMS_COUNTRY"] = "16,73,117"
+sms_key = os.environ.get("SMSBOWER_API_KEY") or getattr(config.codex, "SMSBOWER_API_KEY", "")
+if sms_key:
+    config.codex.SMSBOWER_API_KEY = sms_key
+    os.environ["SMSBOWER_API_KEY"] = sms_key
+config.codex.SMSBOWER_ONLY_PHYSICAL = os.environ.get("SMSBOWER_ONLY_PHYSICAL", "1")
+os.environ["SMS_COUNTRY"] = "73,117,16"
 os.environ["SMS_MAX_PRICE"] = "0.075"
+os.environ["SMSBOWER_ONLY_PHYSICAL"] = "1"
 
 from register import run_openai_registration
 
@@ -102,7 +109,7 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
         from register import _resolve_novproxy_one_ip
         proxy = _resolve_novproxy_one_ip(None)
     except Exception as _pe:
-        logger.warning(f"[NovProxy] 动态提取异常: {_pe}，降级轮换备用池")
+        logger.warning(f"[Proxy] 动态提取异常: {_pe}，降级轮换备用池")
         proxy = PROXIES[(attempt - 1) % len(PROXIES)]
 
     logger.info("-" * 65)
@@ -183,6 +190,16 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
                 logger.info(f"  > [阶段 7 交付] 已落盘 PostgreSQL + CPA 目录并热同步 2api: {email}")
             except Exception as _de:
                 logger.warning(f"  > [阶段 7 交付] 落盘异常: {_de}")
+
+            # 阶段 8: 自动同步推送到 sub2api
+            try:
+                import sys as _sys
+                if '/app' not in _sys.path: _sys.path.insert(0, '/app')
+                from grok2api.upstream.sub2api_client import push_codex_account_to_sub2api
+                push_res = push_codex_account_to_sub2api(cpa_file)
+                logger.info(f"  > [sub2api 推送] 结果: {push_res}")
+            except Exception as _p_err:
+                logger.warning(f"  > [sub2api 推送] 异常: {_p_err}")
         else:
             err = res_data.get("error") or (f"non_zero_exit_{proc.returncode}" if proc.returncode != 0 else "codex_phone_unverified")
             logger.warning(f"✕ [Codex 流程未完成] {email} 耗时: {elapsed:.1f}s | 错误原因: {err}")

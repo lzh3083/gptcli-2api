@@ -1256,7 +1256,7 @@ def _force_submit_add_phone_form(driver) -> dict:
         return {ok:false, reason:f'{type(exc).__name__}: {exc}', url:getattr(driver, 'current_url', '')}
 
 
-def _wait_after_phone_send(driver, timeout: int = 12) -> str:
+def _wait_after_phone_send(driver, timeout: int = 25) -> str:
     end = time.time() + timeout
     last = {}
     force_submitted = False
@@ -1277,7 +1277,7 @@ def _wait_after_phone_send(driver, timeout: int = 12) -> str:
             if invalid:
                 raise RuntimeError(f"invalid_phone: add-phone input aria-invalid state={last}")
             # Cloak/React-Aria 场景下 btn.click 可能只聚焦没触发表单提交；补一次 requestSubmit。
-            if not force_submitted and time.time() > end - timeout + 3:
+            if not force_submitted and time.time() > end - timeout + 8:
                 info = _force_submit_add_phone_form(driver)
                 logger.info("[Codex][Browser] add-phone 点击后仍停留本页，补执行 form.requestSubmit：%s", info)
                 force_submitted = True
@@ -1587,7 +1587,7 @@ def _do_phone_verification_if_present(driver) -> None:
                 _wait_page_settle_after_submit()
 
                 # 等待页面进入 phone-verification；若号码无效/无法发送/WhatsApp 通道，立即换号。
-                _wait_after_phone_send(driver, timeout=15)
+                _wait_after_phone_send(driver, timeout=25)
                 logger.info("[Codex][Browser] 已进入手机验证码页")
 
                 sms_provider.set_status(activation_id, 1, http=http)

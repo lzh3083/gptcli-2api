@@ -212,6 +212,9 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     }
     # 用户铁令：单价超过 0.075 的一律不要
     max_price = str(getattr(_cfg, "SMS_MAX_PRICE", "0.075") or "0.075").strip()
+    only_physical = getattr(_cfg, "SMSBOWER_ONLY_PHYSICAL", "1")
+    if str(only_physical).strip() in ("1", "true", "True"):
+        params["onlyPhysical"] = "1"
     for key, value in (
         ("maxPrice", max_price),
         ("minPrice", getattr(_cfg, "SMSBOWER_MIN_PRICE", "")),
@@ -226,9 +229,9 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
 
 
 def _request_smsbower_number(http: CurlSession, params: dict) -> tuple[dict, str]:
-    """按国家优先级与兼容性顺序取号，筛选无库存时自动切换备选国家或放宽供应商条件。"""
-    raw_country = str(params.get("country") or "16").strip()
-    countries = [c.strip() for c in raw_country.split(",") if c.strip() in ("16", "73", "117")] or ["16", "73", "117"]
+    """按国家优先级与兼容性顺序取号，筛选无库存时自动切换备选国家或放宽实体卡条件。"""
+    raw_country = str(params.get("country") or "73,117,16").strip()
+    countries = [c.strip() for c in raw_country.split(",") if c.strip() in ("16", "73", "117")] or ["73", "117", "16"]
     candidates: list[dict] = []
     for c_code in countries:
         c_params = {**params, "country": c_code}
@@ -240,6 +243,14 @@ def _request_smsbower_number(http: CurlSession, params: dict) -> tuple[dict, str
             candidates.append(without_provider)
             if c_params.get("action") == "getNumberV2":
                 candidates.append({**without_provider, "action": "getNumber"})
+    # 若实体卡暂无库存，放宽 onlyPhysical 条件兜底
+    if params.get("onlyPhysical"):
+        for c_code in countries:
+            c_no_phys = {k: v for k, v in params.items() if k != "onlyPhysical"}
+            c_no_phys["country"] = c_code
+            candidates.append(c_no_phys)
+            if c_no_phys.get("action") == "getNumberV2":
+                candidates.append({**c_no_phys, "action": "getNumber"})
     unique = []
     for candidate in candidates:
         if candidate not in unique:

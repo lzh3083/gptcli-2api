@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -228,14 +229,25 @@ def _resolve_novproxy_one_ip(
             )
             for node in nodes:
                 clean_node = node.split("://", 1)[-1].strip()
-                probe = novproxy.probe_node(clean_node, expect_country=region, timeout=15.0)
+                probe = novproxy.probe_node(clean_node, expect_country=None, timeout=15.0)
                 if not probe.get("ok"):
                     last_err = str(probe.get("reason") or "probe_failed")
+                    continue
+                code = str(probe.get("country") or "").upper()
+                allowed_countries = {
+                    "US", "GB", "DE", "FR", "JP", "SG", "TW", "KR", "BR", "ES",
+                    "IT", "NL", "AU", "CA", "SE", "NO", "DK", "FI", "CH", "AT",
+                    "IE", "NZ", "PT"
+                }
+                if code not in allowed_countries:
+                    last_err = f"节点出口国家不在高质量支持列表 ({code})"
                     continue
                 if probe.get("hosting"):
                     last_err = f"节点出口为机房 IP ({probe.get('exit_ip')} / {probe.get('isp')})"
                     logger.warning(f"[NovProxy] 跳过机房属性节点 {clean_node}: {last_err}")
                     continue
+                # 预检节点与 ip-api 的可用性（无需直接 curl OpenAI，因为由指纹浏览器 CloakBrowser 处理交互）
+                pass
                 exit_ip = str(probe.get("exit_ip") or "").strip()
                 if fallback_candidate is None:
                     fallback_candidate = (clean_node, exit_ip, probe)

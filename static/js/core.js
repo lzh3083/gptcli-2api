@@ -7061,7 +7061,7 @@ function generateDataImpulseNodes() {
   const host = $("reg-dataimpulse-host") ? $("reg-dataimpulse-host").value.trim() : "gw.dataimpulse.com:823";
   const user = $("reg-dataimpulse-user") ? $("reg-dataimpulse-user").value.trim() : "";
   const pass = $("reg-dataimpulse-pass") ? $("reg-dataimpulse-pass").value.trim() : "";
-  const country = $("reg-dataimpulse-country") ? $("reg-dataimpulse-country").value.trim().toLowerCase() : "jp";
+  const country = $("reg-dataimpulse-country") ? $("reg-dataimpulse-country").value.trim().toLowerCase() : "sg";
   const ttl = $("reg-dataimpulse-ttl") ? $("reg-dataimpulse-ttl").value.trim() : "30";
   const num = Math.max(1, Math.min(500, parseInt($("reg-dataimpulse-num") ? $("reg-dataimpulse-num").value.trim() : "1", 10) || 1));
 

@@ -3042,24 +3042,31 @@ def _run_registration(
             active_proxy = str(proxy or sess.get("proxy") or "").strip()
             proxy_mode = str(sess.get("proxy_mode") or "novproxy").strip().lower()
 
-            if active_proxy.lower().startswith("novproxy") or active_proxy.lower() in ("residential", "dynamic") or (not active_proxy and proxy_mode in ("novproxy", "residential", "auto", "")):
-                novproxy_mode = str(sess.get("novproxy_mode") or "api").strip().lower()
-                if novproxy_mode == "userpass" and sess.get("novproxy_up_user") and sess.get("novproxy_up_pass"):
-                    host = str(sess.get("novproxy_up_host") or "sg.novproxy.io:1000").strip()
-                    proto = str(sess.get("novproxy_up_proto") or "socks5h").strip()
-                    up_user = str(sess.get("novproxy_up_user") or "").strip()
-                    up_pass = str(sess.get("novproxy_up_pass") or "").strip()
+            if active_proxy.lower().startswith("novproxy") or active_proxy.lower() in ("residential", "dynamic", "dataimpulse") or (not active_proxy and proxy_mode in ("novproxy", "residential", "dataimpulse", "auto", "")):
+                novproxy_mode = str(sess.get("novproxy_mode") or "userpass").strip().lower()
+                up_user = str(sess.get("novproxy_up_user") or "").strip()
+                up_pass = str(sess.get("novproxy_up_pass") or "").strip()
+                host = str(sess.get("novproxy_up_host") or "gw.dataimpulse.com:823").strip()
+                if (novproxy_mode == "userpass" or "dataimpulse" in host.lower()) and (up_user or "dataimpulse" in host.lower()):
+                    proto = str(sess.get("novproxy_up_proto") or "http").strip()
                     region = str(sess.get("novproxy_up_region") or sess.get("novproxy_region") or "SG").strip()
                     if region.upper() in ("AUTO", "*", "ANY", "ALL"):
                         region = "SG"
                     time_mins = str(sess.get("novproxy_up_time") or "120").strip()
-                    if "-region-" in up_user:
-                        up_user = up_user.split("-region-")[0].strip()
                     import secrets
                     sid_rnd = secrets.token_hex(4)
-                    formatted_user = f"{up_user}-region-{region}-sid-{sid_rnd}-t-{time_mins}"
-                    active_proxy = f"{proto}://{formatted_user}:{up_pass}@{host}"
-                    update("proxy_assigned", f"已分配 NovProxy 住宅账密节点: {proto}://{up_user}:***@{host} ({region})")
+                    if "dataimpulse" in host.lower():
+                        if "__" in up_user:
+                            up_user = up_user.split("__")[0].strip()
+                        formatted_user = f"{up_user}__cr.{region.lower()}__sid.{sid_rnd}"
+                        active_proxy = f"{proto}://{formatted_user}:{up_pass}@{host}"
+                        update("proxy_assigned", f"已分配 DataImpulse 住宅账密节点: {proto}://{up_user}:***@{host} ({region}, sid={sid_rnd})")
+                    else:
+                        if "-region-" in up_user:
+                            up_user = up_user.split("-region-")[0].strip()
+                        formatted_user = f"{up_user}-region-{region}-sid-{sid_rnd}-t-{time_mins}"
+                        active_proxy = f"{proto}://{formatted_user}:{up_pass}@{host}"
+                        update("proxy_assigned", f"已分配 NovProxy 住宅账密节点: {proto}://{up_user}:***@{host} ({region})")
                 else:
                     from openai_client.register import _resolve_novproxy_one_ip
                     region_hint = str(sess.get("novproxy_region") or "SG").strip().upper()

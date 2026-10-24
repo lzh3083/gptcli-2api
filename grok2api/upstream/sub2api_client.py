@@ -178,6 +178,65 @@ def set_sub2api_config(patch: dict[str, Any] | None, *, replace: bool = False) -
     return get_sub2api_config(include_secrets=True)
 
 
+def push_codex_account_to_sub2api(cpa_file_path: str, *, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Push a registered Codex CPA JSON file into sub2api under platform 'openai'."""
+    from pathlib import Path
+    p = Path(cpa_file_path)
+    if not p.is_file():
+        return {"ok": False, "error": f"CPA file not found: {cpa_file_path}"}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to read CPA JSON: {e}"}
+
+    email = str(data.get("email") or p.stem.replace("codex-", "").replace("-free", "")).strip()
+    access = str(data.get("access_token") or "").strip()
+    refresh = str(data.get("refresh_token") or "").strip()
+    id_tok = str(data.get("id_token") or "").strip()
+
+    if not access and not refresh:
+        return {"ok": False, "error": "CPA file has neither access_token nor refresh_token"}
+
+    live_cfg = cfg or get_sub2api_config(include_secrets=True)
+    if not live_cfg.get("enabled"):
+        return {"ok": False, "skipped": True, "reason": "sub2api_disabled"}
+
+    credentials = {
+        "email": email,
+        "access_token": access,
+    }
+    if refresh:
+        credentials["refresh_token"] = refresh
+    if id_tok:
+        credentials["id_token"] = id_tok
+
+    gid = int(live_cfg.get("group_id") or 4)
+    name = f"codex-{email}" if email else p.stem
+
+    body = {
+        "name": name[:200],
+        "platform": "openai",
+        "type": "oauth",
+        "credentials": credentials,
+        "group_ids": [gid],
+        "concurrency": int(live_cfg.get("account_concurrency") or 2),
+        "priority": int(live_cfg.get("account_priority") or 50),
+        "rate_multiplier": float(live_cfg.get("account_rate_multiplier") or 1.0),
+        "notes": f"auto_registered_codex:{email}",
+    }
+
+    status, parsed, raw = _request_authed(
+        "POST",
+        "/api/v1/admin/accounts",
+        cfg=live_cfg,
+        body=body,
+        timeout=60,
+    )
+    if status < 200 or status >= 300:
+        raise RuntimeError(_api_error_message(status, parsed, raw))
+    return {"ok": True, "data": parsed, "email": email, "group_id": gid}
+
+
 def public_sub2api_config() -> dict[str, Any]:
     """Admin UI payload — secrets redacted."""
     cfg = get_sub2api_config(include_secrets=True)

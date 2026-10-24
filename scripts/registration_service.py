@@ -1141,10 +1141,6 @@ async def probe_proxy_pool(request: Request) -> dict[str, Any]:
                     node_addr = fetched[0].strip()
             except Exception as exc:
                 return {"node": p, "raw": p, "ok": False, "reason": f"NovProxy提取失败: {exc}"}
-        for prefix in ("socks5h://", "socks5://", "http://", "https://"):
-            if node_addr.startswith(prefix):
-                node_addr = node_addr[len(prefix):]
-                break
         res = novproxy.probe_node(node_addr, expect_country="", timeout=15.0)
         res["raw"] = f"socks5h://{node_addr}" if p.lower().startswith("novproxy") else p
         return res
