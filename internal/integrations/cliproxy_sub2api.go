@@ -274,10 +274,9 @@ func buildCLIProxyRecord(entry map[string]any, aid string) map[string]any {
 		if cpaProxy == "" {
 			cpaProxy = strings.TrimSpace(os.Getenv("CODEX_CPA_PROXY_URL"))
 		}
-		if cpaProxy == "" {
-			cpaProxy = "socks5h://warp-relay:1080"
+		if cpaProxy != "" && !strings.Contains(cpaProxy, "warp-relay") {
+			rec["proxy_url"] = cpaProxy
 		}
-		rec["proxy_url"] = cpaProxy
 	}
 	if headers != nil {
 		rec["headers"] = headers

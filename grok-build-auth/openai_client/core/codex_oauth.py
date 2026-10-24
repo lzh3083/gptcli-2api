@@ -1705,12 +1705,49 @@ def _parse_id_token(id_token: str) -> dict:
     }
 
 
-def build_codex_storage(token_resp: dict, id_claims: dict) -> dict:
+def resolve_cpa_proxy_url(proxy: str | None = None) -> str:
+    """解析 CPA 凭证文件的 proxy_url。
+    优先规则:
+      1. 当前注册/授权流程中实际分配的独立家宽代理节点 (proxy);
+      2. 环境变量 CODEX_CPA_PROXY_URL (排除 warp-relay);
+      3. data/config.json 中的 DataImpulse 住宅代理或 proxy 配置;
+      4. 严格禁止默认回退到 socks5h://warp-relay:1080 (杜绝机房/Warp 污染家宽号)。
+    """
+    if proxy and "://" in proxy and not any(k in proxy.lower() for k in ("warp-relay", "direct", "none", "off", "0")):
+        return proxy.strip()
+
+    env_p = os.environ.get("CODEX_CPA_PROXY_URL", "").strip()
+    if env_p and not any(k in env_p.lower() for k in ("warp-relay", "direct", "none", "off", "0")):
+        return env_p
+
+    try:
+        data_root = os.environ.get("GROK2API_DATA_DIR") or (
+            "/app/data" if Path("/app/data").is_dir() else str(Path(__file__).resolve().parents[3] / "data")
+        )
+        cfg_file = Path(data_root) / "config.json"
+        if cfg_file.is_file():
+            cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+            u = str(cfg.get("dataimpulse_user") or os.environ.get("DATAIMPULSE_USER") or "").strip()
+            p = str(cfg.get("dataimpulse_pass") or os.environ.get("DATAIMPULSE_PASS") or "").strip()
+            h = str(cfg.get("dataimpulse_host") or os.environ.get("DATAIMPULSE_HOST") or "gw.dataimpulse.com:823").strip()
+            r = str(cfg.get("dataimpulse_region") or cfg.get("dataimpulse_country") or "sg").strip().lower()
+            if u and p:
+                return f"http://{u}__cr.{r}:{p}@{h}"
+            cfg_proxy = str(cfg.get("proxy") or "").strip()
+            if cfg_proxy and "://" in cfg_proxy and "warp-relay" not in cfg_proxy:
+                return cfg_proxy
+    except Exception:
+        pass
+
+    return ""
+
+
+def build_codex_storage(token_resp: dict, id_claims: dict, proxy: str | None = None) -> dict:
     """组装 CLIProxyAPI CodexTokenStorage JSON 结构。"""
     expires_in = token_resp.get("expires_in", 0) or 0
     expired_dt = datetime.now(timezone.utc) + _timedelta_seconds(expires_in)
     last_refresh_dt = datetime.now(timezone.utc)
-    cpa_proxy_url = os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080").strip()
+    cpa_proxy_url = resolve_cpa_proxy_url(proxy)
     storage = {
         "id_token": token_resp.get("id_token", ""),
         "access_token": token_resp.get("access_token", ""),
@@ -2181,7 +2218,7 @@ def run_codex_oauth(
         # 8. 解析 id_token + 落盘
         id_claims = _parse_id_token(token_resp.get("id_token", ""))
         effective_email = id_claims.get("email") or email
-        storage = build_codex_storage(token_resp, id_claims)
+        storage = build_codex_storage(token_resp, id_claims, proxy=proxy)
         path = save_codex_credential(storage, effective_email, id_claims.get("plan_type", ""))
 
         logger.info(

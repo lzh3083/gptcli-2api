@@ -1151,7 +1151,7 @@ def build_cliproxyapi_export_record(entry: dict[str, Any], *, aid: str = "") -> 
         rec["base_url"] = base_url
     cpa_proxy_url = str(
         entry.get("proxy_url")
-        or (os.environ.get("CODEX_CPA_PROXY_URL", "socks5h://warp-relay:1080") if cpa_type in ("codex", "chatgpt", "openai") else "")
+        or os.environ.get("CODEX_CPA_PROXY_URL", "")
     ).strip()
     if cpa_proxy_url:
         rec["proxy_url"] = cpa_proxy_url

@@ -1907,7 +1907,7 @@ def _run_roxy_codex_oauth_once(
             token_resp = proto.exchange_codex_token(session, code, code_verifier)
         id_claims = proto._parse_id_token(token_resp.get("id_token", ""))
         effective_email = id_claims.get("email") or email
-        storage = proto.build_codex_storage(token_resp, id_claims)
+        storage = proto.build_codex_storage(token_resp, id_claims, proxy=proxy)
         path = proto.save_codex_credential(storage, effective_email, id_claims.get("plan_type", ""))
         return proto._codex_result(
             status="success",

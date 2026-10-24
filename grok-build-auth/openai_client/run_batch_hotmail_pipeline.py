@@ -26,6 +26,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("HotmailBatch")
 os.environ["SMS_CODE_WAIT"] = "75"
+if os.path.exists("/app/data/config.json"):
+    try:
+        with open("/app/data/config.json", "r", encoding="utf-8") as _cf:
+            _cdata = json.load(_cf)
+            if _cdata.get("fivesim_api_key"):
+                os.environ["FIVESIM_API_KEY"] = _cdata["fivesim_api_key"]
+    except Exception:
+        pass
 import config.codex
 config.codex.SMS_CODE_WAIT = 75
 
@@ -57,6 +65,13 @@ config.codex.SMS_MAX_PRICE = "0.075"
 config.codex.FIVESIM_MAX_PRICE = "0.075"
 config.codex.FIVESIM_OPERATOR = "any"
 fivesim_key = os.environ.get("FIVESIM_API_KEY") or getattr(config.codex, "FIVESIM_API_KEY", "")
+if not fivesim_key and os.path.exists("/app/data/config.json"):
+    try:
+        with open("/app/data/config.json", "r", encoding="utf-8") as _cf:
+            _cdata = json.load(_cf)
+            fivesim_key = _cdata.get("fivesim_api_key") or ""
+    except Exception:
+        pass
 if fivesim_key:
     config.codex.FIVESIM_API_KEY = fivesim_key
     os.environ["FIVESIM_API_KEY"] = fivesim_key
