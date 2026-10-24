@@ -1558,7 +1558,7 @@ def _do_phone_verification_if_present(driver) -> None:
             return
 
         last_err = None
-        raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip() in ("16", "73", "117")]
+        raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip() in ("16", "73", "117", "england", "brazil", "portugal")]
         # 严格遵循用户指定的国家调度：英国16 -> 巴西73 -> 葡萄牙117，禁用菲律宾4、印尼6、马来西亚7与虚拟号
         for attempt in range(1, max_retries + 1):
             activation_id = None

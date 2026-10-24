@@ -25,9 +25,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("HotmailBatch")
-os.environ["SMS_CODE_WAIT"] = "180"
+os.environ["SMS_CODE_WAIT"] = "75"
 import config.codex
-config.codex.SMS_CODE_WAIT = 180
+config.codex.SMS_CODE_WAIT = 75
 
 PROXIES = [
     "socks5h://162.128.157.171:32116",  # StarHub SG
@@ -50,17 +50,21 @@ sys.path.insert(0, '/app/grok-build-auth/openai_client')
 import config.codex
 config.codex.ENABLE_CODEX_AUTO = True
 config.codex.FORCE_PHONE_VERIFICATION = True
-config.codex.SMS_CODE_WAIT = 180
-config.codex.SMS_COUNTRY = "73,117,16"
+config.codex.SMS_CODE_WAIT = 90
+config.codex.SMS_PROVIDER = "fivesim"
+config.codex.SMS_COUNTRY = "england"
 config.codex.SMS_MAX_PRICE = "0.075"
-sms_key = os.environ.get("SMSBOWER_API_KEY") or getattr(config.codex, "SMSBOWER_API_KEY", "")
-if sms_key:
-    config.codex.SMSBOWER_API_KEY = sms_key
-    os.environ["SMSBOWER_API_KEY"] = sms_key
-config.codex.SMSBOWER_ONLY_PHYSICAL = os.environ.get("SMSBOWER_ONLY_PHYSICAL", "1")
-os.environ["SMS_COUNTRY"] = "73,117,16"
+config.codex.FIVESIM_MAX_PRICE = "0.075"
+config.codex.FIVESIM_OPERATOR = "any"
+fivesim_key = os.environ.get("FIVESIM_API_KEY") or getattr(config.codex, "FIVESIM_API_KEY", "")
+if fivesim_key:
+    config.codex.FIVESIM_API_KEY = fivesim_key
+    os.environ["FIVESIM_API_KEY"] = fivesim_key
+os.environ["SMS_PROVIDER"] = "fivesim"
+os.environ["SMS_COUNTRY"] = "england"
 os.environ["SMS_MAX_PRICE"] = "0.075"
-os.environ["SMSBOWER_ONLY_PHYSICAL"] = "1"
+os.environ["FIVESIM_MAX_PRICE"] = "0.075"
+os.environ["FIVESIM_OPERATOR"] = "any"
 
 from register import run_openai_registration
 
@@ -129,7 +133,7 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
             bufsize=1
         )
 
-        timeout_sec = 650
+        timeout_sec = 900
         deadline = time.time() + timeout_sec
 
         while True:
@@ -182,24 +186,57 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
                 "cpa_file": cpa_file,
                 "elapsed": round(elapsed, 1)
             })
+            cooling_hours = float(os.environ.get("CODEX_COOLING_HOURS", "3"))
+            now_ts = int(time.time())
+            cooling_until_ts = int(now_ts + cooling_hours * 3600)
+            cooling_until_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cooling_until_ts))
+
+            # 无论是否冷却，均先安全落盘 PostgreSQL 数据库存档
             try:
                 _sp.run([sys.executable, '/app/grok-build-auth/openai_client/deliver_codex.py', email],
                         capture_output=True, timeout=120)
-                _sp.run(['bash', '/app/scripts/sync_codex_to_cpa.sh'],
-                        capture_output=True, timeout=120)
-                logger.info(f"  > [阶段 7 交付] 已落盘 PostgreSQL + CPA 目录并热同步 2api: {email}")
             except Exception as _de:
-                logger.warning(f"  > [阶段 7 交付] 落盘异常: {_de}")
+                logger.warning(f"  > [阶段 7 交付] 写入数据库存档异常: {_de}")
 
-            # 阶段 8: 自动同步推送到 sub2api
-            try:
-                import sys as _sys
-                if '/app' not in _sys.path: _sys.path.insert(0, '/app')
-                from grok2api.upstream.sub2api_client import push_codex_account_to_sub2api
-                push_res = push_codex_account_to_sub2api(cpa_file)
-                logger.info(f"  > [sub2api 推送] 结果: {push_res}")
-            except Exception as _p_err:
-                logger.warning(f"  > [sub2api 推送] 异常: {_p_err}")
+            if cooling_hours > 0:
+                # 沉淀隔离：进入冷冻静默池，严禁立即投产给 CPA 探针，避开 1~3 小时离线聚类风控
+                try:
+                    data_dir = os.path.dirname(cpa_file)
+                    cooling_dir = os.path.join(os.path.dirname(data_dir), "cpa_cooling") if "cpa_auth_files" in data_dir else os.path.join(data_dir, "cpa_cooling")
+                    os.makedirs(cooling_dir, exist_ok=True)
+                    
+                    cooling_file = os.path.join(cooling_dir, os.path.basename(cpa_file))
+                    with open(cpa_file, "r", encoding="utf-8") as _rf:
+                        _cdata = json.load(_rf)
+                    _cdata["registered_at"] = now_ts
+                    _cdata["cooling_until"] = cooling_until_ts
+                    _cdata["status"] = "cooling"
+                    with open(cooling_file, "w", encoding="utf-8") as _wf:
+                        json.dump(_cdata, _wf, indent=2, ensure_ascii=False)
+                    
+                    # 从即时交付目录移除，防止被未过滤脚本扫描到
+                    if os.path.isfile(cpa_file) and os.path.abspath(cooling_file) != os.path.abspath(cpa_file):
+                        os.remove(cpa_file)
+
+                    logger.info(f"  > [冷冻沉淀池] ★ 账号已进入沉淀静默池: {email}")
+                    logger.info(f"  > [静默计划] 冷却时长: {cooling_hours}h | 预计成熟时间: {cooling_until_str} (避开 1~3h 离线审计)")
+                except Exception as _ce:
+                    logger.warning(f"  > [冷冻沉淀池] 写入沉淀目录异常: {_ce}")
+            else:
+                # cooling_hours <= 0 直通交付
+                try:
+                    _sp.run(['bash', '/app/scripts/sync_codex_to_cpa.sh'], capture_output=True, timeout=120)
+                    logger.info(f"  > [即时交付] 已同步 CPA 目录并热生效: {email}")
+                except Exception as _se:
+                    logger.warning(f"  > [即时交付] 同步 CPA 异常: {_se}")
+                try:
+                    import sys as _sys
+                    if '/app' not in _sys.path: _sys.path.insert(0, '/app')
+                    from grok2api.upstream.sub2api_client import push_codex_account_to_sub2api
+                    push_res = push_codex_account_to_sub2api(cpa_file)
+                    logger.info(f"  > [sub2api 推送] 结果: {push_res}")
+                except Exception as _p_err:
+                    logger.warning(f"  > [sub2api 推送] 异常: {_p_err}")
         else:
             err = res_data.get("error") or (f"non_zero_exit_{proc.returncode}" if proc.returncode != 0 else "codex_phone_unverified")
             logger.warning(f"✕ [Codex 流程未完成] {email} 耗时: {elapsed:.1f}s | 错误原因: {err}")

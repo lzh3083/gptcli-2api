@@ -97,7 +97,7 @@ CPA_SAVE_CALLBACK_RECEIPT: bool = True
 #   "h"       = 本地 H 取号服务，接口说明见 H_API.md
 # ============================================================
 
-SMS_PROVIDER: str = "smsbower"
+SMS_PROVIDER: str = env_str("SMS_PROVIDER", "fivesim")
 
 # 接码 API 基址（GET handler）
 SMS_API_BASE: str = "https://api.grizzlysms.com/stubs/handler_api.php"
@@ -121,7 +121,7 @@ SMS_SERVICE: str = "dr"
 # 国家代码：英国(16, $0.045~$0.0718)、巴西(73, $0.054)、葡萄牙(117, $0.06)
 # 用户铁令：只要英国(16)、巴西(73)、葡萄牙(117)。剔除菲律宾(4)、印尼(6)、马来西亚(7)、泰国(66)、哈萨克斯坦(2)、老挝(25)等
 # 所有国家单价严格不超过 0.075 美元
-SMS_COUNTRY: str = "16,73,117"
+SMS_COUNTRY: str = env_str("SMS_COUNTRY", "england")
 
 # 单个号愿意支付的最高价格：硬性限制 0.075 美元，超过一律不要
 SMS_MAX_PRICE: str = "0.075"
@@ -146,11 +146,11 @@ SMS_REQUEST_TIMEOUT: int = 30
 # 5sim 接码（SMS_PROVIDER="fivesim" 时使用）
 # API 文档：https://5sim.net/zh/docs
 FIVESIM_BASE: str = "https://5sim.net/v1"
-FIVESIM_API_KEY: str = ""
+FIVESIM_API_KEY: str = env_str("FIVESIM_API_KEY", "")
 # 运营商：any / virtual34 / virtual58 / virtual66 ...（virtual34 波兰成功率最高）
-FIVESIM_OPERATOR: str = "any"
+FIVESIM_OPERATOR: str = env_str("FIVESIM_OPERATOR", "any")
 # 单号价格上限（USD）；超出则买号后立即取消并报错
-FIVESIM_MAX_PRICE: str = ""
+FIVESIM_MAX_PRICE: str = env_str("FIVESIM_MAX_PRICE", "0.075")
 
 # H 取号服务（SMS_PROVIDER="h" 时使用）
 # ============================================================

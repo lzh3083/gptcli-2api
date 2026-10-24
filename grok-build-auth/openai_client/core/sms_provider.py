@@ -230,8 +230,8 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
 
 def _request_smsbower_number(http: CurlSession, params: dict) -> tuple[dict, str]:
     """按国家优先级与兼容性顺序取号，筛选无库存时自动切换备选国家或放宽实体卡条件。"""
-    raw_country = str(params.get("country") or "73,117,16").strip()
-    countries = [c.strip() for c in raw_country.split(",") if c.strip() in ("16", "73", "117")] or ["73", "117", "16"]
+    raw_country = str(params.get("country") or "16,73,117").strip()
+    countries = [c.strip() for c in raw_country.split(",") if c.strip() in ("16", "73", "117")] or ["16", "73", "117"]
     candidates: list[dict] = []
     for c_code in countries:
         c_params = {**params, "country": c_code}
@@ -539,44 +539,69 @@ def acquire_number(
             return activation_id, phone
 
         if _provider() == "fivesim":
-            f_country = str(country or _cfg.SMS_COUNTRY or "").strip().lower()
+            _f_map = {
+                "16": "england", "73": "brazil", "117": "portugal",
+                "england": "england", "brazil": "brazil", "portugal": "portugal"
+            }
+            f_country_raw = str(country or _cfg.SMS_COUNTRY or "england").strip().lower()
+            # 若传入的是逗号隔开的列表，取第一个
+            if "," in f_country_raw:
+                f_country_raw = f_country_raw.split(",")[0].strip()
+            f_country = _f_map.get(f_country_raw, f_country_raw)
             f_product = str(service or _cfg.SMS_SERVICE or "openai").strip().lower()
+            if f_product in ("dr", "chatgpt"):
+                f_product = "openai"
             f_operator = _fivesim_operator(f_country)
-            if not f_country:
-                raise SmsProviderError("5sim 国家不能为空：请填写 SMS_COUNTRY（如 poland）")
-            path = f"/user/buy/activation/{f_country}/{f_operator}/{f_product}"
-            data = _request_5sim(http, path)
-            activation_id = str(data.get("id") or "").strip()
-            raw_phone = str(data.get("phone") or "").strip()
-            phone = raw_phone.lstrip("+").strip()
-            if not activation_id or not phone:
-                raise SmsProviderError(f"5sim buy 响应缺少 id/phone：{str(data)[:200]}")
-            # 价格硬保护：超出上限立即取消并报错
-            max_price = str(getattr(_cfg, "FIVESIM_MAX_PRICE", "") or "").strip()
-            if max_price:
+            max_price = str(getattr(_cfg, "FIVESIM_MAX_PRICE", "") or getattr(_cfg, "SMS_MAX_PRICE", "") or "0.075").strip()
+            limit = float(max_price) if max_price else 0.075
+
+            # 5sim 购买：若未指定具体 operator，按低价列表轮询购买；如果是英国，直接使用 virtual51/virtual60/virtual59（均为 $0.0609）
+            if f_operator != "any":
+                candidates_ops = [f_operator]
+            elif f_country == "england":
+                candidates_ops = ["virtual51", "virtual60", "virtual59"]
+            else:
+                candidates_ops = ["virtual51", "virtual60", "virtual59", "virtual34", "virtual66", "virtual21", "any"]
+
+            last_buy_err = None
+            valid_data = None
+            chosen_op = None
+            for op in candidates_ops:
                 try:
-                    actual = float(data.get("price") or 0)
-                    limit = float(max_price)
-                    if actual > limit:
+                    path = f"/user/buy/activation/{f_country}/{op}/{f_product}"
+                    data = _request_5sim(http, path)
+                    activation_id = str(data.get("id") or "").strip()
+                    raw_phone = str(data.get("phone") or "").strip()
+                    phone = raw_phone.lstrip("+").strip()
+                    actual_price = float(data.get("price") or 0)
+                    if actual_price > limit:
                         logger.warning(
-                            f"[SMS:5sim] 价格 {actual} 超出上限 {limit}，立即取消 id={activation_id}"
+                            f"[SMS:5sim] 价格 {actual_price} 超出上限 {limit}，立即取消 id={activation_id}"
                         )
                         try:
                             _request_5sim(http, f"/user/cancel/{activation_id}")
-                        except Exception as _ce:
-                            logger.warning(f"[SMS:5sim] 超价取消失败：{_ce}")
-                        raise SmsProviderError(
-                            f"5sim 号码价格 {actual} 超出上限 {limit}，已取消"
-                        )
-                except SmsProviderError:
-                    raise
-                except Exception:
-                    pass
+                        except Exception:
+                            pass
+                        continue
+                    if activation_id and phone:
+                        valid_data = data
+                        chosen_op = op
+                        break
+                except Exception as b_err:
+                    last_buy_err = b_err
+                    continue
+
+            if not valid_data:
+                raise SmsProviderError(f"5sim buy 失败（国家 {f_country} 无 <= {limit} 的可用号码或库存不足）：{last_buy_err}")
+
+            activation_id = str(valid_data.get("id") or "").strip()
+            raw_phone = str(valid_data.get("phone") or "").strip()
+            phone = raw_phone.lstrip("+").strip()
             _ACQUIRED_AT[activation_id] = time.time()
             logger.info(
                 f"[SMS:5sim] 取号成功 id={activation_id} phone=+{phone} "
-                f"country={f_country} operator={f_operator} product={f_product} "
-                f"price={data.get('price')}"
+                f"country={f_country} operator={chosen_op} product={f_product} "
+                f"price={valid_data.get('price')}"
             )
             return activation_id, phone
 
@@ -946,6 +971,21 @@ def cancel(activation_id: str, http: CurlSession | None = None, background: bool
 
     失败只告警不抛，不影响主流程。
     """
+    if _provider() == "fivesim":
+        try:
+            own = http is None
+            h = http or _http()
+            try:
+                _request_5sim(h, f"/user/cancel/{activation_id}")
+                logger.info(f"[SMS:5sim] 已成功取消退款: activation_id={activation_id}")
+            finally:
+                if own:
+                    h.close()
+        except Exception as exc:
+            logger.warning(f"[SMS:5sim] 取消退款失败: {exc}")
+        finally:
+            _ACQUIRED_AT.pop(activation_id, None)
+        return
     if _provider() == "l":
         try:
             _release_l_number(activation_id, http=http)

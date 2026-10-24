@@ -28,6 +28,162 @@ from core.roxy_registration import (  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
+
+# ==============================================================================
+# 自然行为拟人对话激活模块 (Warm-up / Anti-Clustering)
+# ==============================================================================
+import random
+
+WARMUP_PROMPTS = [
+    # 英文生活与健康
+    "What are some quick and healthy breakfast ideas that take under 10 minutes?",
+    "How can I keep fresh vegetables crisp and last longer in the fridge?",
+    "What is the best way to clean and maintain a cast-iron skillet?",
+    "Can you suggest a few simple indoor plants that need minimal sunlight?",
+    "What is the difference between cold brew and regular iced coffee?",
+    "What are some good indoor activities for a rainy afternoon?",
+    "Can you give me 3 practical tips for organizing a messy work desk?",
+    "What is the healthiest way to cook eggs without losing nutrients?",
+    # 英文常识与趣味
+    "Could you recommend 3 classic mystery novels suitable for beginners?",
+    "What are some practical tips to improve typing speed and accuracy?",
+    "Explain the basic difference between stocks and mutual funds simply.",
+    "What are some gentle neck and shoulder stretches I can do at my desk?",
+    "Give me 3 creative themes for a weekend family movie night.",
+    "Can you write a short, cozy haiku about an autumn afternoon?",
+    "Why do leaves change color in the autumn? Explain like I am ten.",
+    # 中文生活与常识
+    "平时喝茶的话，绿茶、红茶和乌龙茶在冲泡温度上有什么讲究吗？",
+    "想在家里做点简单清爽的夏日饮品，有什么零失败的搭配推荐？",
+    "推荐几本通俗易懂的心理学入门书籍，适合碎片时间阅读的。",
+    "长时间看电脑屏幕眼睛容易干涩，日常有什么缓解疲劳的小技巧？",
+    "出差收拾行李时，如何快速整理衣物才能不占空间又防皱？",
+    "能不能推荐三种简单易做、适合带饭的工作日便当菜谱？",
+    "家庭养猫需要准备哪些基础用品？有什么新手容易忽略的细节？",
+    "请简单科普一下为什么运动后会有肌肉酸痛，怎么恢复最快？",
+    "想培养每天晨读的习惯，有什么容易长期坚持的方法？",
+    "推荐几个适合周末短途自驾游的放松活动类型。"
+]
+
+
+def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -> bool:
+    """在当前指纹浏览器上下文里访问 ChatGPT 并完成一轮拟人问答激活。"""
+    try:
+        if step_cb:
+            step_cb("warmup", "准备访问 ChatGPT 主页执行拟人对话激活...")
+        logger.info("[Warmup] 开始为 %s 执行原地对话激活 (模拟自然行为)...", email)
+        
+        # 1. 打开 chatgpt.com
+        try:
+            if hasattr(driver, "page") and hasattr(driver.page, "goto"):
+                driver.page.goto("https://chatgpt.com/", timeout=35000, wait_until="domcontentloaded")
+            else:
+                driver.get("https://chatgpt.com/")
+        except Exception as _nav_e:
+            logger.warning("[Warmup] 导航至 chatgpt.com 提示: %s，继续尝试探测输入框", _nav_e)
+
+        time.sleep(random.uniform(3.0, 5.0))
+        page = getattr(driver, "page", None)
+        
+        # 2. 定位输入框 (兼容 Playwright 与 Selenium 两种模式)
+        input_el = None
+        selectors = [
+            "#prompt-textarea",
+            'div[contenteditable="true"]',
+            'textarea[data-id="root"]',
+            'textarea[placeholder*="Message"]',
+            'textarea[placeholder*="Ask"]',
+            'textarea',
+        ]
+
+        for sel in selectors:
+            try:
+                if page and hasattr(page, "wait_for_selector"):
+                    input_el = page.wait_for_selector(sel, state="visible", timeout=6000)
+                    if input_el:
+                        break
+            except Exception:
+                continue
+
+        if not input_el:
+            logger.warning("[Warmup] 未在当前页面找到 ChatGPT 输入框（可能处于重定向或弹窗中），跳过对话激活")
+            return False
+
+        # 3. 拟人打字输入
+        prompt = random.choice(WARMUP_PROMPTS)
+        if step_cb:
+            step_cb("warmup", f"拟人键入第一条问题: {prompt[:30]}...")
+        logger.info("[Warmup] 选取问题: %s", prompt)
+
+        try:
+            input_el.click()
+            time.sleep(random.uniform(0.3, 0.6))
+            
+            # 拟人逐字打字延迟，并在标点符号处增加停顿
+            for ch in prompt:
+                input_el.type(ch, delay=random.randint(35, 95))
+                if ch in (",", "，", ".", "。", "?", "？", " ", "!"):
+                    time.sleep(random.uniform(0.12, 0.28))
+            time.sleep(random.uniform(0.4, 0.8))
+        except Exception as _type_e:
+            logger.warning("[Warmup] 逐字打字异常，降级一次性填入: %s", _type_e)
+            try:
+                if hasattr(input_el, "fill"):
+                    input_el.fill(prompt)
+                elif hasattr(input_el, "send_keys"):
+                    input_el.send_keys(prompt)
+            except Exception:
+                pass
+
+        # 4. 触发发送
+        if step_cb:
+            step_cb("warmup", "发送问题并等待模型回复 (10~20秒)...")
+        logger.info("[Warmup] 发送问题，等待 ChatGPT 响应生成...")
+
+        sent = False
+        try:
+            # 优先尝试敲击回车
+            if page and hasattr(page, "keyboard"):
+                page.keyboard.press("Enter")
+                sent = True
+        except Exception:
+            sent = False
+
+        if not sent:
+            try:
+                send_btn = page.query_selector('button[data-testid="send-button"]') if page else None
+                if send_btn:
+                    send_btn.click()
+                    sent = True
+            except Exception:
+                pass
+
+        # 5. 等待模型回答生成结束 (检测停止按钮或等待 12~18 秒)
+        start_wait = time.time()
+        time.sleep(random.uniform(5.0, 8.0))
+        
+        # 轮询等待生成完毕 (最多等 20 秒)
+        while time.time() - start_wait < 20:
+            try:
+                # 若页面上有 stop-button 说明仍在流式输出，等待它消失
+                stop_btn = page.query_selector('button[data-testid="stop-button"]') if page else None
+                if not stop_btn:
+                    break
+            except Exception:
+                pass
+            time.sleep(1.5)
+
+        elapsed_warmup = round(time.time() - start_wait, 1)
+        logger.info("[Warmup] ★ 对话激活成功！耗时: %.1fs，已在当前同源指纹会话沉淀首条交互记录: %s", elapsed_warmup, email)
+        if step_cb:
+            step_cb("warmup", f"★ 对话激活完成 (耗时 {elapsed_warmup}s)，已沉淀自然交互日志")
+        return True
+
+    except Exception as exc:
+        logger.warning("[Warmup] 对话激活过程遇到非致命异常: %s (跳过，不阻断主流程)", exc)
+        return False
+
+
 def run_cloak_registration(
     email: str | None,
     name: str,
@@ -233,6 +389,15 @@ def run_cloak_registration(
                 logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=False，注册后跳过 Codex OAuth")
         except Exception as exc:
             codex_result = {"status": "failed", "ok": False, "message": f"{type(exc).__name__}: {str(exc)[:180]}"}
+
+        # 阶段：同源指纹浏览器原地对话激活 (Warm-up 模拟自然行为)
+        codex_ok = bool(codex_result.get("ok")) if enable_codex else True
+        if codex_ok and str(os.environ.get("CODEX_ENABLE_WARMUP", "1")).strip() in ("1", "true", "True"):
+            try:
+                _step("warmup", "复用当前同源指纹浏览器执行原地对话激活 (模拟自然使用，对抗异步审计)")
+                _warmup_chatgpt_conversation(driver, email, step_cb=_step)
+            except Exception as _w_err:
+                logger.warning("[Cloak注册][Warmup] 对话激活跳过或遇到非致命异常: %s", _w_err)
 
         # 统计注册浏览器关闭前的完整会话；注册后停留期间的网络请求也计入。
         post_register_dwell(email, label="Cloak注册")
