@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""单账号 Codex 手机验证与 OAuth 授权，完成后自动同步到 chatgpt2api。"""
+"""单账号 Codex 手机验证与 OAuth 授权，完成后仅同步至 CPA。"""
 import json
 import logging
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -9,7 +10,6 @@ from pathlib import Path
 sys.path.insert(0, "/app/grok-build-auth/openai_client")
 from core.codex_oauth import run_codex_oauth
 from register import _resolve_novproxy_one_ip
-from deliver_codex import sync_to_chatgpt2api
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,15 +55,12 @@ try:
         file_path = res.get("file_path")
         logger.info("★ 授权成功 %s 耗时 %.1fs | 凭证: %s", EMAIL, el, file_path)
         try:
-            logger.info("正在执行 chatgpt2api 自动热同步...")
-            cred_data = json.loads(Path(file_path).read_text(encoding="utf-8"))
-            synced = sync_to_chatgpt2api(cred_data)
-            if synced:
-                logger.info("★ 已成功将 %s 同步并热注入到 chatgpt2api！", EMAIL)
-            else:
-                logger.warning("同步到 chatgpt2api 接口返回非 200/201")
+            logger.info("正在执行 CPA 凭据落盘与同步...")
+            subprocess.run([sys.executable, "/app/grok-build-auth/openai_client/deliver_codex.py", EMAIL], capture_output=True, timeout=120)
+            subprocess.run(["bash", "/app/scripts/sync_codex_to_cpa.sh"], capture_output=True, timeout=120)
+            logger.info("★ 已成功将 %s 凭据同步至 CPA 生产目录！", EMAIL)
         except Exception as de:
-            logger.warning("交付同步异常: %s", de)
+            logger.warning("CPA 交付同步异常: %s", de)
     else:
         logger.info("✕ 授权失败 %s 耗时 %.1fs | 状态: %s | 信息: %s", EMAIL, el, res.get("status"), res.get("message"))
     logger.info("=" * 70)

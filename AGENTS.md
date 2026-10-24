@@ -10,7 +10,7 @@
 ```text
 阶段1 代理  →  阶段2 邮箱  →  阶段3-4 注册  →  阶段5 接码  →  阶段6 换Token  →  阶段7 交付
   ↓            ↓              ↓                ↓              ↓               ↓
-used_ips    email_pool    chatgpt-*.json   activation_id   access_token    PG+CPA+2api
+used_ips    email_pool    chatgpt-*.json   activation_id   access_token      PG+CPA
 ```
 
 **唯一入口：**
@@ -38,6 +38,14 @@ sudo -n docker exec -d gptcli-2api bash -c \
 | `run_batch_hotmail_pipeline.py` | 端到端一体化：从住宅代理、邮箱注册到手机接码、Codex 授权同浏览器一次性完成 | ✅ **唯一生产链路** |
 | 二阶段补跑脚本 `run_batch_existing_codex.py` | 源码已物理删除，禁止任何存量补跑 | ❌ **已彻底删除** |
 | 单独 ChatGPT 账号生产 | 未绑手机号不视为成功，不落盘单独 ChatGPT 凭证 | ❌ **严格禁止** |
+
+## ⛔ 铁律 3：成果仅同步至 CPA，严禁同步到其他任何 API
+
+账号生产成果**只同步到 CPA 生产池与本地数据库存档**：
+1. 写入 `/app/data/cpa_auth_files/codex-<email>-free.json`；
+2. 执行 `sync_codex_to_cpa.sh` 同步至 CPA Manager 的 `auths` 目录（`/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/`）；
+3. 写入 PostgreSQL `accounts` 表存档；
+4. **严禁**向 `chatgpt2api`（端口 3000）、`sub2api` 或其他任何第三方 API 接口进行推送或热同步。用户铁令：**"只同步到CPA，不同步到其他api。"**
 
 ---
 

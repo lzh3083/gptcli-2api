@@ -11,7 +11,7 @@
 ```text
 阶段1 代理  →  阶段2 邮箱  →  阶段3-4 注册  →  阶段5 接码  →  阶段6 换Token  →  阶段7 交付
   ↓            ↓              ↓                ↓              ↓               ↓
-used_ips    email_pool    chatgpt-*.json   activation_id   access_token    PG+CPA+2api
+used_ips    email_pool    chatgpt-*.json   activation_id   access_token      PG+CPA
 ```
 
 **唯一入口脚本：**
@@ -38,6 +38,14 @@ sudo -n docker exec -d gptcli-2api bash -c \
 | :--- | :--- |
 | `run_batch_hotmail_pipeline.py` | ✅ **唯一正确生产链路**（注册+接码一体化） |
 | `run_batch_existing_codex.py` | ❌ **已彻底删除废除** |
+
+## 铁律 3：成果仅同步至 CPA，严禁同步到其他任何 API
+
+账号生产成果**只同步到 CPA 生产池与本地数据库存档**：
+1. 写入 `/app/data/cpa_auth_files/codex-<email>-free.json`；
+2. 执行 `sync_codex_to_cpa.sh` 同步至 CPA Manager 的 `auths` 目录（`/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/`）；
+3. 写入 PostgreSQL `accounts` 表存档；
+4. **严禁**向 `chatgpt2api`（端口 3000）、`sub2api` 或其他任何第三方 API 接口进行推送或热同步。用户铁令：**"只同步到CPA，不同步到其他api。"**
 
 ## 铁律 3：账号交付标准
 
@@ -69,8 +77,8 @@ EMAIL_SOURCE=outlook,cloudflare
 | :--- | :--- |
 | VPS | `oracle-singapore` / `134.185.81.98` |
 | 容器 | `gptcli-2api`（supervisor: registration-sidecar / turnstile-solver / gptcli-2api） |
-| API 网关 | `http://134.185.81.98:3000` |
-| 凭据目录 | `/www/wwwroot/gptcli-2api/data/cpa_auth_files/` |
+| CPA 生产目录 | `/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/` |
+| 凭据归档目录 | `/www/wwwroot/gptcli-2api/data/cpa_auth_files/` |
 | 邮箱池 DB | `/app/grok-build-auth/openai_client/turb.sqlite3` 表 `email_pool` |
 | 失败黑名单 | `/app/data/codex_failed_accounts.json` |
 
@@ -83,7 +91,7 @@ EMAIL_SOURCE=outlook,cloudflare
 | 3-4 注册 | ✅ 通 | 能正常产出 `chatgpt-*.json` |
 | 5 接码 | 🔴 **根本瓶颈** | 能进验证码页，短信到达率极低 |
 | 6 换 Token | ✅ 通 | 存量 28 个证明可用 |
-| 7 交付 | ✅ 通 | chatgpt2api 37 个在线 |
+| 7 交付 | ✅ 通 | 凭据同步至 CPA 生产池 (auths 目录) 与 PostgreSQL |
 
 ---
 
@@ -149,7 +157,7 @@ WHERE status='cooling' AND created_at <= datetime('now','-24 hours');
 2. **重启总是卡在同一批坏号** — 无失败持久化导致每次从队首重跑。已加 `codex_failed_accounts.json`（`e8da6e1`）。
 3. **非 Hotmail 域名取不到 OTP** — `@jgxjs.com` 等自定义域名无邮件上下文。候选限定 hotmail/outlook（`d431569`）。
 4. **Hero-SMS 伪装限流** — 短时间连续取号返回 `NO_NUMBERS`，并非真缺货。失败后仅等 10s 重试会持续撞限流。
-5. **chatgpt2api 查询字段** — `/api/accounts` 返回 `{"items": [...]}`，不是 `accounts`。
+5. **成果同步仅限 CPA 生产池** — 凭证仅同步到 `/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/`，严禁同步到第三方 API 网关（如 chatgpt2api、sub2api 等）。
 6. **老挝 25 全虚拟号** — `physicalCount=0`，验证后易触发 `account_deactivated`，仅作末位兜底。
 7. **误跑二阶段脚本** — 白天改的是 `run_batch_hotmail_pipeline.py`，却启动了 `run_batch_existing_codex.py`，白跑 10 分钟。见铁律 2。
 8. **误判邮箱池枯竭** — `available=0` 实为 cooling 状态无自动恢复，实际 55 个可用。抽检 4 个全失效导致误判。

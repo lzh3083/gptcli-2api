@@ -1,9 +1,19 @@
 #!/bin/bash
 # 阶段7-2：把 codex 凭证同步到 CPA manager 的 auths 目录
 set -u
-SRC=/www/wwwroot/gptcli-2api/data/cpa_auth_files
+
+if [ -d "/app/data/cpa_auth_files" ]; then
+  SRC="/app/data/cpa_auth_files"
+  MANIFEST="/app/data/cpa_sync_manifest.txt"
+elif [ -d "/root/gptcli-2api/data/cpa_auth_files" ]; then
+  SRC="/root/gptcli-2api/data/cpa_auth_files"
+  MANIFEST="/root/gptcli-2api/data/cpa_sync_manifest.txt"
+else
+  SRC="/www/wwwroot/gptcli-2api/data/cpa_auth_files"
+  MANIFEST="/www/wwwroot/gptcli-2api/data/cpa_sync_manifest.txt"
+fi
+
 DST=/www/wwwroot/cpa-manager-plus/cliproxyapi/auths
-MANIFEST=/www/wwwroot/gptcli-2api/data/cpa_sync_manifest.txt
 mkdir -p "$DST"
 n=0; skip=0
 if [ -f "$MANIFEST" ]; then

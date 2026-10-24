@@ -13,11 +13,11 @@ from pathlib import Path
 
 import psycopg
 
-CPA_LOCAL = Path('/app/data/cpa_auth_files')
+CPA_LOCAL = Path('/app/data/cpa_auth_files') if Path('/app/data/cpa_auth_files').exists() else Path('/root/gptcli-2api/data/cpa_auth_files')
 PG_DSN = os.environ.get('PG_DSN', 'postgresql://grok2api:grok2api@gptcli-2api-postgres:5432/grok2api')
 OIDC_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
-# 宿主机 CPA 目录（容器内看不到，写清单给宿主机脚本消费）
-MANIFEST = Path('/app/data/cpa_sync_manifest.txt')
+# 宿主机 CPA 目录（写清单给同步脚本消费）
+MANIFEST = Path('/app/data/cpa_sync_manifest.txt') if Path('/app/data').exists() else Path('/root/gptcli-2api/data/cpa_sync_manifest.txt')
 
 
 def _b64url_decode(s: str) -> bytes:
@@ -34,27 +34,6 @@ def parse_jwt(token: str) -> dict:
     except Exception:
         return {}
 
-
-def sync_to_chatgpt2api(cred: dict) -> bool:
-    import urllib.request
-    auth_key = "X1HmVbEhEl6--KCmBlw0Le_l_93xwhoxtb2ZdBmM1M6MtbJml8jd9MDi-vA4E4RE"
-    body = json.dumps({"accounts": [cred], "tokens": []}).encode("utf-8")
-    for endpoint in ["http://172.17.0.1:3000/api/accounts", "http://134.185.81.98:3000/api/accounts"]:
-        try:
-            req = urllib.request.Request(
-                endpoint,
-                data=body,
-                headers={
-                    "Authorization": "Bearer " + auth_key,
-                    "Content-Type": "application/json"
-                }
-            )
-            with urllib.request.urlopen(req, timeout=10) as res:
-                if res.status == 200:
-                    return True
-        except Exception:
-            continue
-    return False
 
 def build_payload(cred: dict) -> tuple[dict, str, str]:
     """返回 (payload, id, user_id)"""
@@ -159,11 +138,6 @@ def main():
                 stats[act] += 1
                 stats['synced'].append(f.name)
                 print(f'✅ [{act}] {email}  id={row_id}  exp={expires_at.isoformat()}')
-                try:
-                    sync_to_chatgpt2api(cred)
-                    print(f'  > 同步 chatgpt2api 成功: {email}')
-                except Exception as _c2e:
-                    print(f'  > 同步 chatgpt2api 异常: {_c2e}')
                 try:
                     sys.path.insert(0, '/app')
                     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

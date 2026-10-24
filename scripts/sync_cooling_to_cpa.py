@@ -5,7 +5,7 @@
 功能:
   1. 扫描 cpa_cooling/ 沉淀目录下的所有 codex-*.json 凭证;
   2. 检查冷却时长 (默认 3 小时，可通过 CODEX_COOLING_HOURS 配置);
-  3. 对已达到沉淀时长的成熟账号，自动流转到 cpa_auth_files/，并同步至 CPA 生产池与 sub2api;
+  3. 对已达到沉淀时长的成熟账号，自动流转到 cpa_auth_files/，并同步至 CPA 生产池;
   4. 支持参数:
      --force: 强制立即流转所有冷却中账号 (跳过沉淀时间检查)
      --status: 仅查看当前沉淀池状态，不执行流转
@@ -145,20 +145,6 @@ def check_and_promote(force: bool = False, status_only: bool = False) -> None:
                     shutil.copy2(target_f, cpa_host_dir / target_f.name)
                 except Exception:
                     pass
-
-    for email in promoted_emails:
-        target_f = prod_dir / f"codex-{email}-free.json"
-        if target_f.is_file():
-            try:
-                if "/app" not in sys.path:
-                    sys.path.insert(0, "/app")
-                if str(Path(__file__).resolve().parents[1]) not in sys.path:
-                    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-                from grok2api.upstream.sub2api_client import push_codex_account_to_sub2api
-                res = push_codex_account_to_sub2api(str(target_f))
-                logger.info(f"  > [sub2api] 自动推送结果 {email}: {res}")
-            except Exception as pe:
-                logger.debug(f"  > [sub2api] 跳过推送: {pe}")
 
     logger.info("=" * 60)
     logger.info(f"🎉 批量流转完成！共激活交付 {len(promoted_emails)} 个成熟 Codex 账号。")

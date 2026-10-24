@@ -13,7 +13,7 @@
                                                               │
         ┌─────────────────────────────────────────────────────┘
         ▼
-[阶段 5: 手机接码与防风控] ──> [阶段 6: Codex PKCE 授权] ──> [阶段 7: 双端交付热同步]
+[阶段 5: 手机接码与防风控] ──> [阶段 6: Codex PKCE 授权] ──> [阶段 7: 凭据落盘与 CPA 专用同步]
 ```
 
 入口脚本：`grok-build-auth/openai_client/run_batch_hotmail_pipeline.py`
@@ -139,25 +139,19 @@ PKCE          = code_challenge_method=S256
 
 ---
 
-## 阶段 7：双端落盘交付与 chatgpt2api 热同步
+## 阶段 7：凭据落盘与 CPA 专用同步
 
-**核心逻辑**：成果即时入库投产，无需人工干预。
+**核心逻辑**：成果仅同步至 CPA（CPA Manager Plus / CLI Proxy API）与数据库存档，严禁推送到任何其他 API 网关（如 chatgpt2api、sub2api 等）。
 
 | 步骤 | 动作 |
 | :--- | :--- |
 | ① | 解析 `id_token` 取 `user_id` |
-| ② | upsert PostgreSQL |
+| ② | upsert PostgreSQL 数据库存档 |
 | ③ | 写 `/app/data/cpa_auth_files/codex-<email>-free.json` |
-| ④ | 写 `cpa_sync_manifest.txt` |
-| ⑤ | `POST http://172.17.0.1:3000/api/accounts`（Bearer auth） |
+| ④ | 写 `cpa_sync_manifest.txt` 同步清单 |
+| ⑤ | 执行 `/app/scripts/sync_codex_to_cpa.sh` 自动同步至 CPA 生产池 `/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/` |
 
-网关无需重启，实时加载新账号并刷新配额，直接对外提供 API 转发。
-
-查询接口返回字段为 `items`（不是 `accounts`）：
-
-```bash
-curl -H "Authorization: Bearer <AUTH_KEY>" http://134.185.81.98:3000/api/accounts
-```
+CPA Manager 自动检测并热加载 `auths` 目录凭据，无需向外部 API 端口进行二次热同步。
 
 ---
 
@@ -165,9 +159,9 @@ curl -H "Authorization: Bearer <AUTH_KEY>" http://134.185.81.98:3000/api/account
 
 | 脚本 | 用途 | 判定 |
 | :--- | :--- | :--- |
-| `run_batch_hotmail_pipeline.py <N>` | **完整闭环**：阶段 1-4 注册 + 阶段 5-6 接码授权 + 阶段 7 落盘（同浏览器一次性完成） | ✅ **唯一正确入口** |
+| `run_batch_hotmail_pipeline.py <N>` | **完整闭环**：阶段 1-4 注册 + 阶段 5-6 接码授权 + 阶段 7 落盘 CPA（同浏览器一次性完成） | ✅ **唯一正确入口** |
 | `run_batch_existing_codex.py` | 历史二阶段存量补跑脚本 | ❌ **已彻底删除废除** |
-| `deliver_codex.py <email>` | 单独补交付（PG + CPA + chatgpt2api） | ✅ 辅助 |
+| `deliver_codex.py <email>` | 单独补交付（PostgreSQL + CPA 凭据） | ✅ 辅助 |
 | `run_single_codex.py` | 单账号手动触发 | ✅ 辅助 |
 
 ### 生产质量保障

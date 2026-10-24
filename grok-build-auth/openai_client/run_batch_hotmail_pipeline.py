@@ -226,17 +226,9 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
                 # cooling_hours <= 0 直通交付
                 try:
                     _sp.run(['bash', '/app/scripts/sync_codex_to_cpa.sh'], capture_output=True, timeout=120)
-                    logger.info(f"  > [即时交付] 已同步 CPA 目录并热生效: {email}")
+                    logger.info(f"  > [即时交付] 已同步 CPA 生产目录: {email}")
                 except Exception as _se:
                     logger.warning(f"  > [即时交付] 同步 CPA 异常: {_se}")
-                try:
-                    import sys as _sys
-                    if '/app' not in _sys.path: _sys.path.insert(0, '/app')
-                    from grok2api.upstream.sub2api_client import push_codex_account_to_sub2api
-                    push_res = push_codex_account_to_sub2api(cpa_file)
-                    logger.info(f"  > [sub2api 推送] 结果: {push_res}")
-                except Exception as _p_err:
-                    logger.warning(f"  > [sub2api 推送] 异常: {_p_err}")
         else:
             err = res_data.get("error") or (f"non_zero_exit_{proc.returncode}" if proc.returncode != 0 else "codex_phone_unverified")
             logger.warning(f"✕ [Codex 流程未完成] {email} 耗时: {elapsed:.1f}s | 错误原因: {err}")

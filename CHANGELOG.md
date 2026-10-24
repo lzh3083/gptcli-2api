@@ -41,11 +41,11 @@ All notable changes to `gptcli-2api` will be documented in this file.
     - 固化 240 秒深度等待窗口与满 125 秒后台自动退款机制，100% 保护账户资金；
     - 增加 HTTP 409 会话失效与 `invalid_auth_step` 即时熔断机制，杜绝无效消耗号码与余额。
   - **阶段 6：独立 Codex PKCE 授权**：在同一独立住宅代理环境下，直连 ChatGPT 授权端换取 `id_token`、`access_token` 与 `refresh_token` 长效凭证。
-  - **阶段 7：多端资产持久化与热同步**：
+  - **阶段 7：CPA 专用资产持久化与同步**：
     - 本地落盘标准 `codex-<email>-free.json`；
     - 自动持久化写入 PostgreSQL `accounts` 表（`cliproxyapi_type='codex'`）；
     - 自动同步至 CPA 凭证目录 `/www/wwwroot/cpa-manager-plus/cliproxyapi/auths/`；
-    - 自动调用热同步接口更新至本地 `chatgpt2api`（端口 3000）。
+    - 严格杜绝向第三方 API 网关（如 `chatgpt2api`、`sub2api`）进行多余分发，确保资产专供 CPA 生产池使用。
 
 - **工程版本治理规范践行**：
   - 遵循 SemVer 规范，同步推进 `grok2api/app.py`、`internal/buildinfo/buildinfo.go` 版本号至 `v1.3.0`，附带完整发行说明与对应 Git Tag `v1.3.0`。
