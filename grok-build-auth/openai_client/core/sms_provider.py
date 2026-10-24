@@ -555,13 +555,13 @@ def acquire_number(
             max_price = str(getattr(_cfg, "FIVESIM_MAX_PRICE", "") or getattr(_cfg, "SMS_MAX_PRICE", "") or "0.075").strip()
             limit = float(max_price) if max_price else 0.075
 
-            # 5sim 购买：若未指定具体 operator，按低价列表轮询购买；如果是英国，直接使用 virtual51/virtual60/virtual59（均为 $0.0609）
+            # 5sim 购买：若未指定具体 operator，优先按高收码率号段轮询（virtual66: ~30%, virtual58: ~20%）
             if f_operator != "any":
                 candidates_ops = [f_operator]
             elif f_country == "england":
-                candidates_ops = ["virtual51", "virtual60", "virtual59"]
+                candidates_ops = ["virtual66", "virtual58", "virtual53", "virtual34", "virtual51", "virtual60", "virtual59"]
             else:
-                candidates_ops = ["virtual51", "virtual60", "virtual59", "virtual34", "virtual66", "virtual21", "any"]
+                candidates_ops = ["virtual66", "virtual58", "virtual63", "virtual51", "virtual60", "virtual59", "virtual34", "virtual21", "any"]
 
             last_buy_err = None
             valid_data = None

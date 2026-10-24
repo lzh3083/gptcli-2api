@@ -61,8 +61,8 @@ config.codex.FORCE_PHONE_VERIFICATION = True
 config.codex.SMS_CODE_WAIT = 90
 config.codex.SMS_PROVIDER = "fivesim"
 config.codex.SMS_COUNTRY = "england"
-config.codex.SMS_MAX_PRICE = "0.075"
-config.codex.FIVESIM_MAX_PRICE = "0.075"
+config.codex.SMS_MAX_PRICE = "0.25"
+config.codex.FIVESIM_MAX_PRICE = "0.25"
 config.codex.FIVESIM_OPERATOR = "any"
 fivesim_key = os.environ.get("FIVESIM_API_KEY") or getattr(config.codex, "FIVESIM_API_KEY", "")
 if not fivesim_key and os.path.exists("/app/data/config.json"):
@@ -77,8 +77,8 @@ if fivesim_key:
     os.environ["FIVESIM_API_KEY"] = fivesim_key
 os.environ["SMS_PROVIDER"] = "fivesim"
 os.environ["SMS_COUNTRY"] = "england"
-os.environ["SMS_MAX_PRICE"] = "0.075"
-os.environ["FIVESIM_MAX_PRICE"] = "0.075"
+os.environ["SMS_MAX_PRICE"] = "0.25"
+os.environ["FIVESIM_MAX_PRICE"] = "0.25"
 os.environ["FIVESIM_OPERATOR"] = "any"
 
 from register import run_openai_registration
