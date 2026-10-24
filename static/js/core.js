@@ -1833,14 +1833,27 @@ function renderStats() {
   const d = dashCache || {};
   // Prefer live /status pool counters over possibly-stale /dashboard cache.
   const pool = Object.assign({}, d.pool || {}, s.pool || {});
-  const credOk = !(d.credentials && d.credentials.error) && (s.credentials_ok || (pool.live > 0));
+  const total = Number(pool.total ?? (d.accounts && d.accounts.account_count) ?? (s.accounts && s.accounts.account_count) ?? 0);
+  const live = Number(pool.live ?? pool.enabled ?? (d.accounts && d.accounts.active_count) ?? (s.accounts && s.accounts.active_count) ?? 0);
+  const credOk = !(d.credentials && d.credentials.error) && (s.credentials_ok || live > 0);
   const pill = $("status-pill");
-  if (credOk) {
-    pill.className = "g2a-tag ok";
-    pill.textContent = "● 已登录 " + (s.credentials_email || "") + " · " + (d.account_mode || s.account_mode || "");
-  } else {
-    pill.className = "g2a-tag bad";
-    pill.textContent = "● 未登录 / 凭证异常";
+  if (pill) {
+    if (live > 0) {
+      pill.className = "g2a-tag ok";
+      pill.textContent = "● 账号就绪 (" + live + " 可用) · " + (d.account_mode || s.account_mode || "轮询");
+    } else if (total === 0) {
+      pill.className = "g2a-tag";
+      pill.textContent = "⚪ 账号池待建号 (可用 0)";
+    } else if (credOk) {
+      pill.className = "g2a-tag ok";
+      pill.textContent = "● 已登录 " + (s.credentials_email || "") + " · " + (d.account_mode || s.account_mode || "");
+    } else if (d.credentials && d.credentials.error) {
+      pill.className = "g2a-tag bad";
+      pill.textContent = "● 凭证异常";
+    } else {
+      pill.className = "g2a-tag warn";
+      pill.textContent = "⚠️ 账号全冷却/待更新 (0/" + total + ")";
+    }
   }
   const keys = d.keys || s.keys || {};
   const acc = d.accounts || s.accounts || {};
