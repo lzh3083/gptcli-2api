@@ -1098,14 +1098,15 @@
 
     <!-- 手动收信与接码模态框（支持收件箱列表与邮件正文完整查看） -->
     <div class="g2a-modal-mask" id="modal-email-otp" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
-      <div class="g2a-card" style="max-width:820px;width:95%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 36px rgba(0,0,0,0.6);margin:auto;">
+      <div class="g2a-card" style="max-width:840px;width:95%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 36px rgba(0,0,0,0.6);margin:auto;">
         <div class="g2a-card-head" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border-color, #333);">
           <div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <h3 id="modal-otp-email" style="margin:0;font-size:1.15rem;">邮箱收信接码</h3>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <h3 id="modal-otp-title" style="margin:0;font-size:1.15rem;">邮箱收信接码</h3>
+              <span id="modal-otp-email" class="mono" style="font-size:0.85rem;color:#10b981;font-weight:600;"></span>
               <span id="modal-otp-status" class="g2a-tag ok" style="font-size:0.72rem;">就绪</span>
             </div>
-            <span class="g2a-muted" style="font-size:0.75rem;">通过 Microsoft Graph API / 直连 IMAP 秒级拉取收件箱邮件与验证码</span>
+            <span id="modal-otp-desc" class="g2a-muted" style="font-size:0.75rem;">通过 Microsoft Graph API / 直连 IMAP 秒级拉取收件箱邮件与验证码</span>
           </div>
           <button class="g2a-btn g2a-btn-default g2a-btn-sm" id="btn-modal-otp-close">✕</button>
         </div>
@@ -1113,7 +1114,7 @@
         <!-- 视图 1：收件箱列表与最新验证码视图 -->
         <div id="modal-otp-list-view" style="overflow-y:auto;flex:1;padding-right:4px;">
           <!-- 核心高亮：最新验证码大卡片 -->
-          <div style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.08));border:1px solid rgba(16,185,129,0.35);border-radius:10px;padding:16px;text-align:center;margin-bottom:16px;">
+          <div id="modal-otp-card-wrap" style="background:linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.08));border:1px solid rgba(16,185,129,0.35);border-radius:10px;padding:16px;text-align:center;margin-bottom:16px;">
             <div style="font-size:0.8rem;color:var(--text-muted,#aaa);letter-spacing:1px;">最新提取的 6 位数字验证码 (OTP)</div>
             <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:10px 0;">
               <span id="modal-otp-code" style="font-size:2.4rem;font-weight:800;letter-spacing:6px;font-family:monospace;color:#10b981;user-select:all;">------</span>
@@ -1183,6 +1184,6 @@
   <script src="/static/dist/api.9ddb30423c.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/state.da9974e23b.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
   <script src="/static/dist/auth.3ec19fa51e.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
-  <script src="/static/dist/core.c53577257c.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
+  <script src="/static/dist/core.8ef22333fc.js" onerror="window.__g2aScriptFailed&&__g2aScriptFailed(this)"></script>
 </body>
 </html>

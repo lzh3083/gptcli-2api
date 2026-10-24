@@ -12995,6 +12995,7 @@ function renderEmailPoolTable() {
 
     // 操作
     const actionsCell = `
+      <button class="g2a-btn g2a-btn-default g2a-btn-sm" style="color:#0ea5e9;border-color:rgba(14,165,233,0.4);" data-act="email-view-mail" data-email="${email}" title="在线读取收件箱所有邮件并查看完整正文">查看邮件</button>
       <button class="g2a-btn g2a-btn-primary g2a-btn-sm" data-act="email-otp" data-email="${email}" title="在线读取收件箱邮件并提取最新 6 位数字验证码">收信接码</button>
       <button class="g2a-btn g2a-btn-default g2a-btn-sm" data-act="email-check-one" data-email="${email}" title="单独对该邮箱测活并检测是否已在 OpenAI 注册">测活</button>
       <button class="g2a-btn g2a-btn-danger g2a-btn-sm" data-act="email-delete-one" data-email="${email}">删除</button>
@@ -13235,14 +13236,30 @@ async function deleteSingleEmail(email) {
 }
 
 // 手动接码模态框
-function openEmailOtpModal(email) {
+function openEmailOtpModal(email, mode = "otp") {
   currentOtpEmail = email;
   currentMailboxMessages = [];
   const m = $("modal-email-otp");
   if (!m) return;
   m.style.display = "flex";
   backToMailListView();
-  if ($("modal-otp-email")) $("modal-otp-email").textContent = email;
+
+  const isMailMode = mode === "mail";
+  if ($("modal-otp-title")) {
+    $("modal-otp-title").textContent = isMailMode ? "📧 邮箱收件箱查看" : "📬 邮箱收信接码";
+  }
+  if ($("modal-otp-email")) {
+    $("modal-otp-email").textContent = email;
+  }
+  if ($("modal-otp-desc")) {
+    $("modal-otp-desc").textContent = isMailMode
+      ? "在线读取该邮箱收件箱邮件列表，点击任意邮件即可查看富文本 HTML 或纯文本正文内容"
+      : "通过 Microsoft Graph API / 直连 IMAP 秒级拉取收件箱邮件与验证码";
+  }
+  if ($("modal-otp-card-wrap")) {
+    $("modal-otp-card-wrap").style.display = isMailMode ? "none" : "block";
+  }
+
   if ($("modal-otp-code")) $("modal-otp-code").textContent = "------";
   if ($("modal-otp-meta")) $("modal-otp-meta").textContent = "正在通过 Microsoft Graph/IMAP 协议读取收件箱…";
   if ($("modal-otp-fetch-hint")) $("modal-otp-fetch-hint").textContent = "拉取中…";
@@ -13514,8 +13531,10 @@ function bindEmailPoolControls() {
       if (!btn) return;
       const act = btn.dataset.act;
       const em = btn.dataset.email;
-      if (act === "email-otp") {
-        openEmailOtpModal(em);
+      if (act === "email-view-mail") {
+        openEmailOtpModal(em, "mail");
+      } else if (act === "email-otp") {
+        openEmailOtpModal(em, "otp");
       } else if (act === "email-check-one") {
         checkSingleEmail(em);
       } else if (act === "email-delete-one") {
