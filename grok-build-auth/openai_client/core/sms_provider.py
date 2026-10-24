@@ -541,7 +541,8 @@ def acquire_number(
         if _provider() == "fivesim":
             _f_map = {
                 "16": "england", "73": "brazil", "117": "portugal",
-                "england": "england", "brazil": "brazil", "portugal": "portugal"
+                "england": "england", "netherlands": "netherlands", "poland": "poland",
+                "brazil": "brazil", "portugal": "portugal"
             }
             f_country_raw = str(country or _cfg.SMS_COUNTRY or "england").strip().lower()
             # 若传入的是逗号隔开的列表，取第一个
@@ -552,16 +553,20 @@ def acquire_number(
             if f_product in ("dr", "chatgpt"):
                 f_product = "openai"
             f_operator = _fivesim_operator(f_country)
-            max_price = str(getattr(_cfg, "FIVESIM_MAX_PRICE", "") or getattr(_cfg, "SMS_MAX_PRICE", "") or "0.075").strip()
-            limit = float(max_price) if max_price else 0.075
+            # 用户铁令：最高单价限额放宽至 0.075 美元（锁死禁止变动）
+            limit = 0.075
 
-            # 5sim 购买：若未指定具体 operator，优先按高收码率号段轮询（virtual66: ~30%, virtual58: ~20%）
+            # 5sim 购买：若未指定具体 operator，优先按各国家 <= $0.075 的号段轮询
             if f_operator != "any":
                 candidates_ops = [f_operator]
+            elif f_country == "netherlands":
+                candidates_ops = ["virtual60", "virtual59", "any"]
+            elif f_country == "poland":
+                candidates_ops = ["virtual51", "virtual59", "virtual60", "virtual53", "virtual21", "any"]
             elif f_country == "england":
-                candidates_ops = ["virtual66", "virtual58", "virtual53", "virtual34", "virtual51", "virtual60", "virtual59"]
+                candidates_ops = ["virtual51", "virtual60", "virtual59", "any"]
             else:
-                candidates_ops = ["virtual66", "virtual58", "virtual63", "virtual51", "virtual60", "virtual59", "virtual34", "virtual21", "any"]
+                candidates_ops = ["virtual51", "virtual60", "virtual59", "virtual53", "virtual21", "any"]
 
             last_buy_err = None
             valid_data = None
