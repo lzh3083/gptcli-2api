@@ -311,12 +311,16 @@ def fetch_mailbox_otp_and_messages(email: str) -> dict[str, Any]:
             latest_otp_subject = subj
             latest_otp_time = date_str
 
+        text_body = str(msg.get("text") or msg.get("snippet") or preview or "")
         normalized_list.append({
             "id": msg.get("id"),
             "subject": subj,
             "from": sender,
             "date": date_str,
             "preview": preview or (html_body[:100] if html_body else ""),
+            "body_html": html_body,
+            "body_text": text_body,
+            "has_html": bool(html_body),
             "otp": otp,
             "is_openai": is_openai,
         })

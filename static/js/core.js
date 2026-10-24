@@ -6282,13 +6282,14 @@ function syncRegConcurrencyWarning() {
 
 // Per-provider mail fields: each provider has dedicated DOM inputs + DB slots.
 // Switching the dropdown only toggles visibility; values never share one input.
-const REG_MAIL_PROVIDERS = ["moemail", "yyds", "gptmail", "cfmail", "tempmail"];
+const REG_MAIL_PROVIDERS = ["moemail", "yyds", "gptmail", "cfmail", "tempmail", "outlook"];
 const REG_MAIL_KEY_SLOTS = {
   moemail: "moemail_api_key",
   yyds: "yyds_api_key",
   gptmail: "gptmail_api_key",
   cfmail: "cfmail_api_key",
   tempmail: "tempmail_api_key",
+  outlook: null,
 };
 const REG_MAIL_DOMAIN_SLOTS = {
   moemail: "moemail_domain",
@@ -6296,10 +6297,12 @@ const REG_MAIL_DOMAIN_SLOTS = {
   gptmail: "gptmail_domain",
   cfmail: "cfmail_domain",
   tempmail: "tempmail_domain",
+  outlook: null,
 };
 const REG_MAIL_BASE_SLOTS = {
   moemail: "moemail_base_url",
   cfmail: "cfmail_base_url",
+  outlook: null,
 };
 const REG_MAIL_INPUT_IDS = {
   moemail: { key: "reg-moemail-api-key", domain: "reg-moemail-domain", base: "reg-moemail-base-url" },
@@ -6307,17 +6310,19 @@ const REG_MAIL_INPUT_IDS = {
   gptmail: { key: "reg-gptmail-api-key", domain: "reg-gptmail-domain", base: null },
   cfmail: { key: "reg-cfmail-api-key", domain: "reg-cfmail-domain", base: "reg-cfmail-base-url" },
   tempmail: { key: "reg-tempmail-api-key", domain: "reg-tempmail-domain", base: null },
+  outlook: { key: null, domain: null, base: null },
 };
 // In-memory cache (mirrors dedicated inputs / DB). Empty string = cleared.
-let regMailKeys = { moemail: "", yyds: "", gptmail: "", cfmail: "", tempmail: "" };
-let regMailDomains = { moemail: "", yyds: "", gptmail: "", cfmail: "", tempmail: "" };
-let regMailBaseUrls = { moemail: "", cfmail: "" };
+let regMailKeys = { moemail: "", yyds: "", gptmail: "", cfmail: "", tempmail: "", outlook: "" };
+let regMailDomains = { moemail: "", yyds: "", gptmail: "", cfmail: "", tempmail: "", outlook: "" };
+let regMailBaseUrls = { moemail: "", cfmail: "", outlook: "" };
 let regMailProviderPrev = "moemail";
 
 function currentRegMailProvider() {
   const mail = $("reg-mail-provider")
     ? ($("reg-mail-provider").value || "moemail").trim().toLowerCase()
     : "moemail";
+  if (mail === "outlook" || mail === "hotmail" || mail === "email_pool" || mail === "microsoft") return "outlook";
   if (mail === "yyds") return "yyds";
   if (mail === "gptmail") return "gptmail";
   if (mail === "cfmail") return "cfmail";
@@ -6402,6 +6407,7 @@ function paintRegMailFieldsToInput() {
 function regMailProviderMeta(mail) {
   const m = mail || "moemail";
   const table = {
+    outlook: { title: "微软邮箱池 (Hotmail / Outlook)", help: "直接从微软邮箱池自动按序拾取可用邮箱，无需配置临时域名或第三方Key", temp24h: false },
     moemail: { title: "MoeMail", help: "", temp24h: false },
     yyds: { title: "YYDS Mail", help: "X-API-Key: AC-… · https://maliapi.215.im/v1 · 文档 vip.215.im/docs", temp24h: true },
     gptmail: { title: "GPTMail", help: "X-API-Key: sk-… · https://mail.chatgpt.org.uk/zh/api/", temp24h: true },
@@ -6419,6 +6425,15 @@ function syncRegMailProviderUI(opts) {
   regMailProviderPrev = mail;
   const meta = regMailProviderMeta(mail);
   const isTemp24h = !!meta.temp24h;
+
+  if (mail === "outlook") {
+    api("/email-pool/summary").then((res) => {
+      if (res && res.ok) {
+        if ($("reg-outlook-available")) $("reg-outlook-available").textContent = String(res.available || 0);
+        if ($("reg-outlook-total")) $("reg-outlook-total").textContent = String(res.total || 0);
+      }
+    }).catch(() => {});
+  }
 
   if ($("reg-mail-help")) {
     // No long marketing/help copy — keep the box hidden.
@@ -12878,6 +12893,7 @@ let emailPoolSearchQuery = "";
 let selectedEmailPoolEmails = new Set();
 let emailOtpPollTimer = null;
 let currentOtpEmail = "";
+let currentMailboxMessages = [];
 
 function updateEmailPoolSummaryUI(s) {
   if (!s) return;
@@ -13208,9 +13224,11 @@ async function deleteSingleEmail(email) {
 // 手动接码模态框
 function openEmailOtpModal(email) {
   currentOtpEmail = email;
+  currentMailboxMessages = [];
   const m = $("modal-email-otp");
   if (!m) return;
   m.style.display = "flex";
+  backToMailListView();
   if ($("modal-otp-email")) $("modal-otp-email").textContent = email;
   if ($("modal-otp-code")) $("modal-otp-code").textContent = "------";
   if ($("modal-otp-meta")) $("modal-otp-meta").textContent = "正在通过 Microsoft Graph/IMAP 协议读取收件箱…";
@@ -13238,6 +13256,89 @@ function hideEmailOtpModal() {
     emailOtpPollTimer = null;
   }
   currentOtpEmail = "";
+  currentMailboxMessages = [];
+}
+
+function backToMailListView() {
+  if ($("modal-otp-detail-view")) $("modal-otp-detail-view").style.display = "none";
+  if ($("modal-otp-list-view")) $("modal-otp-list-view").style.display = "block";
+}
+
+function showMailDetailView(idx) {
+  const m = currentMailboxMessages[idx];
+  if (!m) {
+    toast("未找到该邮件详情", false);
+    return;
+  }
+  if ($("modal-otp-list-view")) $("modal-otp-list-view").style.display = "none";
+  if ($("modal-otp-detail-view")) $("modal-otp-detail-view").style.display = "block";
+
+  if ($("modal-mail-subject")) $("modal-mail-subject").textContent = m.subject || "(无主题)";
+  if ($("modal-mail-from")) $("modal-mail-from").textContent = m.from || "未知";
+  if ($("modal-mail-date")) $("modal-mail-date").textContent = m.date || "—";
+  if ($("modal-mail-view-type")) {
+    $("modal-mail-view-type").textContent = m.has_html ? "富文本 HTML 邮件" : "纯文本邮件";
+    $("modal-mail-view-type").className = m.has_html ? "g2a-tag ok" : "g2a-tag";
+  }
+
+  const otpBanner = $("modal-mail-otp-banner");
+  if (otpBanner) {
+    if (m.otp) {
+      otpBanner.style.display = "flex";
+      if ($("modal-mail-otp-val")) $("modal-mail-otp-val").textContent = m.otp;
+      if ($("btn-modal-mail-copy-otp")) {
+        $("btn-modal-mail-copy-otp").onclick = () => {
+          navigator.clipboard.writeText(m.otp);
+          toast(`验证码 ${m.otp} 已复制到剪贴板！`);
+        };
+      }
+    } else {
+      otpBanner.style.display = "none";
+    }
+  }
+
+  const container = $("modal-mail-body-container");
+  if (container) {
+    container.innerHTML = "";
+    if (m.body_html) {
+      const iframe = document.createElement("iframe");
+      iframe.style.width = "100%";
+      iframe.style.border = "none";
+      iframe.style.minHeight = "420px";
+      iframe.sandbox = "allow-same-origin";
+      container.appendChild(iframe);
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.6; margin: 12px; word-break: break-word; background: #fff; }
+          a { color: #10a37f; }
+          img { max-width: 100%; height: auto; }
+        </style></head>
+        <body>${m.body_html}</body>
+        </html>
+      `);
+      doc.close();
+      setTimeout(() => {
+        try {
+          const h = (doc.body && doc.body.scrollHeight) || 420;
+          if (h > 420) iframe.style.height = (h + 30) + "px";
+        } catch (_) {}
+      }, 150);
+    } else {
+      const pre = document.createElement("pre");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.style.wordBreak = "break-all";
+      pre.style.fontFamily = "monospace";
+      pre.style.fontSize = "0.85rem";
+      pre.style.color = "#111";
+      pre.style.margin = "0";
+      pre.textContent = m.body_text || m.preview || "(空邮件)";
+      container.appendChild(pre);
+    }
+  }
 }
 
 async function fetchMailboxOtp(email, isSilent = false) {
@@ -13270,14 +13371,14 @@ async function fetchMailboxOtp(email, isSilent = false) {
       }
 
       // 渲染邮件列表
-      const msgs = res.messages || [];
-      if ($("modal-otp-msg-count")) $("modal-otp-msg-count").textContent = String(msgs.length);
+      currentMailboxMessages = res.messages || [];
+      if ($("modal-otp-msg-count")) $("modal-otp-msg-count").textContent = String(currentMailboxMessages.length);
       const listEl = $("modal-otp-msg-list");
       if (listEl) {
-        if (!msgs.length) {
+        if (!currentMailboxMessages.length) {
           listEl.innerHTML = `<div class="g2a-muted" style="text-align:center;padding:20px 0;">收件箱为空</div>`;
         } else {
-          listEl.innerHTML = msgs.map((m) => {
+          listEl.innerHTML = currentMailboxMessages.map((m, idx) => {
             const isOai = m.is_openai;
             const bg = isOai ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.02)";
             const border = isOai ? "1px solid rgba(16,185,129,0.3)" : "1px solid var(--border-color,#333)";
@@ -13285,12 +13386,15 @@ async function fetchMailboxOtp(email, isSilent = false) {
             const otpBadge = m.otp ? `<span class="g2a-tag ok" style="background:#10b981;color:#fff;font-weight:bold;margin-right:6px;">验证码: ${esc(m.otp)}</span>` : '';
 
             return `
-              <div style="background:${bg};border:${border};border-radius:6px;padding:10px 12px;">
+              <div style="background:${bg};border:${border};border-radius:6px;padding:12px 14px;cursor:pointer;transition:border-color 0.2s;" data-act="view-mail-detail" data-idx="${idx}" title="点击查看完整邮件正文">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                  <div style="font-weight:600;font-size:0.85rem;color:var(--text-color,#eee);display:flex;align-items:center;">
+                  <div style="font-weight:600;font-size:0.88rem;color:var(--text-color,#eee);display:flex;align-items:center;">
                     ${oaiBadge}${otpBadge}<span>${esc(m.subject || "(无主题)")}</span>
                   </div>
-                  <span class="muted" style="font-size:0.75rem;">${esc(m.date || "")}</span>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="muted" style="font-size:0.75rem;">${esc(m.date || "")}</span>
+                    <button type="button" class="g2a-btn g2a-btn-default g2a-btn-xs" style="padding:2px 8px;font-size:0.72rem;" data-act="view-mail-detail" data-idx="${idx}">查看正文 ➔</button>
+                  </div>
                 </div>
                 <div class="muted" style="font-size:0.75rem;margin-bottom:4px;">发件人: ${esc(m.from || "未知")}</div>
                 <div class="muted mono" style="font-size:0.75rem;background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:4px;word-break:break-all;">
@@ -13502,6 +13606,20 @@ function bindEmailPoolControls() {
   if ($("btn-modal-otp-ok") && !$("btn-modal-otp-ok")._bound) {
     $("btn-modal-otp-ok")._bound = true;
     $("btn-modal-otp-ok").onclick = hideEmailOtpModal;
+  }
+  if ($("btn-modal-otp-back-list") && !$("btn-modal-otp-back-list")._bound) {
+    $("btn-modal-otp-back-list")._bound = true;
+    $("btn-modal-otp-back-list").onclick = backToMailListView;
+  }
+  if ($("modal-otp-msg-list") && !$("modal-otp-msg-list")._bound) {
+    $("modal-otp-msg-list")._bound = true;
+    $("modal-otp-msg-list").addEventListener("click", (e) => {
+      const target = e.target.closest("[data-act='view-mail-detail']");
+      if (target) {
+        const idx = parseInt(target.dataset.idx, 10);
+        if (!isNaN(idx)) showMailDetailView(idx);
+      }
+    });
   }
   if ($("btn-modal-otp-refresh") && !$("btn-modal-otp-refresh")._bound) {
     $("btn-modal-otp-refresh")._bound = true;
