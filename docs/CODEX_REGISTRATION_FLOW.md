@@ -162,11 +162,13 @@ CPA Manager 自动检测并热加载 `auths` 目录凭据，无需向外部 API 
 | `run_batch_hotmail_pipeline.py <N>` | **完整闭环**：阶段 1-4 注册 + 阶段 5-6 接码授权 + 阶段 7 落盘 CPA（同浏览器一次性完成） | ✅ **唯一正确入口** |
 | `run_batch_existing_codex.py` | 历史二阶段存量补跑脚本 | ❌ **已彻底删除废除** |
 | `deliver_codex.py <email>` | 单独补交付（PostgreSQL + CPA 凭据） | ✅ 辅助 |
-| `run_single_codex.py` | 单账号手动触发 | ✅ 辅助 |
+| `run_single_codex.py <email>` | 单账号手动触发重新授权换 Token，支持 `account_deactivated` 自动清理废弃 | ✅ 辅助 |
+| `auto_revive_codex.py` | **24 小时冷却复活调度器**：追踪会话吊销账号，冷冻 24h 后通过干净住宅代理重新授权换 Token；若 `account_deactivated` 则彻底物理废弃 | ✅ 自动化自愈 |
 
-### 生产质量保障
+### 生产质量与自愈保障
 
-流水线全程严格执行手机接码绑定，未成功接码的账号不落盘凭证，直接标记失败并释放资源，从根源杜绝未绑手机号的单独 ChatGPT 账号。
+1. **接码质量**：流水线全程严格执行手机接码绑定，未成功接码的账号不落盘凭证，直接标记失败并释放资源，从根源杜绝未绑手机号的单独 ChatGPT 账号。
+2. **离线风控 24h 冷却复活与废弃**：针对新号可能遭遇的官方离线 session invalidation，自动加入 24 小时复活队列（`codex_revival_queue.json`）。满 24 小时后通过干净住宅代理调用 `run_single_codex.py` 重新换发 Token；若提示已注销（`account_deactivated`）则彻底废弃并清除本地与生产池凭证。
 
 ---
 

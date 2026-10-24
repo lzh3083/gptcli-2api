@@ -170,6 +170,12 @@ WHERE status='cooling' AND created_at <= datetime('now','-24 hours');
 # 看流水线进度
 sudo -n tail -f /www/wwwroot/gptcli-2api/data/batch_hotmail_10.log
 
+# 查看 24 小时复活队列状态与解冻倒计时
+sudo -n docker exec gptcli-2api python3 /app/scripts/auto_revive_codex.py --status
+
+# 手动触发一次复活流转（或带 --force 强制执行）
+sudo -n docker exec gptcli-2api python3 /app/scripts/auto_revive_codex.py --run
+
 # 邮箱池状态
 sudo -n python3 -c "
 import sqlite3
