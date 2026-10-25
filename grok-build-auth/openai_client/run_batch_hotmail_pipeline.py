@@ -163,7 +163,7 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
                 "已提交邮箱", "已填写并提交登录密码", "已填写并点击密码页",
                 "CloakBrowser", "preflight", "starting:", "submit_email:",
                 "password_step:", "waiting_otp:", "validating_otp:", "about_you:",
-                "fetch_session:", "注册成功完成", "Error:", "Exception:", "Traceback", "failed:", "失败"
+                "fetch_session:", "[Warmup]", "warmup", "注册成功完成", "Error:", "Exception:", "Traceback", "failed:", "失败"
             )):
                 logger.info(f"  > {line_str}")
 
