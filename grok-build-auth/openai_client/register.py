@@ -381,6 +381,7 @@ def run_openai_registration(
     check_cancel: Callable[[], None] | None = None,
     enable_codex: bool | None = None,
     enable_twofa: bool | None = None,
+    fingerprint_seed: int | str | None = None,
 ) -> dict[str, Any]:
     """
     执行完整的 ChatGPT 纯协议注册流程。
@@ -461,6 +462,7 @@ def run_openai_registration(
             on_step=on_step,
             check_cancel=check_cancel,
             enable_codex=enable_codex,
+            fingerprint_seed=fingerprint_seed,
         )
 
     # 1. 准备注册参数（仅当显式指定 REGISTRATION_DRIVER=protocol 时回退纯协议）

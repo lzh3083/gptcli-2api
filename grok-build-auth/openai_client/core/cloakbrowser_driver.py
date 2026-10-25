@@ -465,7 +465,34 @@ def _build_cloak_locale_options(proxy_url: str | None = None) -> dict:
     return {k: v for k, v in out.items() if v}
 
 
-def build_cloak_driver(proxy: str | None = None) -> tuple[CloakSeleniumDriver, CloakOpenResult]:
+REALISTIC_SCREEN_PROFILES = [
+    # 常见 1080p 桌面（最主流，65%+ 市场份额）
+    {"width": 1920, "height": 1080, "vp_w": 1920, "vp_h": 969, "dpr": 1.0},
+    {"width": 1920, "height": 1080, "vp_w": 1920, "vp_h": 937, "dpr": 1.0},
+    {"width": 1920, "height": 1080, "vp_w": 1920, "vp_h": 1080, "dpr": 1.0},
+    {"width": 1920, "height": 1080, "vp_w": 1536, "vp_h": 780, "dpr": 1.25},
+    # 常见笔记本高清屏 (1536x864, 125% 缩放)
+    {"width": 1536, "height": 864, "vp_w": 1536, "vp_h": 778, "dpr": 1.0},
+    {"width": 1536, "height": 864, "vp_w": 1536, "vp_h": 746, "dpr": 1.0},
+    # 经典商务笔记本 (1440x900)
+    {"width": 1440, "height": 900, "vp_w": 1440, "vp_h": 821, "dpr": 1.0},
+    {"width": 1440, "height": 900, "vp_w": 1440, "vp_h": 789, "dpr": 1.0},
+    # 常见轻薄便携笔记本 (1366x768)
+    {"width": 1366, "height": 768, "vp_w": 1366, "vp_h": 695, "dpr": 1.0},
+    {"width": 1366, "height": 768, "vp_w": 1366, "vp_h": 657, "dpr": 1.0},
+    # 宽屏办公显示器 (1600x900)
+    {"width": 1600, "height": 900, "vp_w": 1600, "vp_h": 821, "dpr": 1.0},
+    # 2K 高清显示器 (2560x1440)
+    {"width": 2560, "height": 1440, "vp_w": 2560, "vp_h": 1317, "dpr": 1.0},
+    {"width": 2560, "height": 1440, "vp_w": 2048, "vp_h": 1054, "dpr": 1.25},
+]
+
+
+def build_cloak_driver(
+    proxy: str | None = None,
+    fingerprint_seed: int | str | None = None,
+    screen_profile: dict | None = None,
+) -> tuple[CloakSeleniumDriver, CloakOpenResult]:
     """启动 CloakBrowser 并返回 Selenium 风格 driver。
 
     proxy=None  时按 config.proxy.PROXY_POOL 随机抽取；
@@ -498,9 +525,14 @@ def build_cloak_driver(proxy: str | None = None) -> tuple[CloakSeleniumDriver, C
     _CLOAK_SESSION_LOCK.acquire()
     try:
         launch_args = list(getattr(_cfg, "CLOAK_EXTRA_ARGS", []) or [])
-        seed = str(getattr(_cfg, "CLOAK_FINGERPRINT_SEED", "") or "").strip()
-        if seed:
-            launch_args.append(f"--fingerprint={seed}")
+        seed = fingerprint_seed or str(getattr(_cfg, "CLOAK_FINGERPRINT_SEED", "") or "").strip()
+        if not seed:
+            seed = random.randint(10000, 99999)
+        launch_args.append(f"--fingerprint={seed}")
+
+        # 动态选取拟真屏幕与视口分辨率组合，打破 1280x720 固定视口聚类
+        profile = screen_profile or random.choice(REALISTIC_SCREEN_PROFILES)
+        launch_args.append(f"--window-size={profile['width']},{profile['height']}")
 
         proxy_url = _normalize_proxy(proxy) if bool(getattr(_cfg, "CLOAK_USE_PROXY", True)) else None
         locale_opts = _build_cloak_locale_options(proxy_url)
@@ -523,12 +555,16 @@ def build_cloak_driver(proxy: str | None = None) -> tuple[CloakSeleniumDriver, C
 
         user_data_dir = str(getattr(_cfg, "CLOAK_USER_DATA_DIR", "") or "").strip()
         logger.info(
-            "[Cloak] 启动 CloakBrowser：headless=%s humanize=%s geoip=%s proxy=%s locale=%s timezone=%s accept_language=%s persistent=%s",
-            opts.get("headless"), opts.get("humanize"), opts.get("geoip"),
+            "[Cloak] 启动 CloakBrowser (动态指纹防连坐)：Seed=%s 分辨率=%sx%s 视口=%sx%s DPR=%s headless=%s humanize=%s geoip=%s proxy=%s locale=%s timezone=%s accept_language=%s persistent=%s",
+            seed, profile["width"], profile["height"], profile["vp_w"], profile["vp_h"],
+            profile.get("dpr", 1.0), opts.get("headless"), opts.get("humanize"), opts.get("geoip"),
             proxy_url or "无", opts.get("locale") or "自动/默认", opts.get("timezone") or "自动/默认",
             locale_opts.get("accept_language") or "自动/默认", bool(user_data_dir),
         )
         context_kwargs = {}
+        context_kwargs["viewport"] = {"width": profile["vp_w"], "height": profile["vp_h"]}
+        if profile.get("dpr"):
+            context_kwargs["device_scale_factor"] = profile["dpr"]
         if locale_opts.get("locale"):
             context_kwargs["locale"] = locale_opts["locale"]
         if locale_opts.get("timezone"):
@@ -553,6 +589,8 @@ def build_cloak_driver(proxy: str | None = None) -> tuple[CloakSeleniumDriver, C
             "proxy": proxy_url,
             "proxy_pool_target": proxy_pool_target or proxy_url,
             "locale": locale_opts,
+            "fingerprint_seed": seed,
+            "screen_profile": profile,
             "options": {k: v for k, v in opts.items() if k != "license_key"},
         })
     except Exception:

@@ -67,22 +67,38 @@ WARMUP_PROMPTS = [
 
 
 def _dismiss_welcome_popups(driver: Any) -> None:
-    """清理新账号首次登录 chatgpt.com 时可能遮挡输入框的欢迎引导弹窗。"""
+    """清理新账号首次登录 chatgpt.com 时可能遮挡输入框的欢迎引导与提示弹窗。"""
     dismiss_js = """
     try {
         const keywords = [
             "okay, let's go", "next", "done", "got it", "stay logged out", 
-            "dismiss", "continue", "start chatting", "关闭", "知道了", "继续"
+            "dismiss", "continue", "start chatting", "关闭", "知道了", "继续",
+            "accept all", "agree", "agree and continue", "sounds good"
         ];
+        // 优先在 dialog 中寻找并点击
+        const dialogs = document.querySelectorAll('div[role="dialog"], div[role="alertdialog"], .modal, [data-state="open"]');
+        for (const d of dialogs) {
+            const close = d.querySelector('button[aria-label*="Close"], button[aria-label*="close"], button[data-testid*="close"]');
+            if (close) { close.click(); }
+            const btns = Array.from(d.querySelectorAll('button'));
+            for (const b of btns) {
+                const txt = (b.innerText || b.textContent || "").trim().toLowerCase();
+                if (keywords.some(k => txt.includes(k))) {
+                    b.click();
+                }
+            }
+        }
+        // 全局关闭按钮
+        const globalClose = document.querySelectorAll('button[aria-label*="Close"], button[aria-label*="close"], button[aria-label*="Dismiss"]');
+        for (const gc of globalClose) { gc.click(); }
+        // 页面通用按钮
         const buttons = Array.from(document.querySelectorAll('button'));
         for (const btn of buttons) {
             const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-            if (keywords.some(k => txt.includes(k))) {
+            if (keywords.some(k => txt === k)) {
                 btn.click();
             }
         }
-        const closeBtns = document.querySelectorAll('button[aria-label="Close"], button[aria-label="close"]');
-        for (const cb of closeBtns) { cb.click(); }
     } catch(e) {}
     """
     try:
@@ -95,34 +111,37 @@ def _dismiss_welcome_popups(driver: Any) -> None:
 
 
 def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -> bool:
-    """在当前已登录的指纹浏览器上下文里完成一轮拟人问答激活 (沉淀云端真实会话记录)。"""
+    """在当前已登录的指纹浏览器上下文里完成一轮拟人问答激活 (闭环沉淀云端真实会话记录)。"""
     try:
         if step_cb:
-            step_cb("warmup", "准备在 ChatGPT 页面执行拟人首聊对话激活 (关键防封)...")
-        logger.info("[Warmup] 开始为 %s 执行原地对话激活 (模拟自然行为，沉淀首条会话)...", email)
+            step_cb("warmup", "准备在 ChatGPT 页面执行拟人首聊对话激活 (关键防封，沉淀真实会话)...")
+        logger.info("[Warmup] 开始为 %s 执行原地对话激活 (模拟自然行为，沉淀真实交互会话)...", email)
         
-        # 1. 确认当前在 chatgpt.com
+        page = getattr(driver, "page", None)
+        if not page:
+            logger.warning("[Warmup] 未获取到浏览器 Page 对象，跳过对话激活")
+            return False
+
+        # 1. 确认当前在 chatgpt.com 主界面
         try:
-            cur_url = str(getattr(driver, "current_url", "") or "")
-            if "chatgpt.com" not in cur_url:
-                if hasattr(driver, "page") and hasattr(driver.page, "goto"):
-                    driver.page.goto("https://chatgpt.com/", timeout=35000, wait_until="domcontentloaded")
-                else:
-                    driver.get("https://chatgpt.com/")
+            cur_url = str(getattr(driver, "current_url", "") or getattr(page, "url", "") or "")
+            if "chatgpt.com" not in cur_url or "auth.openai.com" in cur_url:
+                logger.info("[Warmup] 当前页面为 %s，导航至 https://chatgpt.com/", cur_url)
+                page.goto("https://chatgpt.com/", timeout=40000, wait_until="domcontentloaded")
                 time.sleep(random.uniform(3.0, 5.0))
         except Exception as _nav_e:
             logger.warning("[Warmup] 导航至 chatgpt.com 提示: %s，继续尝试探测输入框", _nav_e)
 
-        page = getattr(driver, "page", None)
         # 关掉任何可能遮挡界面的弹窗
         _dismiss_welcome_popups(driver)
         time.sleep(random.uniform(1.0, 2.0))
         _dismiss_welcome_popups(driver)
         
-        # 2. 定位输入框 (兼容 Playwright 与 Selenium 两种模式)
+        # 2. 定位输入框 (兼容 contenteditable div 与 textarea 两种现代 ChatGPT DOM 结构)
         input_el = None
         selectors = [
             "#prompt-textarea",
+            'div[contenteditable="true"][id="prompt-textarea"]',
             'div[contenteditable="true"]',
             'textarea[data-id="root"]',
             'textarea[placeholder*="Message"]',
@@ -132,96 +151,156 @@ def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -
 
         for sel in selectors:
             try:
-                if page and hasattr(page, "wait_for_selector"):
-                    input_el = page.wait_for_selector(sel, state="visible", timeout=6000)
-                    if input_el:
-                        break
+                el = page.wait_for_selector(sel, state="visible", timeout=6000)
+                if el and el.is_visible():
+                    input_el = el
+                    break
             except Exception:
                 continue
 
         if not input_el:
-            # 再次尝试关闭弹窗后寻找
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
             _dismiss_welcome_popups(driver)
             time.sleep(1.5)
             for sel in selectors:
                 try:
-                    if page and hasattr(page, "wait_for_selector"):
-                        input_el = page.wait_for_selector(sel, state="visible", timeout=4000)
-                        if input_el:
-                            break
+                    el = page.wait_for_selector(sel, state="visible", timeout=5000)
+                    if el and el.is_visible():
+                        input_el = el
+                        break
                 except Exception:
                     continue
 
         if not input_el:
-            logger.warning("[Warmup] 未在当前页面找到 ChatGPT 输入框（可能处于重定向或弹窗中），跳过对话激活")
+            logger.warning("[Warmup] 未在当前页面找到 ChatGPT 输入框（可能处于重定向或未知弹窗中），当前 URL: %s", getattr(page, "url", ""))
             return False
 
         # 3. 拟人打字输入
         prompt = random.choice(WARMUP_PROMPTS)
         if step_cb:
             step_cb("warmup", f"拟人键入首条问题: {prompt[:30]}...")
-        logger.info("[Warmup] 选取问题: %s", prompt)
+        logger.info("[Warmup] 选取问答题目: %s", prompt)
 
         try:
-            input_el.click()
+            input_el.scroll_into_view_if_needed(timeout=3000)
+            input_el.click(timeout=3000)
             time.sleep(random.uniform(0.3, 0.6))
             
-            # 拟人逐字打字延迟，并在标点符号处增加停顿
+            # 使用 page.keyboard.type 逐字打字，真实触发 Lexical / React 输入状态机
             for ch in prompt:
-                input_el.type(ch, delay=random.randint(35, 95))
+                page.keyboard.type(ch, delay=random.randint(25, 75))
                 if ch in (",", "，", ".", "。", "?", "？", " ", "!"):
-                    time.sleep(random.uniform(0.12, 0.28))
-            time.sleep(random.uniform(0.4, 0.8))
+                    time.sleep(random.uniform(0.08, 0.22))
+            time.sleep(random.uniform(0.6, 1.2))
         except Exception as _type_e:
-            logger.warning("[Warmup] 逐字打字异常，降级一次性填入: %s", _type_e)
+            logger.warning("[Warmup] 逐字打字异常，降级填入: %s", _type_e)
             try:
                 if hasattr(input_el, "fill"):
                     input_el.fill(prompt)
-                elif hasattr(input_el, "send_keys"):
-                    input_el.send_keys(prompt)
+                elif hasattr(input_el, "type"):
+                    input_el.type(prompt)
             except Exception:
                 pass
 
-        # 4. 触发发送
+        # 4. 触发发送并校验发送动作
         if step_cb:
-            step_cb("warmup", "发送问题并等待模型回复 (流式生成中)...")
-        logger.info("[Warmup] 发送问题，等待 ChatGPT 响应生成...")
+            step_cb("warmup", "提交首聊问题，等待模型流式响应生成...")
+        logger.info("[Warmup] 提交问题，等待 ChatGPT 响应生成...")
 
-        sent = False
-        try:
-            if page and hasattr(page, "keyboard"):
-                page.keyboard.press("Enter")
-                sent = True
-        except Exception:
-            sent = False
-
-        if not sent:
+        # 优先检测并等待发送按钮处于可用（enabled）状态
+        send_btn = None
+        for _ in range(6):
             try:
-                send_btn = page.query_selector('button[data-testid="send-button"]') if page else None
-                if send_btn:
-                    send_btn.click()
-                    sent = True
-            except Exception:
-                pass
-
-        # 5. 等待模型回答生成结束 (检测停止按钮或等待 12~20 秒)
-        start_wait = time.time()
-        time.sleep(random.uniform(5.0, 7.0))
-        
-        while time.time() - start_wait < 22:
-            try:
-                stop_btn = page.query_selector('button[data-testid="stop-button"]') if page else None
-                if not stop_btn:
+                btn = page.query_selector('button[data-testid="send-button"]:not([disabled]), button[aria-label*="Send"]:not([disabled]), button[data-testid="fruitjuice-send-button"]:not([disabled])')
+                if btn and btn.is_enabled():
+                    send_btn = btn
                     break
             except Exception:
                 pass
-            time.sleep(1.5)
+            time.sleep(0.5)
 
+        sent = False
+        if send_btn:
+            try:
+                send_btn.click()
+                sent = True
+                logger.info("[Warmup] 已点击发送按钮")
+            except Exception:
+                sent = False
+
+        if not sent:
+            try:
+                page.keyboard.press("Enter")
+                logger.info("[Warmup] 已触发键盘 Enter 发送")
+                sent = True
+            except Exception as _e:
+                logger.warning("[Warmup] 键盘 Enter 异常: %s", _e)
+
+        # 5. 等待模型开始生成 (捕获 stop-button 或 assistant 角色消息)
+        generating_started = False
+        start_wait = time.time()
+        for _ in range(20):
+            try:
+                stop_btn = page.query_selector('button[data-testid="stop-button"]')
+                assistant_node = page.query_selector('div[data-message-author-role="assistant"], article[data-testid*="conversation-turn"]')
+                if stop_btn or assistant_node:
+                    generating_started = True
+                    logger.info("[Warmup] 检测到模型已开始生成回答 (stop_button / assistant_node 出现)")
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+        if not generating_started:
+            # 补点一次可能存在的发送按钮
+            try:
+                retry_send = page.query_selector('button[data-testid="send-button"]')
+                if retry_send:
+                    retry_send.click()
+                    time.sleep(2)
+            except Exception:
+                pass
+
+        # 6. 等待模型流式回复完全结束 (stop-button 消失)
+        max_generate_wait = 35
+        wait_deadline = time.time() + max_generate_wait
+        while time.time() < wait_deadline:
+            try:
+                stop_btn = page.query_selector('button[data-testid="stop-button"]')
+                if generating_started and not stop_btn:
+                    # stop 按钮已消失，生成完毕
+                    time.sleep(1.5)
+                    break
+            except Exception:
+                pass
+            time.sleep(1.0)
+
+        # 7. 捕获模型真实回答文本与会话 URL 进行权威存活性校验
+        reply_snippet = ""
+        try:
+            reply_el = page.query_selector('div[data-message-author-role="assistant"] .markdown, div[data-message-author-role="assistant"]')
+            if reply_el:
+                reply_snippet = (reply_el.inner_text() or "").strip()
+        except Exception:
+            pass
+
+        final_url = str(getattr(page, "url", "") or "")
         elapsed_warmup = round(time.time() - start_wait, 1)
-        logger.info("[Warmup] ★ 对话激活成功！耗时: %.1fs，已在当前同源指纹会话沉淀首条交互记录: %s", elapsed_warmup, email)
-        if step_cb:
-            step_cb("warmup", f"★ 对话激活完成 (耗时 {elapsed_warmup}s)，已沉淀自然交互日志")
-        return True
+
+        if reply_snippet or "/c/" in final_url:
+            logger.info(
+                "[Warmup] ★ 对话首聊成功沉淀！耗时: %.1fs | 会话URL: %s | 模型回复前40字: %s",
+                elapsed_warmup, final_url, reply_snippet[:40].replace("\n", " ") if reply_snippet else "(已捕获会话ID)"
+            )
+            if step_cb:
+                step_cb("warmup", f"★ 对话激活完成 (耗时 {elapsed_warmup}s): {reply_snippet[:25]}...")
+            return True
+        else:
+            logger.warning("[Warmup] 首聊等待完成但未提取到模型文本 (url=%s, 耗时=%.1fs)，继续后续流程", final_url, elapsed_warmup)
+            return False
 
     except Exception as exc:
         logger.warning("[Warmup] 对话激活过程遇到非致命异常: %s (跳过，不阻断主流程)", exc)
@@ -241,6 +320,7 @@ def run_cloak_registration(
     on_step: Callable[[str, str], None] | None = None,
     check_cancel: Callable[[], None] | None = None,
     enable_codex: bool | None = None,
+    fingerprint_seed: int | str | None = None,
 ) -> dict:
     """CloakBrowser 自动化注册入口。"""
     def _step(status: str, msg: str) -> None:
@@ -266,7 +346,7 @@ def run_cloak_registration(
     network_traffic: dict | None = None
     try:
         _step("browser_launch", f"启动 CloakBrowser 真实反检测浏览器: {email or '待分配'}")
-        driver, opened = build_cloak_driver(proxy=proxy)
+        driver, opened = build_cloak_driver(proxy=proxy, fingerprint_seed=fingerprint_seed)
         effective_proxy = ((opened.raw or {}).get("proxy_pool_target") if opened else None) or proxy or None
         try:
             traffic_tracker = PlaywrightTrafficTracker(driver.context, label="Cloak")
