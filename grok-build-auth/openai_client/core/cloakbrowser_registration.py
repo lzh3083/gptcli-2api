@@ -477,6 +477,10 @@ def run_cloak_registration(
         if profile_submitted:
             create_acknowledged = True
             human_delay("post_auth")
+        elif not openai_password:
+            raise RuntimeError(
+                f"already_registered: 邮箱 {email} 未触发密码创建与新用户资料填写页，属于已注册存量老号，立即中止避免重复注册"
+            )
 
         _step("fetch_session", "CloakBrowser 提取 ChatGPT 登录 Session 与 accessToken")
         session_info = _fetch_chatgpt_session(driver, timeout=120)
@@ -618,7 +622,9 @@ def run_cloak_registration(
         try:
             if email:
                 from core.email_provider import release_email
-                release_email(email, status="failed" if create_acknowledged else "available", note=f"Cloak注册失败: {str(exc)[:180]}")
+                err_str = str(exc) or ""
+                rel_status = "already_registered" if "already_registered" in err_str else ("failed" if create_acknowledged else "available")
+                release_email(email, status=rel_status, note=f"Cloak注册失败: {err_str[:180]}")
         except Exception:
             pass
         return {

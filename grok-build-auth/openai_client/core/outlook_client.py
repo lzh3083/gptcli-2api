@@ -32,6 +32,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.header import decode_header
+from pathlib import Path
 from urllib.parse import urlencode
 from pathlib import Path
 
@@ -254,15 +255,27 @@ def _parse_accounts_file(path: Path) -> list[OutlookAccount]:
 # 公共接口：挑账号 / 取 OTP（统一走 DB）
 # ============================================================
 
-def _check_mailbox_clean_for_openai(account: OutlookAccount) -> tuple[bool, str]:
-    """检测收件箱是否为号商翻新/二手机箱（含历史 OpenAI 封禁、锁号或改别名记录）。"""
+def _check_mailbox_clean_for_openai(
+    account: OutlookAccount,
+    graph_token: str | None = None,
+    http: CurlSession | None = None,
+) -> tuple[bool, str]:
+    """检测收件箱是否为号商翻新/二手机箱或已注册过 OpenAI（含历史 OpenAI 邮件、封禁、锁号或改别名记录）。"""
     if str(os.getenv("OUTLOOK_REJECT_RECYCLED_MAILBOX", "true")).strip().lower() in ("0", "false", "no", "off"):
         return True, "skip_clean_check"
-    try:
-        msgs = _fetch_imap_direct_messages(account)
-    except Exception as exc:
-        logger.debug("[Outlook] 收件箱干净度预检 IMAP 读取跳过 (%s): %s", account.email, exc)
-        return True, "clean_check_skipped"
+    msgs = None
+    # 优先使用已获取的 Microsoft Graph Token 读取收件箱（最快且不受 IMAP User not connected 限制）
+    if graph_token and http is not None:
+        try:
+            msgs = _fetch_graph_messages(http, graph_token)
+        except Exception as exc_g:
+            logger.debug("[Outlook] 收件箱干净度预检 Graph 读取异常 (%s): %s", account.email, exc_g)
+    if msgs is None:
+        try:
+            msgs = _fetch_imap_direct_messages(account)
+        except Exception as exc:
+            logger.debug("[Outlook] 收件箱干净度预检 IMAP 读取跳过 (%s): %s", account.email, exc)
+            return True, "clean_check_skipped"
 
     now_ts = time.time()
     dirty_reasons: list[str] = []
@@ -270,7 +283,7 @@ def _check_mailbox_clean_for_openai(account: OutlookAccount) -> tuple[bool, str]
         subj = str(m.get("subject") or "").strip()
         subj_low = subj.lower()
         msg_ts = _parse_email_ts(m)
-        is_old = (msg_ts is None) or ((now_ts - msg_ts) > 7200)
+        is_old = (msg_ts is None) or ((now_ts - msg_ts) > 600)
         if "deactivated" in subj_low:
             dirty_reasons.append(f"deactivated({subj[:40]})")
         elif "action required to secure your chatgpt account" in subj_low:
@@ -286,12 +299,13 @@ def _check_mailbox_clean_for_openai(account: OutlookAccount) -> tuple[bool, str]
 
 
 def _verify_outlook_token_alive(account: OutlookAccount) -> tuple[bool, str]:
-    """轻量检测 Outlook/Hotmail 账号的 refresh_token 是否仍然有效，并拦截二手翻新黑历史邮箱。"""
+    """轻量检测 Outlook/Hotmail 账号的 refresh_token 是否仍然有效，并拦截二手翻新或已注册邮箱。"""
     http = _ms_http()
     token_kind = ""
+    graph_token: str | None = None
     try:
         try:
-            _ms_access_token(account, http=http)
+            graph_token = _ms_access_token(account, http=http)
             token_kind = "ok_graph"
         except Exception as exc1:
             try:
@@ -299,19 +313,45 @@ def _verify_outlook_token_alive(account: OutlookAccount) -> tuple[bool, str]:
                 token_kind = "ok_live_imap"
             except Exception as exc2:
                 return False, f"{exc1} | {exc2}"
+
+        clean_ok, clean_detail = _check_mailbox_clean_for_openai(account, graph_token=graph_token, http=http)
     finally:
         http.close()
 
-    clean_ok, clean_detail = _check_mailbox_clean_for_openai(account)
     if not clean_ok:
         return False, clean_detail
     return True, f"{token_kind},{clean_detail}"
 
 
+def _is_already_in_local_or_cpa(email: str) -> tuple[bool, str]:
+    """检查邮箱是否已存在于本地 SQLite accounts/codex_accounts 表或 CPA 凭证目录中，防止重复注册。"""
+    from core.db import get_account_by_email, list_codex_accounts
+
+    em_low = str(email or "").strip().lower()
+    if not em_low:
+        return False, ""
+    existing_acc = get_account_by_email(em_low)
+    if existing_acc:
+        return True, f"local_accounts_table(id={existing_acc.get('id')})"
+    try:
+        for c in (list_codex_accounts() or []):
+            if str(c.get("email") or "").strip().lower() == em_low:
+                return True, "local_codex_accounts_table"
+    except Exception:
+        pass
+    for d in ("/app/data/cpa_auth_files", "/app/data/cpa_cooling", "/www/wwwroot/cpa-manager-plus/cliproxyapi/auths"):
+        p_dir = Path(d)
+        if p_dir.is_dir():
+            for f in p_dir.glob("*.json"):
+                if f.name.lower() == f"codex-{em_low}-free.json":
+                    return True, f"cpa_dir({d})"
+    return False, ""
+
+
 def pick_account() -> OutlookAccount:
     """
     原子地挑一个 status='available' 且 OAuth refresh_token 测活通过的 Outlook 账号并标记为 'used'（DB 事务）。
-    若遇到 refresh_token 失效的死号，自动将其标记为 status='failed' 并继续挑下一个。
+    若遇到已存在于本地/CPA 的老号或 refresh_token 失效的死号，自动标记并继续挑下一个。
     多线程并发安全。
     """
     from core.db import claim_next_outlook, outlook_pool_summary, release_outlook
@@ -324,6 +364,15 @@ def pick_account() -> OutlookAccount:
                 f"Outlook 账号池没有可用账号: {summary}. "
                 "请在 WebUI 的邮箱库中导入新邮箱。"
             )
+
+        # 第一道防线：本地 accounts / codex_accounts / CPA 目录去重校验
+        dup_ok, dup_reason = _is_already_in_local_or_cpa(row["email"])
+        if dup_ok:
+            logger.warning(
+                f"[Outlook] 挑号拦截到已存在于本地库/CPA 的账号 {row['email']} (DB id={row['id']}, {dup_reason})，自动保持为 used 并跳过"
+            )
+            release_outlook(row["email"], status="used", note=f"already_in_cpa_or_db:{dup_reason}")
+            continue
 
         account = OutlookAccount(
             email=row["email"],
