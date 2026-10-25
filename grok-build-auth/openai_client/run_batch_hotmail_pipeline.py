@@ -195,15 +195,9 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
             cooling_until_ts = int(now_ts + cooling_hours * 3600)
             cooling_until_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cooling_until_ts))
 
-            # 无论是否冷却，均先安全落盘 PostgreSQL 数据库存档
-            try:
-                _sp.run([sys.executable, '/app/grok-build-auth/openai_client/deliver_codex.py', email],
-                        capture_output=True, timeout=120)
-            except Exception as _de:
-                logger.warning(f"  > [阶段 7 交付] 写入数据库存档异常: {_de}")
-
             if cooling_hours > 0:
-                # 沉淀隔离：进入冷冻静默池，严禁立即投产给 CPA 探针，避开 1~3 小时离线聚类风控
+                # 沉淀隔离：严禁立即投产给 CPA 探针，避开 1~3 小时离线聚类风控
+                # 关键修复：必须第一时间先将文件移出 cpa_auth_files 目录，杜绝与宿主机每分钟 cron 产生并发竞态
                 try:
                     data_dir = os.path.dirname(cpa_file)
                     cooling_dir = os.path.join(os.path.dirname(data_dir), "cpa_cooling") if "cpa_auth_files" in data_dir else os.path.join(data_dir, "cpa_cooling")
@@ -218,7 +212,7 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
                     with open(cooling_file, "w", encoding="utf-8") as _wf:
                         json.dump(_cdata, _wf, indent=2, ensure_ascii=False)
                     
-                    # 从即时交付目录移除，防止被未过滤脚本扫描到
+                    # 立即从即时交付目录移除
                     if os.path.isfile(cpa_file) and os.path.abspath(cooling_file) != os.path.abspath(cpa_file):
                         os.remove(cpa_file)
 
@@ -226,9 +220,18 @@ for attempt in range(1, MAX_REG_ATTEMPTS + 1):
                     logger.info(f"  > [静默计划] 冷却时长: {cooling_hours}h | 预计成熟时间: {cooling_until_str} (避开 1~3h 离线审计)")
                 except Exception as _ce:
                     logger.warning(f"  > [冷冻沉淀池] 写入沉淀目录异常: {_ce}")
+
+                # 数据库归档：直接读取 cooling 目录中的凭据，严禁触发同步至 CPA auths
+                try:
+                    _sp.run([sys.executable, '/app/grok-build-auth/openai_client/deliver_codex.py', email, cooling_dir],
+                            capture_output=True, timeout=120)
+                except Exception as _de:
+                    logger.warning(f"  > [阶段 7 交付] 写入数据库存档异常: {_de}")
             else:
                 # cooling_hours <= 0 直通交付
                 try:
+                    _sp.run([sys.executable, '/app/grok-build-auth/openai_client/deliver_codex.py', email],
+                            capture_output=True, timeout=120)
                     _sp.run(['bash', '/app/scripts/sync_codex_to_cpa.sh'], capture_output=True, timeout=120)
                     logger.info(f"  > [即时交付] 已同步 CPA 生产目录: {email}")
                 except Exception as _se:

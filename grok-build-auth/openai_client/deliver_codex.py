@@ -106,11 +106,12 @@ def upsert_pg(conn, email: str, payload: dict, row_id: str, user_id: str, expire
 
 def main():
     target = sys.argv[1].strip().lower() if len(sys.argv) > 1 else None
-    files = sorted(CPA_LOCAL.glob('codex-*.json'))
+    search_dir = Path(sys.argv[2].strip()) if len(sys.argv) > 2 and sys.argv[2].strip() else CPA_LOCAL
+    files = sorted(search_dir.glob('codex-*.json'))
     if target:
         files = [f for f in files if target in f.name.lower()]
     if not files:
-        print('没有找到待落盘的 codex 凭证')
+        print(f'没有找到待落盘的 codex 凭证 (search_dir={search_dir})')
         return
 
     stats = {'inserted': 0, 'updated': 0, 'skipped': 0, 'synced': []}
