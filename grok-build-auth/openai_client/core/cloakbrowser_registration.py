@@ -137,99 +137,134 @@ def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -
         time.sleep(random.uniform(1.0, 2.0))
         _dismiss_welcome_popups(driver)
         
-        # 2. 定位输入框 (兼容 contenteditable div 与 textarea 两种现代 ChatGPT DOM 结构)
-        input_el = None
-        selectors = [
-            "#prompt-textarea",
-            'div[contenteditable="true"][id="prompt-textarea"]',
-            'div[contenteditable="true"]',
-            'textarea[data-id="root"]',
-            'textarea[placeholder*="Message"]',
-            'textarea[placeholder*="Ask"]',
-            'textarea',
-        ]
-
-        for sel in selectors:
+        # 2. 定位并聚焦输入框 (优先定位 ProseMirror contenteditable div，绕过 pointer-events 遮挡)
+        focus_js = """
+        () => {
+            const sels = [
+                'div#prompt-textarea[contenteditable="true"]',
+                'div[contenteditable="true"]',
+                'textarea#prompt-textarea',
+                'textarea[placeholder*="Message"]',
+                'textarea[placeholder*="Ask"]',
+                'textarea'
+            ];
+            for (const s of sels) {
+                const els = Array.from(document.querySelectorAll(s));
+                for (const el of els) {
+                    const r = el.getBoundingClientRect();
+                    const st = window.getComputedStyle(el);
+                    if (r.width > 20 && r.height > 10 && st.visibility !== 'hidden' && st.display !== 'none') {
+                        el.scrollIntoView({block: 'center'});
+                        el.focus();
+                        el.click();
+                        return {ok: true, selector: s, tag: el.tagName};
+                    }
+                }
+            }
+            return {ok: false};
+        }
+        """
+        focus_res = {"ok": False}
+        for _ in range(5):
             try:
-                el = page.wait_for_selector(sel, state="visible", timeout=6000)
-                if el and el.is_visible():
-                    input_el = el
+                _dismiss_welcome_popups(driver)
+                focus_res = page.evaluate(focus_js) or {"ok": False}
+                if focus_res.get("ok"):
                     break
-            except Exception:
-                continue
-
-        if not input_el:
-            try:
                 page.keyboard.press("Escape")
             except Exception:
                 pass
-            _dismiss_welcome_popups(driver)
-            time.sleep(1.5)
-            for sel in selectors:
-                try:
-                    el = page.wait_for_selector(sel, state="visible", timeout=5000)
-                    if el and el.is_visible():
-                        input_el = el
-                        break
-                except Exception:
-                    continue
+            time.sleep(1.2)
 
-        if not input_el:
-            logger.warning("[Warmup] 未在当前页面找到 ChatGPT 输入框（可能处于重定向或未知弹窗中），当前 URL: %s", getattr(page, "url", ""))
+        if not focus_res.get("ok"):
+            logger.warning("[Warmup] 未在当前页面找到可见的 ChatGPT 输入框，当前 URL: %s", getattr(page, "url", ""))
             return False
 
-        # 3. 拟人打字输入
+        # 3. 拟人打字输入 (直接通过 keyboard.type 向当前焦点输入，避免 ElementHandle.click 遮挡超时)
         prompt = random.choice(WARMUP_PROMPTS)
         if step_cb:
             step_cb("warmup", f"拟人键入首条问题: {prompt[:30]}...")
-        logger.info("[Warmup] 选取问答题目: %s", prompt)
+        logger.info("[Warmup] 已聚焦输入框 (%s)，选取问答题目: %s", focus_res.get("selector"), prompt)
 
         try:
-            input_el.scroll_into_view_if_needed(timeout=3000)
-            input_el.click(timeout=3000)
-            time.sleep(random.uniform(0.3, 0.6))
-            
-            # 使用 page.keyboard.type 逐字打字，真实触发 Lexical / React 输入状态机
+            time.sleep(random.uniform(0.2, 0.5))
             for ch in prompt:
-                page.keyboard.type(ch, delay=random.randint(25, 75))
+                page.keyboard.type(ch, delay=random.randint(20, 60))
                 if ch in (",", "，", ".", "。", "?", "？", " ", "!"):
-                    time.sleep(random.uniform(0.08, 0.22))
-            time.sleep(random.uniform(0.6, 1.2))
+                    time.sleep(random.uniform(0.06, 0.18))
+            time.sleep(random.uniform(0.5, 0.9))
         except Exception as _type_e:
-            logger.warning("[Warmup] 逐字打字异常，降级填入: %s", _type_e)
-            try:
-                if hasattr(input_el, "fill"):
-                    input_el.fill(prompt)
-                elif hasattr(input_el, "type"):
-                    input_el.type(prompt)
-            except Exception:
-                pass
+            logger.warning("[Warmup] keyboard.type 异常: %s", _type_e)
+
+        # 校验输入框内容是否已成功写入，若为空则通过 execCommand / InputEvent 兜底注入
+        ensure_text_js = """
+        (text) => {
+            const el = document.querySelector('div#prompt-textarea[contenteditable="true"]')
+                    || document.querySelector('div[contenteditable="true"]')
+                    || document.querySelector('textarea#prompt-textarea')
+                    || document.querySelector('textarea');
+            if (!el) return {ok: false, len: 0};
+            el.focus();
+            const cur = (el.innerText || el.value || '').trim();
+            if (cur.length < 5) {
+                try {
+                    document.execCommand('selectAll', false, null);
+                    document.execCommand('insertText', false, text);
+                } catch(e) {}
+                if ((el.innerText || el.value || '').trim().length < 5) {
+                    if (el.tagName === 'TEXTAREA') {
+                        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                        setter.call(el, text);
+                    } else {
+                        el.innerHTML = '<p>' + text + '</p>';
+                    }
+                    el.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: text}));
+                }
+            }
+            const finalLen = (el.innerText || el.value || '').trim().length;
+            return {ok: finalLen >= 5, len: finalLen};
+        }
+        """
+        try:
+            text_state = page.evaluate(ensure_text_js, prompt) or {}
+            logger.info("[Warmup] 输入框文本校验: ok=%s, len=%s", text_state.get("ok"), text_state.get("len"))
+        except Exception as _ens_e:
+            logger.warning("[Warmup] 输入框文本校验异常: %s", _ens_e)
 
         # 4. 触发发送并校验发送动作
         if step_cb:
             step_cb("warmup", "提交首聊问题，等待模型流式响应生成...")
         logger.info("[Warmup] 提交问题，等待 ChatGPT 响应生成...")
 
-        # 优先检测并等待发送按钮处于可用（enabled）状态
-        send_btn = None
-        for _ in range(6):
+        click_send_js = """
+        () => {
+            const selectors = [
+                'button[data-testid="send-button"]:not([disabled])',
+                'button[data-testid="fruitjuice-send-button"]:not([disabled])',
+                'button[aria-label*="Send"]:not([disabled])',
+                'button[aria-label*="发送"]:not([disabled])'
+            ];
+            for (const s of selectors) {
+                const btn = document.querySelector(s);
+                if (btn && !btn.disabled) {
+                    btn.click();
+                    return {clicked: true, selector: s};
+                }
+            }
+            return {clicked: false};
+        }
+        """
+        sent = False
+        for _ in range(5):
             try:
-                btn = page.query_selector('button[data-testid="send-button"]:not([disabled]), button[aria-label*="Send"]:not([disabled]), button[data-testid="fruitjuice-send-button"]:not([disabled])')
-                if btn and btn.is_enabled():
-                    send_btn = btn
+                res_click = page.evaluate(click_send_js) or {}
+                if res_click.get("clicked"):
+                    sent = True
+                    logger.info("[Warmup] 已通过 JS 点击发送按钮 (%s)", res_click.get("selector"))
                     break
             except Exception:
                 pass
-            time.sleep(0.5)
-
-        sent = False
-        if send_btn:
-            try:
-                send_btn.click()
-                sent = True
-                logger.info("[Warmup] 已点击发送按钮")
-            except Exception:
-                sent = False
+            time.sleep(0.4)
 
         if not sent:
             try:

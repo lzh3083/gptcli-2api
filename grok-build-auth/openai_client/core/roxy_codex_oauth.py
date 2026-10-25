@@ -1527,10 +1527,14 @@ def _do_phone_verification_if_present(driver) -> None:
                 if "add-phone" in current_url:
                     # 已经在 add-phone URL 上，给足时间等表单渲染
                     pass
-                elif any(k in current_url for k in ("callback", "localhost:1455")):
+                elif any(k in current_url for k in ("callback", "localhost:1455", "/codex/consent")):
                     break
                 time.sleep(0.5)
             if not (_has_strict_add_phone_form(driver) or _is_phone_code_page(driver)):
+                cur_now = str(getattr(driver, "current_url", "") or "").lower()
+                if "/codex/consent" in cur_now or "callback" in cur_now or "localhost:1455" in cur_now:
+                    logger.info("[Codex][Browser] 当前已处于授权确认或回调页 (%s)，交由 consent 流程处理（若点击后跳 add-phone 会自动接管）", cur_now[:100])
+                    return
                 # 强制手机验证模式：主动导航到 add-phone 页面
                 force_phone = bool(getattr(sms_provider._cfg, "FORCE_PHONE_VERIFICATION", False))
                 if force_phone:
@@ -1627,9 +1631,9 @@ def _do_phone_verification_if_present(driver) -> None:
                     raise RuntimeError(
                         f"接码平台余额不足，已停止换号止损：{err_text[:180]}"
                     ) from exc
-                if "invalid_auth_step" in str(exc) or "409" in str(exc) or "session expired" in str(exc).lower():
+                if any(k in err_text.lower() for k in ("invalid_auth_step", "409", "session expired", "session ended", "no longer valid")):
                     raise RuntimeError(
-                        f"手机号流程遭遇 409 会话失效或 invalid_auth_step ({err_text[:120]})，立即熔断以保护接码配额与资金"
+                        f"手机号流程遭遇会话失效或 invalid_auth_step ({err_text[:120]})，立即熔断以保护接码配额与资金"
                     ) from exc
                 # 如果已经离开手机号/验证码相关页面，认为通过或不再需要；
                 # 如果仍在 phone-verification，则下一轮必须回 add-phone 重新填新号码再提交。
