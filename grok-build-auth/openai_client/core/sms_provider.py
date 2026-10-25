@@ -67,7 +67,10 @@ def _http() -> CurlSession:
 
 
 def _provider() -> str:
-    return str(getattr(_cfg, "SMS_PROVIDER", "grizzly") or "grizzly").strip().lower()
+    p = str(getattr(_cfg, "SMS_PROVIDER", "smsbower") or "smsbower").strip().lower()
+    if p in ("hero-sms", "herosms", "hero"):
+        return "smsbower"
+    return p
 
 
 def _request_grizzly(http: CurlSession, params: dict) -> str:
@@ -201,17 +204,37 @@ def _smsbower_number_params(service: str | None, country: str | None) -> dict:
     service_code = str(service or _cfg.SMS_SERVICE or "").strip()
     if service_code.lower() in ("openai", "chatgpt"):
         service_code = "dr"
-    raw_country = str(country or _cfg.SMS_COUNTRY or "16,73,117").strip()
-    # 用户铁令：只要英国(16)、巴西(73)、葡萄牙(117)，剔除菲律宾(4)、印尼(6)、马来西亚(7)、泰国(66)、哈萨克斯坦(2)、老挝(25)等
-    c_list = [c.strip() for c in raw_country.split(",") if c.strip() in ("16", "73", "117")]
-    raw_country = ",".join(c_list) if c_list else "16"
+    
+    # 用户铁令：只要英国(16)、巴西(73)、葡萄牙(117)，剔除菲律宾/印尼/老挝等其他国家
+    _country_name_map = {
+        "16": "16", "england": "16", "uk": "16", "gb": "16",
+        "73": "73", "brazil": "73",
+        "117": "117", "portugal": "117",
+    }
+    raw_country = str(country or _cfg.SMS_COUNTRY or "16,73,117").strip().lower()
+    c_list = []
+    for item in raw_country.split(","):
+        clean_item = item.strip()
+        if clean_item in _country_name_map:
+            mapped = _country_name_map[clean_item]
+            if mapped not in c_list:
+                c_list.append(mapped)
+    raw_country = ",".join(c_list) if c_list else "16,73,117"
+
     params = {
         "action": "getNumberV2" if bool(getattr(_cfg, "SMSBOWER_USE_V2", True)) else "getNumber",
         "service": service_code,
         "country": raw_country,
     }
-    # 用户铁令：单价超过 0.075 的一律不要
-    max_price = str(getattr(_cfg, "SMS_MAX_PRICE", "0.075") or "0.075").strip()
+    # 用户铁令：单价不能超过 0.085 美元「锁死禁止变动」
+    MAX_PRICE_LOCKED = 0.085
+    configured_price = getattr(_cfg, "SMS_MAX_PRICE", "0.085")
+    try:
+        price_val = min(float(configured_price), MAX_PRICE_LOCKED)
+    except (ValueError, TypeError):
+        price_val = MAX_PRICE_LOCKED
+    max_price = f"{price_val:.4f}".rstrip("0").rstrip(".")
+
     only_physical = getattr(_cfg, "SMSBOWER_ONLY_PHYSICAL", "1")
     if str(only_physical).strip() in ("1", "true", "True"):
         params["onlyPhysical"] = "1"
@@ -523,15 +546,15 @@ def acquire_number(
                 cancel(activation_id, http)
                 raise SmsProviderError(f"拦截到非指定国家号码 +{phone}，已自动取消并退款")
 
-            # 用户硬性约束：单价超过 0.075 的一律不要
-            max_price_limit = float(getattr(_cfg, "SMS_MAX_PRICE", "0.075") or "0.075")
+            # 用户铁令：单价不能超过 0.085 美元「锁死」，超过的一律不要并立即取消退款
+            MAX_PRICE_LOCKED = 0.085
             if price is not None:
                 try:
                     actual_cost = float(price)
-                    if actual_cost > max_price_limit:
-                        logger.warning("[SMSBower] 号码价格 $%s 超过最高限额 $%s，立即取消退款", actual_cost, max_price_limit)
+                    if actual_cost > MAX_PRICE_LOCKED:
+                        logger.warning("[SMSBower/Hero-SMS] 号码价格 $%s 超过最高限额 $%s，立即取消退款", actual_cost, MAX_PRICE_LOCKED)
                         cancel(activation_id, http)
-                        raise SmsProviderError(f"号码单价 ${actual_cost} 超过最高限额 ${max_price_limit}，已自动取消退款")
+                        raise SmsProviderError(f"号码单价 ${actual_cost} 超过最高限额 ${MAX_PRICE_LOCKED}，已自动取消退款")
                 except ValueError:
                     pass
 

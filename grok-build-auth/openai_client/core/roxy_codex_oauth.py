@@ -1558,8 +1558,16 @@ def _do_phone_verification_if_present(driver) -> None:
             return
 
         last_err = None
-        raw_countries = [c.strip() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip() in ("16", "73", "117", "england", "brazil", "portugal", "netherlands", "poland")]
-        # 遵循用户指定的国家调度：英国 / 荷兰 / 波兰 / 巴西 / 葡萄牙
+        _c_map = {
+            "16": "16", "england": "16", "uk": "16", "gb": "16",
+            "73": "73", "brazil": "73",
+            "117": "117", "portugal": "117"
+        }
+        cfg_countries = [c.strip().lower() for c in str(getattr(sms_provider._cfg, "SMS_COUNTRY", "") or "").split(",") if c.strip()]
+        raw_countries = [_c_map[c] for c in cfg_countries if c in _c_map]
+        if not raw_countries:
+            raw_countries = ["16", "73", "117"]
+        # 遵循用户指定的国家调度：英国 (16) / 巴西 (73) / 葡萄牙 (117)
         for attempt in range(1, max_retries + 1):
             activation_id = None
             try:

@@ -59,27 +59,16 @@ import config.codex
 config.codex.ENABLE_CODEX_AUTO = True
 config.codex.FORCE_PHONE_VERIFICATION = True
 config.codex.SMS_CODE_WAIT = 90
-config.codex.SMS_PROVIDER = "fivesim"
-config.codex.SMS_COUNTRY = "england,netherlands,poland"
-config.codex.SMS_MAX_PRICE = "0.075"
-config.codex.FIVESIM_MAX_PRICE = "0.075"
-config.codex.FIVESIM_OPERATOR = "any"
-fivesim_key = os.environ.get("FIVESIM_API_KEY") or getattr(config.codex, "FIVESIM_API_KEY", "")
-if not fivesim_key and os.path.exists("/app/data/config.json"):
-    try:
-        with open("/app/data/config.json", "r", encoding="utf-8") as _cf:
-            _cdata = json.load(_cf)
-            fivesim_key = _cdata.get("fivesim_api_key") or ""
-    except Exception:
-        pass
-if fivesim_key:
-    config.codex.FIVESIM_API_KEY = fivesim_key
-    os.environ["FIVESIM_API_KEY"] = fivesim_key
-os.environ["SMS_PROVIDER"] = "fivesim"
-os.environ["SMS_COUNTRY"] = "england,netherlands,poland"
-os.environ["SMS_MAX_PRICE"] = "0.075"
-os.environ["FIVESIM_MAX_PRICE"] = "0.075"
-os.environ["FIVESIM_OPERATOR"] = "any"
+config.codex.SMS_PROVIDER = "smsbower"
+config.codex.SMS_COUNTRY = "16,73,117"
+config.codex.SMS_MAX_PRICE = "0.085"
+config.codex.SMSBOWER_API_BASE = "https://hero-sms.com/stubs/handler_api.php"
+config.codex.SMSBOWER_API_KEY = "65f98d0330618120582d49f3eff7923f"
+os.environ["SMS_PROVIDER"] = "smsbower"
+os.environ["SMS_COUNTRY"] = "16,73,117"
+os.environ["SMS_MAX_PRICE"] = "0.085"
+os.environ["SMSBOWER_API_BASE"] = "https://hero-sms.com/stubs/handler_api.php"
+os.environ["SMSBOWER_API_KEY"] = "65f98d0330618120582d49f3eff7923f"
 
 from register import run_openai_registration
 

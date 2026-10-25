@@ -66,24 +66,58 @@ WARMUP_PROMPTS = [
 ]
 
 
+def _dismiss_welcome_popups(driver: Any) -> None:
+    """清理新账号首次登录 chatgpt.com 时可能遮挡输入框的欢迎引导弹窗。"""
+    dismiss_js = """
+    try {
+        const keywords = [
+            "okay, let's go", "next", "done", "got it", "stay logged out", 
+            "dismiss", "continue", "start chatting", "关闭", "知道了", "继续"
+        ];
+        const buttons = Array.from(document.querySelectorAll('button'));
+        for (const btn of buttons) {
+            const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+            if (keywords.some(k => txt.includes(k))) {
+                btn.click();
+            }
+        }
+        const closeBtns = document.querySelectorAll('button[aria-label="Close"], button[aria-label="close"]');
+        for (const cb of closeBtns) { cb.click(); }
+    } catch(e) {}
+    """
+    try:
+        if hasattr(driver, "page") and hasattr(driver.page, "evaluate"):
+            driver.page.evaluate(dismiss_js)
+        elif hasattr(driver, "execute_script"):
+            driver.execute_script(dismiss_js)
+    except Exception:
+        pass
+
+
 def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -> bool:
-    """在当前指纹浏览器上下文里访问 ChatGPT 并完成一轮拟人问答激活。"""
+    """在当前已登录的指纹浏览器上下文里完成一轮拟人问答激活 (沉淀云端真实会话记录)。"""
     try:
         if step_cb:
-            step_cb("warmup", "准备访问 ChatGPT 主页执行拟人对话激活...")
-        logger.info("[Warmup] 开始为 %s 执行原地对话激活 (模拟自然行为)...", email)
+            step_cb("warmup", "准备在 ChatGPT 页面执行拟人首聊对话激活 (关键防封)...")
+        logger.info("[Warmup] 开始为 %s 执行原地对话激活 (模拟自然行为，沉淀首条会话)...", email)
         
-        # 1. 打开 chatgpt.com
+        # 1. 确认当前在 chatgpt.com
         try:
-            if hasattr(driver, "page") and hasattr(driver.page, "goto"):
-                driver.page.goto("https://chatgpt.com/", timeout=35000, wait_until="domcontentloaded")
-            else:
-                driver.get("https://chatgpt.com/")
+            cur_url = str(getattr(driver, "current_url", "") or "")
+            if "chatgpt.com" not in cur_url:
+                if hasattr(driver, "page") and hasattr(driver.page, "goto"):
+                    driver.page.goto("https://chatgpt.com/", timeout=35000, wait_until="domcontentloaded")
+                else:
+                    driver.get("https://chatgpt.com/")
+                time.sleep(random.uniform(3.0, 5.0))
         except Exception as _nav_e:
             logger.warning("[Warmup] 导航至 chatgpt.com 提示: %s，继续尝试探测输入框", _nav_e)
 
-        time.sleep(random.uniform(3.0, 5.0))
         page = getattr(driver, "page", None)
+        # 关掉任何可能遮挡界面的弹窗
+        _dismiss_welcome_popups(driver)
+        time.sleep(random.uniform(1.0, 2.0))
+        _dismiss_welcome_popups(driver)
         
         # 2. 定位输入框 (兼容 Playwright 与 Selenium 两种模式)
         input_el = None
@@ -106,13 +140,26 @@ def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -
                 continue
 
         if not input_el:
+            # 再次尝试关闭弹窗后寻找
+            _dismiss_welcome_popups(driver)
+            time.sleep(1.5)
+            for sel in selectors:
+                try:
+                    if page and hasattr(page, "wait_for_selector"):
+                        input_el = page.wait_for_selector(sel, state="visible", timeout=4000)
+                        if input_el:
+                            break
+                except Exception:
+                    continue
+
+        if not input_el:
             logger.warning("[Warmup] 未在当前页面找到 ChatGPT 输入框（可能处于重定向或弹窗中），跳过对话激活")
             return False
 
         # 3. 拟人打字输入
         prompt = random.choice(WARMUP_PROMPTS)
         if step_cb:
-            step_cb("warmup", f"拟人键入第一条问题: {prompt[:30]}...")
+            step_cb("warmup", f"拟人键入首条问题: {prompt[:30]}...")
         logger.info("[Warmup] 选取问题: %s", prompt)
 
         try:
@@ -137,12 +184,11 @@ def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -
 
         # 4. 触发发送
         if step_cb:
-            step_cb("warmup", "发送问题并等待模型回复 (10~20秒)...")
+            step_cb("warmup", "发送问题并等待模型回复 (流式生成中)...")
         logger.info("[Warmup] 发送问题，等待 ChatGPT 响应生成...")
 
         sent = False
         try:
-            # 优先尝试敲击回车
             if page and hasattr(page, "keyboard"):
                 page.keyboard.press("Enter")
                 sent = True
@@ -158,14 +204,12 @@ def _warmup_chatgpt_conversation(driver: Any, email: str, step_cb: Any = None) -
             except Exception:
                 pass
 
-        # 5. 等待模型回答生成结束 (检测停止按钮或等待 12~18 秒)
+        # 5. 等待模型回答生成结束 (检测停止按钮或等待 12~20 秒)
         start_wait = time.time()
-        time.sleep(random.uniform(5.0, 8.0))
+        time.sleep(random.uniform(5.0, 7.0))
         
-        # 轮询等待生成完毕 (最多等 20 秒)
-        while time.time() - start_wait < 20:
+        while time.time() - start_wait < 22:
             try:
-                # 若页面上有 stop-button 说明仍在流式输出，等待它消失
                 stop_btn = page.query_selector('button[data-testid="stop-button"]') if page else None
                 if not stop_btn:
                     break
@@ -324,6 +368,15 @@ def run_cloak_registration(
         access_token = session_info["accessToken"]
         logger.info("[Cloak注册] 已拿到 accessToken：%s", email)
 
+        # 阶段：同源指纹浏览器原地对话激活 (Warm-up 模拟自然行为，关键防封)
+        # 铁律：必须在当前活跃会话、处于 chatgpt.com 且登录态完备时立即执行！
+        if str(os.environ.get("CODEX_ENABLE_WARMUP", "1")).strip() in ("1", "true", "True"):
+            try:
+                _step("warmup", "复用当前同源指纹浏览器执行原地首聊对话激活 (关键防封，沉淀真实会话)")
+                _warmup_chatgpt_conversation(driver, email, step_cb=_step)
+            except Exception as _w_err:
+                logger.warning("[Cloak注册][Warmup] 对话激活跳过或遇到非致命异常: %s", _w_err)
+
         cookies_dict = driver.get_cookies_dict() if hasattr(driver, "get_cookies_dict") else {}
 
         if _twofa_cfg.ENABLE_2FA:
@@ -390,15 +443,6 @@ def run_cloak_registration(
                 logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=False，注册后跳过 Codex OAuth")
         except Exception as exc:
             codex_result = {"status": "failed", "ok": False, "message": f"{type(exc).__name__}: {str(exc)[:180]}"}
-
-        # 阶段：同源指纹浏览器原地对话激活 (Warm-up 模拟自然行为)
-        codex_ok = bool(codex_result.get("ok")) if enable_codex else True
-        if codex_ok and str(os.environ.get("CODEX_ENABLE_WARMUP", "1")).strip() in ("1", "true", "True"):
-            try:
-                _step("warmup", "复用当前同源指纹浏览器执行原地对话激活 (模拟自然使用，对抗异步审计)")
-                _warmup_chatgpt_conversation(driver, email, step_cb=_step)
-            except Exception as _w_err:
-                logger.warning("[Cloak注册][Warmup] 对话激活跳过或遇到非致命异常: %s", _w_err)
 
         # 统计注册浏览器关闭前的完整会话；注册后停留期间的网络请求也计入。
         post_register_dwell(email, label="Cloak注册")

@@ -97,7 +97,7 @@ CPA_SAVE_CALLBACK_RECEIPT: bool = True
 #   "h"       = 本地 H 取号服务，接口说明见 H_API.md
 # ============================================================
 
-SMS_PROVIDER: str = env_str("SMS_PROVIDER", "fivesim")
+SMS_PROVIDER: str = env_str("SMS_PROVIDER", "smsbower")
 
 # 接码 API 基址（GET handler）
 SMS_API_BASE: str = "https://api.grizzlysms.com/stubs/handler_api.php"
@@ -106,9 +106,9 @@ SMS_API_BASE: str = "https://api.grizzlysms.com/stubs/handler_api.php"
 # 留空时 Codex 授权的手机验证步会失败；如不需要 Codex 自动授权，把 ENABLE_CODEX_AUTO=False。
 SMS_API_KEY: str = env_str("SMS_API_KEY", "")
 
-# SMSBower 独立 API 配置（SMS_PROVIDER="smsbower" 时使用）
-SMSBOWER_API_BASE: str = "https://smsbower.page/stubs/handler_api.php"
-SMSBOWER_API_KEY: str = env_str("SMSBOWER_API_KEY", "")
+# SMSBower / Hero-SMS 独立 API 配置（SMS_PROVIDER="smsbower" 时使用）
+SMSBOWER_API_BASE: str = env_str("SMSBOWER_API_BASE", "https://hero-sms.com/stubs/handler_api.php")
+SMSBOWER_API_KEY: str = env_str("SMSBOWER_API_KEY", "65f98d0330618120582d49f3eff7923f")
 SMSBOWER_USE_V2: bool = False
 SMSBOWER_PROVIDER_IDS: str = ""
 SMSBOWER_EXCEPT_PROVIDER_IDS: str = ""
@@ -118,13 +118,11 @@ SMSBOWER_MIN_PRICE: str = ""
 # 服务代码：OpenAI (ChatGPT) = "dr"
 SMS_SERVICE: str = "dr"
 
-# 国家代码：英国(16, $0.045~$0.0718)、巴西(73, $0.054)、葡萄牙(117, $0.06)
-# 用户铁令：只要英国(16)、巴西(73)、葡萄牙(117)。剔除菲律宾(4)、印尼(6)、马来西亚(7)、泰国(66)、哈萨克斯坦(2)、老挝(25)等
-# 所有国家单价严格不超过 0.075 美元
-SMS_COUNTRY: str = env_str("SMS_COUNTRY", "england")
+# 国家代码：英国(16)、巴西(73)、葡萄牙(117)
+SMS_COUNTRY: str = env_str("SMS_COUNTRY", "16,73,117")
 
-# 单个号愿意支付的最高价格：硬性限制 0.075 美元，超过一律不要
-SMS_MAX_PRICE: str = "0.075"
+# 单个号愿意支付的最高价格：硬性限制 0.085 美元「锁死」，超过一律不要
+SMS_MAX_PRICE: str = "0.085"
 
 # 一个号收不到短信/被拒时，换号重试的最大次数
 SMS_MAX_RETRIES: int = 10

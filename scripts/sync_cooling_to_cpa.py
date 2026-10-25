@@ -50,6 +50,68 @@ def find_data_dirs() -> tuple[Path, Path, Path]:
     return cooling_dir, prod_dir, cpa_host_dir
 
 
+def verify_account_maturity(file_path: Path) -> tuple[str, dict | None]:
+    """通过凭证绑定的原生家宽代理向 OpenAI 请求 refresh_token，验证账号是否健康存活。
+    返回值:
+      'valid': 存活成熟，返回更新后的数据
+      'deactivated': 官方注销/封禁
+      'retry': 网络/代理临时波动，保持冷却下一轮重试
+    """
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except Exception:
+        return "deactivated", None
+
+    rt = data.get("refresh_token")
+    if not rt:
+        return "deactivated", None
+
+    proxy_url = data.get("proxy_url")
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+
+    token_url = "https://auth.openai.com/oauth/token"
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": rt,
+        "client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
+    }
+    headers = {
+        "User-Agent": "codex_cli_rs/0.76.0 (Debian 13.0.0; x86_64) WindowsTerminal",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(token_url, json=payload, headers=headers, proxies=proxies, timeout=12)
+        if resp.status_code == 200:
+            token_json = resp.json()
+            if "access_token" in token_json:
+                data["access_token"] = token_json["access_token"]
+                if "refresh_token" in token_json:
+                    data["refresh_token"] = token_json["refresh_token"]
+                if "id_token" in token_json:
+                    data["id_token"] = token_json["id_token"]
+                data["last_refresh"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                data["maturity_verified"] = True
+                return "valid", data
+
+        try:
+            err_body = resp.json()
+            err_code = str(err_body.get("error", {}).get("code") or "").lower()
+            err_msg = str(err_body.get("error", {}).get("message") or "").lower()
+        except Exception:
+            err_code = str(resp.status_code)
+            err_msg = resp.text[:200].lower()
+
+        if any(k in err_code or k in err_msg for k in ("invalid", "deactivated", "revoked", "account_deactivated")):
+            return "deactivated", None
+
+        return "retry", None
+    except Exception as e:
+        logger.warning(f"成熟度验证遇到网络波动 ({type(e).__name__}: {e})，保持冷却池稍后重试")
+        return "retry", None
+
+
 def check_and_promote(force: bool = False, status_only: bool = False) -> None:
     cooling_dir, prod_dir, cpa_host_dir = find_data_dirs()
     cooling_hours = float(os.environ.get("CODEX_COOLING_HOURS", "3"))
@@ -105,24 +167,34 @@ def check_and_promote(force: bool = False, status_only: bool = False) -> None:
         return
 
     logger.info("-" * 60)
-    logger.info(f"🚀 开始安全流转 {len(ready_files)} 个已成熟账号至 CPA 生产池...")
+    logger.info(f"🚀 开始对 {len(ready_files)} 个到期账号执行成熟度存活性实测验证...")
 
     promoted_emails: list[str] = []
-    for f in ready_files:
-        dest_prod = prod_dir / f.name
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            data["status"] = "active"
-            data["promoted_at"] = int(time.time())
-            f.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except Exception:
-            pass
+    backup_invalid_dir = cooling_dir.parent / "cpa_auth_files_invalid_backup"
+    backup_invalid_dir.mkdir(parents=True, exist_ok=True)
 
-        shutil.copy2(f, dest_prod)
-        f.unlink(missing_ok=True)
+    for f in ready_files:
         email = f.stem.replace("codex-", "").replace("-free", "")
-        promoted_emails.append(email)
-        logger.info(f"✅ [成熟流转] {email} 成功从沉淀池移动至生产凭证目录: {dest_prod.name}")
+        dest_prod = prod_dir / f.name
+
+        status, updated_data = verify_account_maturity(f)
+
+        if status == "valid" and updated_data:
+            updated_data["status"] = "active"
+            updated_data["promoted_at"] = int(time.time())
+            dest_prod.write_text(json.dumps(updated_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            f.unlink(missing_ok=True)
+            promoted_emails.append(email)
+            logger.info(f"✅ [成熟流转通过] {email} 存活性验证 100% 正常，已流转至生产池: {dest_prod.name}")
+        elif status == "deactivated":
+            shutil.move(str(f), str(backup_invalid_dir / f.name))
+            logger.warning(f"🚫 [离线审计夭折] {email} 检测到官方会话失效/注销，已阻断流入生产池并隔离废弃")
+        else:
+            logger.info(f"⏳ [代理波动重试] {email} 暂时跳过流转，保持在冷却池中等待下个周期")
+
+    if not promoted_emails:
+        logger.info("本轮无新增成熟存活账号流入生产池。")
+        return
 
     sync_script_candidates = [
         Path("/app/scripts/sync_codex_to_cpa.sh"),
